@@ -348,28 +348,107 @@ The covariance is updated using the **Joseph (symmetric) form**
 `(I−KF)Σ(I−KF)ᵀ + K Rₑ Kᵀ` (where Rₑ = σ²I) to maintain positive
 semi-definiteness numerically even with imperfect Kalman gains.
 """
-function ekf_update(μ, Σ, y, s, c, model::ModelFunctions)
-    F  = model.fx(μ, s, c)                    # dy × dx
-    f̂  = model.f(μ, s, c)                     # dy
-
+function _ekf_forward(F, f̂, μ, Σ, y, σ²)
     dx = length(μ)
     dy = length(y)
-
-    # Use dense identity matrices — I(n) returns Diagonal which Zygote/ChainRules
-    # can't differentiate through (Diagonal pullback doesn't accept NoTangent).
-    I_dy = Matrix{Float64}(I, dy, dy)
     I_dx = Matrix{Float64}(I, dx, dx)
-    S = F * Σ * F' + model.σ² * I_dy                          # dy × dy
-    # Use explicit inv(S) instead of / S: the ChainRules rrule for rdiv (/)
-    # produces incorrect gradients in multi-step EKF chains, while inv() has
-    # a known-good rrule (verified in lattice tests).
-    K = Σ * F' * inv(S)                                        # dx × dy  (= Σ Fᵀ S⁻¹)
+    I_dy = Matrix{Float64}(I, dy, dy)
 
-    μ_new = μ + K * (y - f̂)                                   # dx
-    IKF   = I_dx - K * F
-    Σ_new = IKF * Σ * IKF' + (model.σ² * K) * K'              # Joseph form
+    S     = F * Σ * F' + σ² * I_dy          # dy × dy
+    S_inv = inv(S)                            # dy × dy
+    K     = Σ * F' * S_inv                    # dx × dy
+    innov = y - f̂                             # dy
+    μ_new = μ + K * innov                     # dx
+    IKF   = I_dx - K * F                      # dx × dx
+    Σ_new = IKF * Σ * IKF' + (σ² * K) * K'   # dx × dx  (Joseph form)
 
+    return μ_new, Σ_new, S_inv, K, IKF
+end
+
+function ekf_update(μ, Σ, y, s, c, model::ModelFunctions)
+    F  = model.fx(μ, s, c)
+    f̂  = model.f(μ, s, c)
+    μ_new, Σ_new, _, _, _ = _ekf_forward(F, f̂, μ, Σ, y, model.σ²)
     return μ_new, Σ_new
+end
+
+# ── Custom rrule for ekf_update ───────────────────────────────────────────────
+# Manually computes adjoints through the EKF matrix equations, then uses
+# Zygote.pullback to propagate ΔF, Δf̂ back through model.fx, model.f.
+# This avoids Zygote tracing through inv(), /, and complex matrix chains
+# that caused gradient errors in multi-step EKF compositions.
+function ChainRulesCore.rrule(::typeof(ekf_update),
+                              μ, Σ, y, s, c, model::ModelFunctions)
+    # Forward pass — get pullbacks for model.fx and model.f
+    F, pb_fx = Zygote.pullback((μ_, s_, c_) -> model.fx(μ_, s_, c_), μ, s, c)
+    f̂, pb_f  = Zygote.pullback((μ_, s_, c_) -> model.f(μ_, s_, c_),  μ, s, c)
+
+    μ_new, Σ_new, S_inv, K, IKF = _ekf_forward(F, f̂, μ, Σ, y, model.σ²)
+    innov = y - f̂
+    σ² = model.σ²
+
+    function ekf_update_pb(Δ_raw)
+        Δμ_new_r, ΔΣ_new_r = Δ_raw
+
+        dx = length(μ);  dy = length(y)
+        Δμ_new = Δμ_new_r isa ChainRulesCore.AbstractZero ? zeros(dx)     : collect(Float64, Δμ_new_r)
+        ΔΣ_new = ΔΣ_new_r isa ChainRulesCore.AbstractZero ? zeros(dx, dx) : collect(Float64, ΔΣ_new_r)
+
+        # ── μ_new = μ + K * innov ─────────────────────────────────────────────
+        ΔK   = Δμ_new * innov'                           # dx × dy
+        Δy   = K' * Δμ_new                                # dy
+        Δf̂_  = -K' * Δμ_new                               # dy
+
+        # ── Σ_new = IKF * Σ * IKF' + σ² * K * K' ─────────────────────────────
+        #  ∂L/∂Σ  from  A*Σ*A'  (A = IKF)
+        ΔΣ   = IKF' * ΔΣ_new * IKF                       # dx × dx
+
+        #  ∂L/∂IKF  from  IKF*Σ*IKF'  (A*B*A' form)
+        ΔIKF = ΔΣ_new * IKF * Σ' + ΔΣ_new' * IKF * Σ    # dx × dx
+
+        #  ∂L/∂K  from  σ²*K*K'  (scalar * A*A' form)
+        ΔK  += σ² * (ΔΣ_new + ΔΣ_new') * K               # dx × dy
+
+        #  IKF = I − K*F  →  ∂L/∂K from IKF
+        ΔK  += -ΔIKF * F'                                 # dx × dy
+
+        #  IKF = I − K*F  →  ∂L/∂F from IKF
+        ΔF   = -K' * ΔIKF                                 # dy × dx
+
+        # ── K = Σ * F' * S_inv ────────────────────────────────────────────────
+        M  = F' * S_inv                                    # dx × dy
+        ΔΣ += ΔK * M'                                     # dx × dx
+        ΔM  = Σ * ΔK                                      # dx × dy  (Σ symmetric)
+        ΔF += (ΔM * S_inv)'                                # dy × dx  (from F' in M)
+
+        ΔS_inv = F * ΔM                                   # dy × dy  (from S_inv in M)
+        ΔS     = -S_inv * ΔS_inv * S_inv                  # dy × dy  (inv adjoint)
+
+        # ── S = F * Σ * F' + σ² * I ──────────────────────────────────────────
+        ΔF += ΔS * F * Σ' + ΔS' * F * Σ                   # dy × dx  (A*B*A' form)
+        ΔΣ += F' * ΔS * F                                  # dx × dx
+
+        # ── Propagate ΔF, Δf̂ back through model.fx, model.f ─────────────────
+        Δμ_fx, Δs_fx, Δc_fx = pb_fx(ΔF)
+        Δμ_f,  Δs_f,  Δc_f  = pb_f(Δf̂_)
+
+        _v(x, n) = x === nothing ? zeros(n) : collect(Float64, x)
+        _m(x, r, c) = x === nothing ? zeros(r, c) : collect(Float64, x)
+
+        Δμ_total = Δμ_new .+ _v(Δμ_fx, dx) .+ _v(Δμ_f, dx)
+        Δs_total = _v(Δs_fx, length(s)) .+ _v(Δs_f, length(s))
+        Δc_total = _v(Δc_fx, length(c)) .+ _v(Δc_f, length(c))
+
+        return (NoTangent(),  # ::typeof(ekf_update)
+                Δμ_total,     # μ
+                ΔΣ,           # Σ
+                Δy,           # y
+                Δs_total,     # s
+                Δc_total,     # c
+                NoTangent())  # model
+    end
+
+    return (μ_new, Σ_new), ekf_update_pb
 end
 
 """
