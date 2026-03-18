@@ -360,7 +360,10 @@ function ekf_update(μ, Σ, y, s, c, model::ModelFunctions)
     I_dy = Matrix{Float64}(I, dy, dy)
     I_dx = Matrix{Float64}(I, dx, dx)
     S = F * Σ * F' + model.σ² * I_dy                          # dy × dy
-    K = Σ * F' / S                                             # dx × dy  (= Σ Fᵀ S⁻¹)
+    # Use explicit inv(S) instead of / S: the ChainRules rrule for rdiv (/)
+    # produces incorrect gradients in multi-step EKF chains, while inv() has
+    # a known-good rrule (verified in lattice tests).
+    K = Σ * F' * inv(S)                                        # dx × dy  (= Σ Fᵀ S⁻¹)
 
     μ_new = μ + K * (y - f̂)                                   # dx
     IKF   = I_dx - K * F
