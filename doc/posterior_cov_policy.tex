@@ -1,0 +1,446 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{booktabs}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\ve}{\operatorname{vec}}
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\bx}{\bm{x}}
+\newcommand{\by}{\bm{y}}
+\newcommand{\bs}{\bm{s}}
+\newcommand{\bc}{\bm{c}}
+\newcommand{\bmu}{\bm{\mu}}
+\newcommand{\bep}{\bm{\varepsilon}}
+\newcommand{\bla}{\bm{\lambda}}
+\newcommand{\sstar}{\bs^{\star}}
+\newcommand{\Snew}{\bm{\Sigma}_{\mathrm{new}}}
+\newcommand{\FIM}{\bm{I}_{\mathrm{F}}}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+
+\title{Posterior Covariance Minimization for Adaptive Sensor Selection\\[4pt]
+       \large Bilevel Formulation and End-to-End Backpropagation}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present a bilevel optimization framework for sensor design in which the
+inner problem selects sensor parameters to minimize the expected posterior
+covariance of a Bayesian state estimator, and the outer problem optimizes
+the physical sensor design to minimize long-horizon estimation error.  We
+derive the closed-form sensor selection policy under a linearized Gaussian
+measurement model, show that the expected posterior covariance is
+independent of the realized measurement, and develop an efficient
+backpropagation scheme through the inner argmin via the Implicit Function
+Theorem.  We give explicit expressions for all required derivatives,
+including a novel analytical directional-derivative formulation that
+eliminates nested automatic differentiation.
+\end{abstract}
+
+%======================================================================
+\section{Problem Setup}
+\label{sec:setup}
+%======================================================================
+
+Consider a hidden state $\bx \in \R^{d_x}$ observed through a nonlinear
+sensor model
+\begin{equation}
+  \by = f(\bx, \bs, \bc) + \bep, \qquad
+  \bep \sim \mathcal{N}(\bm{0},\, \sigma^2 \bm{I}_{d_y}),
+  \label{eq:obs-model}
+\end{equation}
+where $\bs \in \R^{d_s}$ are \emph{sensor parameters} (e.g., input
+phases) chosen adaptively at each time step, and $\bc \in \R^{d_c}$ are
+\emph{sensor design parameters} (e.g., a photonic device geometry)
+optimized offline.
+
+A Bayesian estimator maintains a belief $(\bmu, \bm{\Sigma})$ over $\bx$.
+At each step, we (i) select $\bs$ to maximize estimation quality, (ii)
+acquire a measurement $\by$, and (iii) update the belief via the Extended
+Kalman Filter (EKF).
+
+%======================================================================
+\section{Expected Posterior Covariance}
+\label{sec:posterior-cov}
+%======================================================================
+
+\subsection{EKF Update}
+
+Linearizing \eqref{eq:obs-model} around the current mean $\bmu$ gives
+\begin{equation}
+  \bm{F} = \frac{\partial f}{\partial \bx}\bigg|_{\bmu, \bs, \bc}
+  \in \R^{d_y \times d_x}.
+\end{equation}
+The standard EKF measurement update is:
+\begin{align}
+  \bm{S}     &= \bm{F}\bm{\Sigma}\bm{F}^\top + \sigma^2 \bm{I}_{d_y},
+  \label{eq:innov-cov} \\
+  \bm{K}     &= \bm{\Sigma}\bm{F}^\top \bm{S}^{-1},
+  \label{eq:kalman-gain} \\
+  \bmu_{\mathrm{new}} &= \bmu + \bm{K}(\by - \hat{\by}),
+  \label{eq:mean-update} \\
+  \Snew      &= (\bm{I}_{d_x} - \bm{K}\bm{F})\,\bm{\Sigma}.
+  \label{eq:cov-update}
+\end{align}
+
+\subsection{Key Observation: Independence from $\by$}
+
+\begin{proposition}
+\label{prop:y-indep}
+In the linearized Gaussian model, the posterior covariance $\Snew$ depends
+on $(\bmu, \bm{\Sigma}, \bs, \bc)$ but \textbf{not} on the realized
+measurement~$\by$.
+\end{proposition}
+
+\begin{proof}
+The Kalman gain $\bm{K}$ in \eqref{eq:kalman-gain} depends only on
+$\bm{F}$, $\bm{\Sigma}$, and $\sigma^2$, all of which are determined
+before $\by$ is observed.  Since $\Snew = (\bm{I} - \bm{K}\bm{F})\bm{\Sigma}$
+involves only $\bm{K}$ and $\bm{F}$, it is independent of $\by$.
+\end{proof}
+
+Consequently, the \emph{expected} posterior covariance $\mathbb{E}_{\by}[\Snew]$
+equals $\Snew$ itself---no integration over $\by$ is required.
+
+\subsection{Woodbury Form}
+
+Applying the matrix inversion lemma to \eqref{eq:cov-update} yields the
+compact expression
+\begin{equation}
+  \boxed{%
+    \Snew(\bs) = \bigl(\bm{\Sigma}^{-1}
+      + \bm{F}(\bs)^\top \bm{F}(\bs) / \sigma^2\bigr)^{-1}
+    = \bigl(\bm{\Sigma}^{-1} + \FIM(\bs)\bigr)^{-1},
+  }
+  \label{eq:woodbury}
+\end{equation}
+where $\FIM = \bm{F}^\top\bm{F}/\sigma^2$ is the (Bayesian) Fisher
+Information Matrix for a single measurement.  The posterior precision is
+the sum of the prior precision and the Fisher information.
+
+%======================================================================
+\section{Sensor Selection Policy}
+\label{sec:sensor-selection}
+%======================================================================
+
+\subsection{A-Optimal Criterion}
+
+We select sensor parameters to minimize the trace of the posterior
+covariance (the A-optimality criterion in experimental design):
+\begin{equation}
+  \sstar(\bmu, \bm{\Sigma}, \bc)
+  = \arg\min_{\bs}\;\underbrace{%
+    \tr\!\bigl(\Snew(\bs)\bigr) + \alpha_r \|\bs\|^2
+  }_{\displaystyle \varphi(\bs;\, \bmu, \bm{\Sigma}, \bc)},
+  \label{eq:inner-opt}
+\end{equation}
+where $\alpha_r > 0$ is a regularization coefficient that keeps the
+solution bounded.
+
+\begin{remark}[Comparison with the BFIM criterion]
+The commonly used BFIM criterion maximizes $\tr(\FIM) = \|\bm{F}\|_F^2 / \sigma^2$,
+which depends only on $\bm{F}$ and $\sigma^2$.  The A-optimal criterion
+\eqref{eq:inner-opt} additionally accounts for the current uncertainty
+$\bm{\Sigma}$: it focuses sensor resources on state-space directions where
+the prior uncertainty is still large.  In the limit $\bm{\Sigma}^{-1} \to
+\bm{0}$ (flat prior), the two criteria differ---the BFIM criterion
+maximizes $\tr(\bm{F}^\top\bm{F})$, while the A-optimal criterion
+minimizes $\tr((\bm{F}^\top\bm{F})^{-1})$.
+\end{remark}
+
+\subsection{Stationarity Condition}
+
+At the optimum, the gradient of the full objective vanishes:
+\begin{equation}
+  \nabla_{\bs}\,\varphi\big|_{\sstar} = \bm{0},
+  \qquad\text{i.e.,}\qquad
+  \nabla_{\bs}\,\tr(\Snew)\big|_{\sstar} + 2\alpha_r\,\sstar = \bm{0}.
+  \label{eq:stationarity}
+\end{equation}
+
+The gradient $\nabla_{\bs}\,\tr(\Snew)$ can be computed via the identity
+\begin{equation}
+  \frac{\partial}{\partial s_k}\,\tr(\bm{M}^{-1})
+  = -\tr\!\Bigl(\bm{M}^{-1}\,\frac{\partial \bm{M}}{\partial s_k}\,\bm{M}^{-1}\Bigr),
+  \label{eq:tr-inv-deriv}
+\end{equation}
+where $\bm{M} = \bm{\Sigma}^{-1} + \bm{F}^\top\bm{F}/\sigma^2$ and
+\begin{equation}
+  \frac{\partial \bm{M}}{\partial s_k}
+  = \frac{1}{\sigma^2}\Bigl(
+    \frac{\partial \bm{F}^\top}{\partial s_k}\bm{F}
+    + \bm{F}^\top \frac{\partial \bm{F}}{\partial s_k}
+  \Bigr).
+  \label{eq:dM-ds}
+\end{equation}
+
+%======================================================================
+\section{Outer Optimization and Backpropagation}
+\label{sec:outer}
+%======================================================================
+
+\subsection{Bilevel Structure}
+
+The outer problem optimizes the sensor design $\bc$ to minimize the
+expected estimation error over $N$-step episodes:
+\begin{equation}
+  \min_{\bc}\;\mathbb{E}_{x_0}\bigl[\|\bmu_N(\bc) - \bx_0\|^2\bigr],
+  \label{eq:outer}
+\end{equation}
+where $\bmu_N$ is the EKF mean after $N$ measurement-update steps, each
+involving the sensor selection \eqref{eq:inner-opt}.  The full
+computational graph is:
+\begin{equation}
+  \bc \;\longrightarrow\;
+  \underbrace{\sstar_k = \arg\min_{\bs}\,\varphi(\bs;\,\bmu_{k-1},\bm{\Sigma}_{k-1},\bc)}_{\text{inner optimization}}
+  \;\longrightarrow\;
+  \by_k
+  \;\longrightarrow\;
+  (\bmu_k, \bm{\Sigma}_k)
+  \;\longrightarrow\; \cdots \;\longrightarrow\;
+  \|\bmu_N - \bx_0\|^2.
+  \label{eq:comp-graph}
+\end{equation}
+
+Differentiating through the inner $\arg\min$ requires the Implicit
+Function Theorem (IFT).
+
+\subsection{Implicit Function Theorem for $\sstar$}
+
+The stationarity condition \eqref{eq:stationarity} defines $\sstar$
+implicitly as a function of $\bm{\theta} \in \{\bc, \bmu, \bm{\Sigma}\}$.
+Differentiating with respect to~$\bm{\theta}$:
+\begin{equation}
+  \bm{H}_\varphi\,\frac{\partial \sstar}{\partial \bm{\theta}}
+  + \frac{\partial (\nabla_{\bs}\varphi)}{\partial \bm{\theta}} = \bm{0},
+  \label{eq:ift-identity}
+\end{equation}
+where $\bm{H}_\varphi = \nabla^2_{\bs\bs}\,\varphi\big|_{\sstar}$ is
+the Hessian of the full objective at the optimum, which is positive
+definite (guaranteed by the regularization $\alpha_r$).
+
+Solving for the sensitivity:
+\begin{equation}
+  \frac{\partial \sstar}{\partial \bm{\theta}}
+  = -\bm{H}_\varphi^{-1}\,
+    \frac{\partial (\nabla_{\bs}\varphi)}{\partial \bm{\theta}}
+  = \bm{H}_\varphi^{-1}\,\bm{J}_\theta,
+  \label{eq:sensitivity}
+\end{equation}
+where $\bm{J}_\theta = -\partial(\nabla_{\bs}\varphi)/\partial\bm{\theta}$
+is the cross-Jacobian.  Since $\nabla_{\bs}\varphi = \nabla_{\bs}\tr(\Snew)
++ 2\alpha_r \bs$ and the regularization term does not depend on $\bm{\theta}$:
+\begin{equation}
+  \bm{J}_\theta
+  = -\frac{\partial}{\partial \bm{\theta}}\,
+    \nabla_{\bs}\,\tr(\Snew)\big|_{\sstar}.
+\end{equation}
+
+\subsection{Reverse-Mode (Pullback) Computation}
+
+For a scalar loss $\mathcal{L}$ with upstream cotangent
+$\bar{\bs} = \partial\mathcal{L}/\partial\sstar \in \R^{d_s}$, the IFT
+gives the cotangents for each parameter:
+\begin{equation}
+  \boxed{%
+    \bar{\bm{\theta}} = \bm{J}_\theta^\top\,\bla,
+    \qquad\text{where}\quad
+    \bm{H}_\varphi\,\bla = \bar{\bs}.
+  }
+  \label{eq:pullback}
+\end{equation}
+
+Concretely, the three cotangents are:
+\begin{align}
+  \bar{\bc}   &= \bm{J}_c^\top \bla,   &
+  \bm{J}_c &= \frac{\partial\,\nabla_{\bs}\tr(\Snew)}{\partial \bc}\in\R^{d_s\times d_c},
+  \label{eq:cbar} \\[4pt]
+  \bar{\bmu}  &= \bm{J}_\mu^\top \bla,  &
+  \bm{J}_\mu &= \frac{\partial\,\nabla_{\bs}\tr(\Snew)}{\partial \bmu}\in\R^{d_s\times d_x},
+  \label{eq:mubar} \\[4pt]
+  \bar{\bm{\Sigma}}
+              &= \operatorname{reshape}(\bm{J}_\Sigma^\top \bla,\; d_x, d_x), &
+  \bm{J}_\Sigma &= \frac{\partial\,\nabla_{\bs}\tr(\Snew)}{\partial\ve(\bm{\Sigma})}
+  \in\R^{d_s\times d_x^2}.
+  \label{eq:Sigmabar}
+\end{align}
+
+\begin{remark}[New dependency on $\bm{\Sigma}$]
+Unlike the BFIM criterion (where $\sstar$ depends only on $\bmu$ and $\bc$),
+the A-optimal policy makes $\sstar$ depend on $\bm{\Sigma}$ as well.
+This introduces a new cotangent $\bar{\bm{\Sigma}}$ in the pullback,
+which propagates gradients through the evolving covariance across EKF
+steps.
+\end{remark}
+
+%======================================================================
+\section{Efficient Computation of $\bar{\bc}$}
+\label{sec:cbar}
+%======================================================================
+
+The design-parameter cotangent $\bar{\bc} = \bm{J}_c^\top\bla$ is the
+most expensive term because $d_c$ is typically large (e.g., $d_c = 96
+n_\omega$ for the photonic sensor design problem, where $n_\omega$ is the
+number of frequency points).
+
+\subsection{Na\"ive Approach: Full Jacobian}
+
+Computing $\bm{J}_c$ via forward-mode AD (ForwardDiff) requires
+$\lceil d_c/\text{chunk}\rceil$ evaluations of $\nabla_{\bs}\tr(\Snew)$,
+each involving nested dual numbers (ForwardDiff-over-ForwardDiff).  For
+$d_c = 1920$ and chunk size~8, this is $\sim 240$ passes.
+
+\subsection{Analytical Directional Derivative}
+
+We observe that $\bar{\bc} = \bm{J}_c^\top\bla = \nabla_{\bc}\bigl[
+\bla^\top \nabla_{\bs}\tr(\Snew)\bigr]$, which is the gradient of a
+\emph{scalar} function of $\bc$.  This scalar is the directional
+derivative of $\tr(\Snew)$ in the $\bs$-direction $\bla$:
+\begin{equation}
+  \bla^\top\nabla_{\bs}\,\tr(\Snew)
+  = \frac{\dd}{\dd\epsilon}\,\tr(\Snew(\sstar + \epsilon\bla))
+    \Big|_{\epsilon=0}.
+  \label{eq:dir-deriv-defn}
+\end{equation}
+
+Using \eqref{eq:tr-inv-deriv} with $\bm{M}(\epsilon) = \bm{\Sigma}^{-1}
++ \bm{F}(\sstar+\epsilon\bla)^\top\bm{F}(\sstar+\epsilon\bla)/\sigma^2$:
+\begin{equation}
+  \frac{\dd}{\dd\epsilon}\,\tr(\bm{M}^{-1})\Big|_{\epsilon=0}
+  = -\tr\!\Bigl(\Snew\,\frac{\dd\bm{M}}{\dd\epsilon}\Big|_0\,\Snew\Bigr),
+  \label{eq:dir-deriv-trace}
+\end{equation}
+where
+\begin{equation}
+  \frac{\dd\bm{M}}{\dd\epsilon}\bigg|_0
+  = \frac{1}{\sigma^2}\bigl(
+    \dot{\bm{F}}^\top\bm{F} + \bm{F}^\top\dot{\bm{F}}
+  \bigr),
+  \qquad
+  \dot{\bm{F}} \equiv \sum_{k=1}^{d_s} \lambda_k
+    \frac{\partial \bm{F}}{\partial s_k}\bigg|_{\sstar}.
+  \label{eq:dF-lambda}
+\end{equation}
+
+\subsection{Reverse-Mode Gradient}
+
+The key insight is that \eqref{eq:dir-deriv-trace} can be evaluated
+\emph{without} any ForwardDiff: $\bm{F}$ and $\dot{\bm{F}}$ are computed
+analytically by the lattice scattering model (since the sensor parameters
+$\bs$ enter only through the input amplitudes $\bm{a}_{\mathrm{in}}$,
+whose $\bs$-derivative is trivial).
+
+The scalar \eqref{eq:dir-deriv-trace} depends on $\bc$ through $\bm{F}$,
+$\dot{\bm{F}}$, and $\Snew$ (all of which depend on the S-matrices
+packed in $\bc$).  A single reverse-mode AD pass (Zygote) through this
+scalar yields $\bar{\bc}$:
+\begin{equation}
+  \boxed{%
+    \bar{\bc} = \nabla_{\bc}\Bigl[
+      -\tr\!\bigl(\Snew\,(\dot{\bm{F}}^\top\bm{F}
+      + \bm{F}^\top\dot{\bm{F}})\,\Snew/\sigma^2\bigr)
+    \Bigr].
+  }
+  \label{eq:cbar-analytical}
+\end{equation}
+
+This reduces the cost from $\mathcal{O}(d_c/\text{chunk})$ nested-dual
+passes to \textbf{one} forward + one backward pass through the lattice
+model, regardless of~$d_c$.
+
+%======================================================================
+\section{Complete Algorithm}
+\label{sec:algorithm}
+%======================================================================
+
+\begin{algorithm}[h]
+\caption{One training iteration (outer gradient step)}
+\label{alg:training}
+\begin{algorithmic}[1]
+\Require Design parameters $\bc$; prior $(\bmu_0, \bm{\Sigma}_0)$;
+  true states $\{\bx_0^{(i)}\}$; noise bank $\{\bep_k^{(i)}\}$
+\Ensure Loss $\mathcal{L}$ and gradient $\nabla_{\bc}\mathcal{L}$
+
+\Statex \textbf{--- Forward: FDFD simulation ---}
+\State $\bc_{\mathrm{flat}} \gets \textsc{SimGeom}(\bm{\varepsilon}_{\mathrm{geom}})$
+  \Comment{FDFD $\to$ S-matrices $\to$ flat vector}
+\State Store pullback $\overline{\textsc{SimGeom}}$ for later
+
+\Statex \textbf{--- Forward + backward: episode gradients (parallel over episodes) ---}
+\For{each episode $i$ \textbf{in parallel}}
+  \State $(\bmu, \bm{\Sigma}) \gets (\bmu_0, \bm{\Sigma}_0)$
+  \For{$k = 1, \ldots, N$}
+    \State $\sstar_k \gets \arg\min_{\bs}\bigl[\tr(\Snew(\bs))
+      + \alpha_r\|\bs\|^2\bigr]$
+      \Comment{L-BFGS, \Cref{eq:inner-opt}}
+    \State $\by_k \gets f(\bx_0^{(i)}, \sstar_k, \bc_{\mathrm{flat}})
+      + \bep_k^{(i)}$
+    \State $(\bmu, \bm{\Sigma}) \gets \textsc{EKF-Update}(\bmu, \bm{\Sigma},
+      \by_k, \sstar_k, \bc_{\mathrm{flat}})$
+  \EndFor
+  \State $\mathcal{L}^{(i)} \gets \|\bmu - \bx_0^{(i)}\|^2$
+  \State Backpropagate through EKF loop using IFT (\Cref{eq:pullback})
+    at each $\arg\min$
+  \State \Return $(\mathcal{L}^{(i)},\; \nabla_{\bc_{\mathrm{flat}}}
+    \mathcal{L}^{(i)})$
+\EndFor
+
+\Statex \textbf{--- Backward: FDFD adjoint ---}
+\State $\bar{\bc}_{\mathrm{flat}} \gets
+  \frac{1}{n_{\mathrm{ep}}}\sum_i \nabla_{\bc_{\mathrm{flat}}}
+  \mathcal{L}^{(i)}$
+\State $\nabla_{\bm{\varepsilon}_{\mathrm{geom}}}\mathcal{L}
+  \gets \overline{\textsc{SimGeom}}(\bar{\bc}_{\mathrm{flat}})$
+  \Comment{Adjoint of FDFD solver}
+
+\Statex \textbf{--- Adam update ---}
+\State $\bm{\varepsilon}_{\mathrm{geom}} \gets
+  \textsc{Adam-Step}(\bm{\varepsilon}_{\mathrm{geom}},\;
+  \nabla_{\bm{\varepsilon}_{\mathrm{geom}}}\mathcal{L})$
+\end{algorithmic}
+\end{algorithm}
+
+%======================================================================
+\section{Summary of Derivatives}
+\label{sec:derivatives}
+%======================================================================
+
+\Cref{tab:derivatives} summarizes all derivative quantities needed by the
+algorithm, their dimensionality, and the method used to compute them.
+
+\begin{table}[h]
+\centering
+\caption{Derivative quantities in the bilevel optimization.}
+\label{tab:derivatives}
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Quantity} & \textbf{Size} & \textbf{Method} & \textbf{Used in} \\
+\midrule
+$\nabla_{\bs}\tr(\Snew)$ & $d_s$ & ForwardDiff & Inner L-BFGS \\
+$\nabla^2_{\bs\bs}\tr(\Snew)$ & $d_s \times d_s$ & ForwardDiff (nested) & IFT Hessian $\bm{H}_\varphi$ \\
+$\bla = \bm{H}_\varphi^{-1}\bar{\bs}$ & $d_s$ & LU solve & IFT pullback \\
+$\bm{J}_c^\top\bla = \bar{\bc}$ & $d_c$ & Zygote (analytical) & Outer gradient \\
+$\bm{J}_\mu^\top\bla = \bar{\bmu}$ & $d_x$ & ForwardDiff & EKF chain rule \\
+$\bm{J}_\Sigma^\top\bla = \bar{\bm{\Sigma}}$ & $d_x \times d_x$ & ForwardDiff & EKF chain rule \\
+$\bm{F}$, $\dot{\bm{F}}$ & $d_y \times d_x$ & Analytical (lattice) & Eq.~\eqref{eq:cbar-analytical} \\
+$\Snew$ & $d_x \times d_x$ & Woodbury \eqref{eq:woodbury} & Eq.~\eqref{eq:cbar-analytical} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}
