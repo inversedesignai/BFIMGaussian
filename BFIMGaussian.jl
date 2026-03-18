@@ -100,14 +100,14 @@ for the L-BFGS sensor-parameter optimisation.  Evaluates the regularised
 objective φ = -bfim_trace + αr‖s‖² on a uniform grid (n_grid^ds points)
 and returns the grid point with the smallest φ.
 
-For ds=2 with n_grid=8, this is 64 evaluations of bfim_trace — cheap
+For ds=2 with n_grid=20, this is 400 evaluations of bfim_trace — cheap
 compared to the FDFD solver.  For ds>2, consider replacing with a
 proper Bayesian optimisation (GP surrogate + acquisition function).
 
 This function is non-differentiable and must be called inside
 `@ignore_derivatives` so that Zygote does not trace through it.
 """
-function _global_init_s(c, μ, model::ModelFunctions; n_grid::Int=8)
+function _global_init_s(c, μ, model::ModelFunctions; n_grid::Int=20)
     ds = model.ds
     φ_range = collect(range(-π, π, length=n_grid+1))[1:end-1]  # exclude endpoint (periodic)
     obj = s -> -bfim_trace(μ, s, c, model) + model.αr * sum(abs2, s)
