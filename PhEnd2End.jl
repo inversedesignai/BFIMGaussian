@@ -718,6 +718,25 @@ if _run_test("ekf")
             println("      ε=$ε_test  AD=$(round(ad_mu1, sigdigits=6))  FD=$(round(fd_mu1, sigdigits=6))  rel_err=$(round(re_mu1, sigdigits=3))"); flush(stdout)
         end
 
+        # ── 3c'''. Warm-started ∂(get_sopt)/∂μ at μ₁ ──────────────────────
+        # Uses _get_sopt with nominal s★ as init so FD stays in the same basin.
+        println("  3c'''. Warm-started ∂(get_sopt)/∂μ at μ₁:"); flush(stdout)
+        sopt_nom_at_mu1 = get_sopt(c_nom, μ1_test, mf_check)
+        sopt_of_mu_warm = μ_ -> begin
+            s_opt = BFIMGaussian._get_sopt(c_nom, μ_, mf_check, sopt_nom_at_mu1)
+            sum(real.(exp.(im .* s_opt)))
+        end
+        _, (grad_mu1w,) = Zygote.withgradient(sopt_of_mu_warm, μ1_test)
+        best_re_mu1w = Inf
+        for ε_test in [1e-4, 1e-5, 1e-6]
+            fd_mu1w = (sopt_of_mu_warm(μ1_test .+ ε_test .* v_mu) - sopt_of_mu_warm(μ1_test .- ε_test .* v_mu)) / (2ε_test)
+            ad_mu1w = dot(grad_mu1w, v_mu)
+            re_mu1w = abs(fd_mu1w - ad_mu1w) / (abs(ad_mu1w) + 1e-12)
+            best_re_mu1w = min(best_re_mu1w, re_mu1w)
+            println("      ε=$ε_test  AD=$(round(ad_mu1w, sigdigits=6))  FD=$(round(fd_mu1w, sigdigits=6))  rel_err=$(round(re_mu1w, sigdigits=3))"); flush(stdout)
+        end
+        @assert best_re_mu1w < 1e-3  "warm-started ∂(get_sopt)/∂μ at μ₁ failed: best rel_err=$best_re_mu1w"
+
         # ── 3d. Two EKF steps, FIXED s, no get_sopt ─────────────────────────
         # Isolates multi-step ekf_update gradient from IFT rrule.
         println("  3d. Zygote ∂(2 EKF steps, fixed s, no get_sopt)/∂c:"); flush(stdout)
