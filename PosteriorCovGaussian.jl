@@ -224,8 +224,11 @@ function ChainRulesCore.rrule(::typeof(_get_sopt),
             # then differentiate w.r.t. c via Zygote.
             c̄ = Zygote.gradient(c) do c_
                 F, dF_λ = model.fxs(μ, s_star, c_, λ)
+                # Σ is constant w.r.t. c_, so inv(Symmetric(Σ)) is not traced.
+                # Avoid Symmetric wrapper on M — Zygote has inv rrule for
+                # StridedMatrix but not Symmetric (would hit LAPACK foreigncall).
                 Σ_inv = inv(Symmetric(Σ))
-                M = Symmetric(Σ_inv + F' * F / model.σ²)
+                M = Σ_inv + F' * F / model.σ²
                 Σ_new = inv(M)
                 dM = (dF_λ' * F + F' * dF_λ) / model.σ²
                 -tr(Σ_new * dM * Σ_new)
