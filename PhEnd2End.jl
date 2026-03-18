@@ -685,10 +685,29 @@ if _run_test("ekf")
         println("      AD=$(round(ad_3c, sigdigits=6))  FD=$(round(fd_3c, sigdigits=6))  rel_err=$(round(re_3c, sigdigits=3))")
         @assert re_3c < 1e-3  "single EKF step gradient check failed: rel_err=$re_3c"
 
-        # ── 3d. Two EKF steps with get_sopt ──────────────────────────────────
-        println("  3d. Zygote ∂(2 EKF steps with get_sopt)/∂c:")
-        noise_2 = noise_bank[1][2]
-        two_step_c = c_ -> begin
+        # ── 3d. Two EKF steps, FIXED s, no get_sopt ─────────────────────────
+        # Isolates multi-step ekf_update gradient from IFT rrule.
+        println("  3d. Zygote ∂(2 EKF steps, fixed s, no get_sopt)/∂c:")
+        noise_2  = noise_bank[1][2]
+        s_fixed1 = [0.3, -0.2]
+        s_fixed2 = [0.1,  0.5]
+        two_step_fixed_c = c_ -> begin
+            y1 = mf_check.f(x0_check, s_fixed1, c_) + noise_1
+            μ1, Σ1 = ekf_update(μ0, Σ0, y1, s_fixed1, c_, mf_check)
+            y2 = mf_check.f(x0_check, s_fixed2, c_) + noise_2
+            μ2, Σ2 = ekf_update(μ1, Σ1, y2, s_fixed2, c_, mf_check)
+            sum(abs2, μ2 - x0_check)
+        end
+        _, (grad_3d,) = Zygote.withgradient(two_step_fixed_c, c_nom)
+        fd_3d = (two_step_fixed_c(c_nom .+ ε .* v_c) - two_step_fixed_c(c_nom .- ε .* v_c)) / (2ε)
+        ad_3d = dot(grad_3d, v_c)
+        re_3d = abs(fd_3d - ad_3d) / (abs(ad_3d) + 1e-12)
+        println("      AD=$(round(ad_3d, sigdigits=6))  FD=$(round(fd_3d, sigdigits=6))  rel_err=$(round(re_3d, sigdigits=3))")
+        @assert re_3d < 1e-3  "2-step EKF (fixed s) gradient check failed: rel_err=$re_3d"
+
+        # ── 3e. Two EKF steps WITH get_sopt ──────────────────────────────────
+        println("  3e. Zygote ∂(2 EKF steps with get_sopt)/∂c:")
+        two_step_sopt_c = c_ -> begin
             μ, Σ = μ0, Σ0
             for noise_k in [noise_1, noise_2]
                 sk = get_sopt(c_, μ, mf_check)
@@ -697,22 +716,22 @@ if _run_test("ekf")
             end
             sum(abs2, μ - x0_check)
         end
-        _, (grad_3d,) = Zygote.withgradient(two_step_c, c_nom)
-        fd_3d = (two_step_c(c_nom .+ ε .* v_c) - two_step_c(c_nom .- ε .* v_c)) / (2ε)
-        ad_3d = dot(grad_3d, v_c)
-        re_3d = abs(fd_3d - ad_3d) / (abs(ad_3d) + 1e-12)
-        println("      AD=$(round(ad_3d, sigdigits=6))  FD=$(round(fd_3d, sigdigits=6))  rel_err=$(round(re_3d, sigdigits=3))")
-        @assert re_3d < 1e-2  "2-step EKF gradient check failed: rel_err=$re_3d"
-
-        # ── 3e. Full episode_loss (N_steps EKF steps) ─────────────────────────
-        println("  3e. Zygote ∂(episode_loss)/∂c  (N_steps=$N_steps):")
-        ep_c = c_ -> episode_loss(x0_check, c_, mf_check, μ0, Σ0, noise_bank[1])
-        _, (grad_3e,) = Zygote.withgradient(ep_c, c_nom)
-        fd_3e = (ep_c(c_nom .+ ε .* v_c) - ep_c(c_nom .- ε .* v_c)) / (2ε)
+        _, (grad_3e,) = Zygote.withgradient(two_step_sopt_c, c_nom)
+        fd_3e = (two_step_sopt_c(c_nom .+ ε .* v_c) - two_step_sopt_c(c_nom .- ε .* v_c)) / (2ε)
         ad_3e = dot(grad_3e, v_c)
         re_3e = abs(fd_3e - ad_3e) / (abs(ad_3e) + 1e-12)
         println("      AD=$(round(ad_3e, sigdigits=6))  FD=$(round(fd_3e, sigdigits=6))  rel_err=$(round(re_3e, sigdigits=3))")
-        @assert re_3e < 1e-2  "episode_loss gradient check failed: rel_err=$re_3e"
+        @assert re_3e < 1e-2  "2-step EKF (with get_sopt) gradient check failed: rel_err=$re_3e"
+
+        # ── 3f. Full episode_loss (N_steps EKF steps) ─────────────────────────
+        println("  3f. Zygote ∂(episode_loss)/∂c  (N_steps=$N_steps):")
+        ep_c = c_ -> episode_loss(x0_check, c_, mf_check, μ0, Σ0, noise_bank[1])
+        _, (grad_3f,) = Zygote.withgradient(ep_c, c_nom)
+        fd_3f = (ep_c(c_nom .+ ε .* v_c) - ep_c(c_nom .- ε .* v_c)) / (2ε)
+        ad_3f = dot(grad_3f, v_c)
+        re_3f = abs(fd_3f - ad_3f) / (abs(ad_3f) + 1e-12)
+        println("      AD=$(round(ad_3f, sigdigits=6))  FD=$(round(fd_3f, sigdigits=6))  rel_err=$(round(re_3f, sigdigits=3))")
+        @assert re_3f < 1e-2  "episode_loss gradient check failed: rel_err=$re_3f"
 
         println("═══ EKF gradient tests complete ═══"); flush(stdout)
     end
