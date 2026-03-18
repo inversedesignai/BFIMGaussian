@@ -309,11 +309,13 @@ function ekf_update(μ, Σ, y, s, c, model::ModelFunctions)
     dx = length(μ)
     dy = length(y)
 
-    S = F * Σ * F' + model.σ² * I(dy)
+    I_dy = Matrix{Float64}(I, dy, dy)
+    I_dx = Matrix{Float64}(I, dx, dx)
+    S = F * Σ * F' + model.σ² * I_dy
     K = Σ * F' / S
 
     μ_new = μ + K * (y - f̂)
-    IKF   = I(dx) - K * F
+    IKF   = I_dx - K * F
     Σ_new = IKF * Σ * IKF' + (model.σ² * K) * K'
 
     return μ_new, Σ_new

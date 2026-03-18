@@ -355,12 +355,15 @@ function ekf_update(μ, Σ, y, s, c, model::ModelFunctions)
     dx = length(μ)
     dy = length(y)
 
-    I_dy = I(dy)
+    # Use dense identity matrices — I(n) returns Diagonal which Zygote/ChainRules
+    # can't differentiate through (Diagonal pullback doesn't accept NoTangent).
+    I_dy = Matrix{Float64}(I, dy, dy)
+    I_dx = Matrix{Float64}(I, dx, dx)
     S = F * Σ * F' + model.σ² * I_dy                          # dy × dy
     K = Σ * F' / S                                             # dx × dy  (= Σ Fᵀ S⁻¹)
 
     μ_new = μ + K * (y - f̂)                                   # dx
-    IKF   = I(dx) - K * F
+    IKF   = I_dx - K * F
     Σ_new = IKF * Σ * IKF' + (model.σ² * K) * K'              # Joseph form
 
     return μ_new, Σ_new
