@@ -402,7 +402,7 @@ end
 # ══════════════════════════════════════════════════════════════════════════════
 # Gradient / correctness tests
 # Control via env var BFIM_TEST: "all", or comma-separated subset of
-#   sim_geom, mf_f, mf_fx, sopt_heatmap, sopt_grad, episode, batch
+#   sim_geom, mf_f, mf_fx, lattice, sopt_heatmap, sopt_grad, episode, batch
 # Example:  BFIM_TEST=sopt_grad,episode julia PhEnd2End.jl
 # ══════════════════════════════════════════════════════════════════════════════
 const _TEST_ENV = get(ENV, "BFIM_TEST", "")
@@ -500,6 +500,129 @@ if _run_test("mf_fx")
             println("  --- diagnostic: does -J_anal ≈ J_fd? rel_err = $(norm(J_anal .+ J_fd)/norm(J_anal))")
         end
         @assert rel_err_full < 1e-3  "mf.fx full Jacobian check failed: relative error = $rel_err_full"
+    end
+end
+
+# ── Lattice function consistency & AD tests ──────────────────────────────────
+# Tests powers_only, jac_only, jac_and_dirderiv_s for:
+#   1. Mutual consistency: jac_only ≈ FD(powers_only), dirderiv ≈ FD(jac_only)
+#   2. Zygote AD correctness: ∂/∂c of each function matches FD
+if _run_test("lattice")
+    let ε = 1e-5
+        mf_check = make_model(nω, n_lat, GΔω, σ², αr)
+        S_arr, dSdn_arr, d2Sdn2_arr = unpack_c(c_nom, nω)
+        x_check  = x0_list[1]
+        Δn       = reshape(x_check, n_lat, n_lat)
+        s_check  = [0.3, -0.2]   # non-zero phases
+        φ₁, φ₂   = s_check[1], s_check[2]
+
+        println("═══ Lattice function tests ═══"); flush(stdout)
+
+        # ── 1a. jac_only vs FD of powers_only ────────────────────────────────
+        # J[:,k] should equal (powers_only(x+ε·eₖ) − powers_only(x−ε·eₖ)) / 2ε
+        println("  1a. jac_only vs FD(powers_only) w.r.t. Δn:")
+        J_anal = jac_only(Δn, φ₁, φ₂, S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
+        J_fd   = hcat([begin
+            eₖ = zeros(n_lat, n_lat); eₖ[k] = 1.0
+            (powers_only(Δn .+ ε .* eₖ, φ₁, φ₂, S_arr, dSdn_arr, d2Sdn2_arr, GΔω) .-
+             powers_only(Δn .- ε .* eₖ, φ₁, φ₂, S_arr, dSdn_arr, d2Sdn2_arr, GΔω)) ./ (2ε)
+        end for k in 1:length(Δn)]...)
+        re_jac = norm(J_anal - J_fd) / (norm(J_anal) + 1e-12)
+        println("      ‖J_anal‖=$(round(norm(J_anal), sigdigits=4))  ‖J_fd‖=$(round(norm(J_fd), sigdigits=4))  rel_err=$(round(re_jac, sigdigits=3))")
+        @assert re_jac < 1e-3  "jac_only vs FD(powers_only) failed: rel_err=$re_jac"
+
+        # ── 1b. jac_only vs FD of powers_only w.r.t. s (phases) ──────────────
+        println("  1b. jac_only vs FD(powers_only) w.r.t. s:")
+        for (si, name) in [(1, "φ₁"), (2, "φ₂")]
+            μ_plus  = powers_only(Δn, (si==1 ? φ₁+ε : φ₁), (si==2 ? φ₂+ε : φ₂),
+                                  S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
+            μ_minus = powers_only(Δn, (si==1 ? φ₁-ε : φ₁), (si==2 ? φ₂-ε : φ₂),
+                                  S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
+            dμ_ds_fd = (μ_plus .- μ_minus) ./ (2ε)
+            # jac_only gives ∂μ/∂Δn, not ∂μ/∂s. Use ForwardDiff for ∂μ/∂s:
+            dμ_ds_ad = ForwardDiff.derivative(
+                t -> powers_only(Δn, (si==1 ? φ₁+t : φ₁), (si==2 ? φ₂+t : φ₂),
+                                 S_arr, dSdn_arr, d2Sdn2_arr, GΔω), 0.0)
+            re_s = norm(dμ_ds_ad - dμ_ds_fd) / (norm(dμ_ds_ad) + 1e-12)
+            println("      ∂μ/∂$name: ‖AD‖=$(round(norm(dμ_ds_ad), sigdigits=4))  ‖FD‖=$(round(norm(dμ_ds_fd), sigdigits=4))  rel_err=$(round(re_s, sigdigits=3))")
+            @assert re_s < 1e-3  "∂μ/∂$name check failed: rel_err=$re_s"
+        end
+
+        # ── 1c. jac_and_dirderiv_s vs FD of jac_only w.r.t. s ────────────────
+        println("  1c. jac_and_dirderiv_s vs FD(jac_only) w.r.t. s:")
+        λ_test = [0.7, -0.4]
+        J0, dJ_λ = jac_and_dirderiv_s(Δn, φ₁, φ₂, λ_test, S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
+        # FD: directional derivative of jac_only along λ in s-space
+        J_plus  = jac_only(Δn, φ₁ + ε*λ_test[1], φ₂ + ε*λ_test[2], S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
+        J_minus = jac_only(Δn, φ₁ - ε*λ_test[1], φ₂ - ε*λ_test[2], S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
+        dJ_fd   = (J_plus .- J_minus) ./ (2ε)
+        # Also check J0 == jac_only at the same point
+        re_J0 = norm(J0 - J_anal) / (norm(J_anal) + 1e-12)
+        re_dJ = norm(dJ_λ - dJ_fd) / (norm(dJ_fd) + 1e-12)
+        println("      J consistency: rel_err=$(round(re_J0, sigdigits=3))")
+        println("      dJ_λ: ‖anal‖=$(round(norm(dJ_λ), sigdigits=4))  ‖FD‖=$(round(norm(dJ_fd), sigdigits=4))  rel_err=$(round(re_dJ, sigdigits=3))")
+        @assert re_J0 < 1e-10  "J from jac_and_dirderiv_s != jac_only: rel_err=$re_J0"
+        @assert re_dJ < 1e-3   "dJ_λ vs FD(jac_only) failed: rel_err=$re_dJ"
+
+        # ── 2a. Zygote gradient of powers_only w.r.t. c ──────────────────────
+        println("  2a. Zygote ∂(powers_only)/∂c:")
+        v_c = randn(MersenneTwister(200), length(c_nom)); v_c ./= norm(v_c)
+        scalar_po = c_ -> begin
+            Sa, dSa, d2Sa = unpack_c(c_, nω)
+            sum(abs2, powers_only(Δn, φ₁, φ₂, Sa, dSa, d2Sa, GΔω))
+        end
+        _, (grad_po,) = Zygote.withgradient(scalar_po, c_nom)
+        fd_po = (scalar_po(c_nom .+ ε .* v_c) - scalar_po(c_nom .- ε .* v_c)) / (2ε)
+        ad_po = dot(grad_po, v_c)
+        re_po = abs(fd_po - ad_po) / (abs(ad_po) + 1e-12)
+        println("      AD=$(round(ad_po, sigdigits=6))  FD=$(round(fd_po, sigdigits=6))  rel_err=$(round(re_po, sigdigits=3))")
+        @assert re_po < 1e-3  "Zygote ∂(powers_only)/∂c failed: rel_err=$re_po"
+
+        # ── 2b. Zygote gradient of jac_only w.r.t. c ─────────────────────────
+        println("  2b. Zygote ∂(jac_only)/∂c:")
+        scalar_jo = c_ -> begin
+            Sa, dSa, d2Sa = unpack_c(c_, nω)
+            sum(abs2, jac_only(Δn, φ₁, φ₂, Sa, dSa, d2Sa, GΔω))
+        end
+        _, (grad_jo,) = Zygote.withgradient(scalar_jo, c_nom)
+        fd_jo = (scalar_jo(c_nom .+ ε .* v_c) - scalar_jo(c_nom .- ε .* v_c)) / (2ε)
+        ad_jo = dot(grad_jo, v_c)
+        re_jo = abs(fd_jo - ad_jo) / (abs(ad_jo) + 1e-12)
+        println("      AD=$(round(ad_jo, sigdigits=6))  FD=$(round(fd_jo, sigdigits=6))  rel_err=$(round(re_jo, sigdigits=3))")
+        @assert re_jo < 1e-3  "Zygote ∂(jac_only)/∂c failed: rel_err=$re_jo"
+
+        # ── 2c. Zygote gradient of jac_and_dirderiv_s w.r.t. c ───────────────
+        println("  2c. Zygote ∂(jac_and_dirderiv_s)/∂c:")
+        scalar_jds = c_ -> begin
+            Sa, dSa, d2Sa = unpack_c(c_, nω)
+            F, dF = jac_and_dirderiv_s(Δn, φ₁, φ₂, λ_test, Sa, dSa, d2Sa, GΔω)
+            sum(abs2, F) + sum(abs2, dF)
+        end
+        _, (grad_jds,) = Zygote.withgradient(scalar_jds, c_nom)
+        fd_jds = (scalar_jds(c_nom .+ ε .* v_c) - scalar_jds(c_nom .- ε .* v_c)) / (2ε)
+        ad_jds = dot(grad_jds, v_c)
+        re_jds = abs(fd_jds - ad_jds) / (abs(ad_jds) + 1e-12)
+        println("      AD=$(round(ad_jds, sigdigits=6))  FD=$(round(fd_jds, sigdigits=6))  rel_err=$(round(re_jds, sigdigits=3))")
+        @assert re_jds < 1e-3  "Zygote ∂(jac_and_dirderiv_s)/∂c failed: rel_err=$re_jds"
+
+        # ── 2d. Zygote gradient of bfim_trace_dirderiv (IFT scalar) w.r.t. c ─
+        # This is the scalar λ'·∇_s(bfim_trace) = 2·sum(F.*dF_λ)/σ² that the
+        # IFT rrule differentiates w.r.t. c.
+        println("  2d. Zygote ∂(λ'·∇_s bfim_trace)/∂c  (IFT scalar):")
+        scalar_ift = c_ -> begin
+            Sa, dSa, d2Sa = unpack_c(c_, nω)
+            Δn_ = reshape(x_check, n_lat, n_lat)
+            F, dF_λ = jac_and_dirderiv_s(Δn_, s_check[1], s_check[2], λ_test, Sa, dSa, d2Sa, GΔω)
+            2 * sum(F .* dF_λ) / σ²
+        end
+        _, (grad_ift,) = Zygote.withgradient(scalar_ift, c_nom)
+        fd_ift = (scalar_ift(c_nom .+ ε .* v_c) - scalar_ift(c_nom .- ε .* v_c)) / (2ε)
+        ad_ift = dot(grad_ift, v_c)
+        re_ift = abs(fd_ift - ad_ift) / (abs(ad_ift) + 1e-12)
+        println("      AD=$(round(ad_ift, sigdigits=6))  FD=$(round(fd_ift, sigdigits=6))  rel_err=$(round(re_ift, sigdigits=3))")
+        @assert re_ift < 1e-3  "Zygote ∂(IFT scalar)/∂c failed: rel_err=$re_ift"
+
+        println("═══ All lattice tests passed ═══"); flush(stdout)
     end
 end
 
