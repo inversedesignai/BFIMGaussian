@@ -6,8 +6,9 @@ flush(stdout)
 
 using Distributed
 
+println("[startup] Adding worker processes..."); flush(stdout)
 addprocs(4)
-println("Workers: $(nworkers())  |  Sys.CPU_THREADS: $(Sys.CPU_THREADS)")
+println("[startup] Workers: $(nworkers())  |  Sys.CPU_THREADS: $(Sys.CPU_THREADS)"); flush(stdout)
 
 # Broadcast LOAD_PATH and module imports to all workers.
 # $src_dir interpolates the master-side string so @__DIR__ is not re-evaluated
@@ -29,6 +30,7 @@ const src_dir = @__DIR__
 #   - posterior_cov_trace(μ,s,c,model,Σ)  replaces  bfim_trace(μ,s,c,model)
 #   - posterior_grad_s / posterior_hessian_s  replace  bfim_grad_s / bfim_hessian_s
 # ──────────────────────────────────────────────────────────────────────────────
+println("[startup] Loading modules on all workers..."); flush(stdout)
 @everywhere begin
     using SimGeomBroadBand
     using BFIMGaussian          # swap to: using PosteriorCovGaussian
@@ -45,6 +47,7 @@ const src_dir = @__DIR__
     BLAS.set_num_threads(1)
 end
 
+println("[startup] Loading main-process packages..."); flush(stdout)
 using Test
 using Plots
 using ForwardDiff
@@ -52,6 +55,7 @@ using Optim
 using Serialization
 using Statistics
 using BFIMGaussian          # swap to: using PosteriorCovGaussian
+println("[startup] All packages loaded."); flush(stdout)
 
 # Unpack the flat real coefficient vector c into arrays of complex 4×4 S-matrices.
 # Uses only indexing — fully Zygote-differentiable.
@@ -140,13 +144,18 @@ function end2end(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info, monitors
                  x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr)
 
     @assert size(ε_geom) == (length(grid_info.design_iy), length(grid_info.design_ix))  "ε_geom size $(size(ε_geom)) does not match design region ($(length(grid_info.design_iy)), $(length(grid_info.design_ix)))"
+
+    println("  [end2end] FDFD forward (sim_geom + Zygote pullback)..."); flush(stdout)
     fdfd = ε_ -> sim_geom(ε_, n_geom, ε_base, ω_array, Ls, Bs, grid_info, monitors_array, a_f_array, a_b_array)
     c, pb_c = Zygote.pullback(fdfd, ε_geom)
 
+    println("  [end2end] Episode gradients (batch_c2loss_grad, $(length(x0_list)) episodes)..."); flush(stdout)
     loss, cbar = batch_c2loss_grad(x0_list, c, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr)
 
-    (grad_ε_geoms,) = pb_c(cbar) 
-        
+    println("  [end2end] FDFD backward (pullback)..."); flush(stdout)
+    (grad_ε_geoms,) = pb_c(cbar)
+
+    println("  [end2end] Done. loss=$loss"); flush(stdout)
     return loss, grad_ε_geoms
 
 end
@@ -168,8 +177,11 @@ function train_adam!(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
     losses = Float64[]
 
     for t in 1:n_iters
+        t_start = time()
+
         # Optionally resample x0 and noise each iteration for fresh stochastic estimates
         if resample_every > 0 && t > 1 && mod(t - 1, resample_every) == 0
+            println("  [optim] Resampling x0 and noise..."); flush(stdout)
             x0_list    = [x0_min .+ (x0_max - x0_min) .* rand(rng, length(μ0)) for _ in eachindex(x0_list)]
             noise_bank = sample_noise_bank(rng, length(x0_list), length(noise_bank[1]),
                                            length(noise_bank[1][1]), σ²)
@@ -194,7 +206,8 @@ function train_adam!(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
         g_abs    = abs.(grad)
         step_abs = abs.(lr .* m̂ ./ (sqrt.(v̂) .+ ε_adam))
         Δloss    = t > 1 ? loss - losses[end-1] : NaN
-        println("iter $t/$n_iters  loss=$(round(loss, sigdigits=6))  Δloss=$(round(Δloss, sigdigits=3))  " *
+        elapsed  = round(time() - t_start, digits=1)
+        println("iter $t/$n_iters  $(elapsed)s  loss=$(round(loss, sigdigits=6))  Δloss=$(round(Δloss, sigdigits=3))  " *
                 "|grad| min=$(round(minimum(g_abs), sigdigits=3)) avg=$(round(mean(g_abs), sigdigits=3)) " *
                 "max=$(round(maximum(g_abs), sigdigits=3))  " *
                 "|step| avg=$(round(mean(step_abs), sigdigits=3)) max=$(round(maximum(step_abs), sigdigits=3))  " *
@@ -246,27 +259,33 @@ rng                = MersenneTwister(42)
 x0_list            = [x0_min .+ (x0_max - x0_min) .* rand(rng, dx) for _ in 1:n_episodes]
 noise_bank         = sample_noise_bank(rng, n_episodes, N_steps, dy, σ²)
 
-println("number of frequencies = $nω  |  workers = $(nworkers())")
+println("[params] nω=$nω  workers=$(nworkers())  n_lat=$n_lat  res=$res  grid=$(round(Int,Lx*res))×$(round(Int,Ly*res))  design=$(d_length)×$(d_width)")
+flush(stdout)
 
 # ── Geometry and calibration setup ───────────────────────────────────────────
+println("[setup] Building 4-port geometry (setup_4port_sweep)..."); flush(stdout)
 ε_base, ω_array, Ls, Bs, grid_info, _, monitors_array =
     setup_4port_sweep(ωmin, ωmax, nω, n_core, w, d_length, d_width;
         Lx=Lx, Ly=Ly, res=res, n_pml=n_pml, R_target=R_target,
         port_offset=port_offset, mon_offset=mon_offset)
+println("[setup] Geometry built. Nx=$(grid_info.Nx) Ny=$(grid_info.Ny)"); flush(stdout)
 
-
+println("[setup] Calibrating straight waveguide..."); flush(stdout)
 (a_f_array, a_b_array) = calibrate_straight_waveguide(
     ωmin, ωmax, nω, n_core, w;
     Lx=Lx, Ly=Ly, res=res, n_pml=n_pml, R_target=R_target,
     port_offset=port_offset, mon_offset=mon_offset)
+println("[setup] Calibration done. a_f range=[$(minimum(a_f_array)), $(maximum(a_f_array))]"); flush(stdout)
 
 δω  = ω_array[2] - ω_array[1]
 GΔω = @. exp(-(ω_array - ω₀)^2 / (2Δω^2)) / (Δω * sqrt(2π)) * δω
 
 Ny_d = length(grid_info.design_iy)
 Nx_d = length(grid_info.design_ix)
+println("[setup] Design region: $(Ny_d)×$(Nx_d) = $(Ny_d*Nx_d) parameters"); flush(stdout)
 
 # ── Run optimisation ─────────────────────────────────────────────────────────
+println("[optim] Starting Adam optimisation..."); flush(stdout)
 
 ε_geom_opt = fill(0.5, Ny_d, Nx_d)
 
