@@ -355,12 +355,13 @@ function ekf_update(μ, Σ, y, s, c, model::ModelFunctions)
     dx = length(μ)
     dy = length(y)
 
-    S = F * Σ * F' + model.σ² * Matrix{Float64}(I, dy, dy)   # dy × dy
+    I_dy = I(dy)
+    S = F * Σ * F' + model.σ² * I_dy                          # dy × dy
     K = Σ * F' / S                                             # dx × dy  (= Σ Fᵀ S⁻¹)
 
     μ_new = μ + K * (y - f̂)                                   # dx
-    IKF   = Matrix{Float64}(I, dx, dx) - K * F
-    Σ_new = IKF * Σ * IKF' + K * (model.σ² * Matrix{Float64}(I, dy, dy)) * K'  # Joseph form
+    IKF   = I(dx) - K * F
+    Σ_new = IKF * Σ * IKF' + (model.σ² * K) * K'              # Joseph form
 
     return μ_new, Σ_new
 end

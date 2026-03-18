@@ -703,7 +703,6 @@ function ChainRulesCore.rrule(::typeof(batch_solve), ε_geom, n_geom, Ls, ωs, �
             # -----------------------------------------------------------------
 
             # A) Reverse solve for: Z = F \ C2
-            # ΔZ may be ZeroTangent() when Z is unused by the caller.
             ΔZ_mat = ΔZ isa AbstractZero ? zeros(ComplexF64, size(X)) : ΔZ
             ΔC2 = F' \ ΔZ_mat
 
@@ -714,7 +713,6 @@ function ChainRulesCore.rrule(::typeof(batch_solve), ε_geom, n_geom, Ls, ωs, �
             ΔY_from_C2   = -2 .* ΔC2 .* conj.(dA_diag)
 
             # C) Reverse solve for: Y = F \ C1
-            # ΔY may be ZeroTangent() when Y is unused by the caller.
             ΔY_mat   = ΔY isa AbstractZero ? zeros(ComplexF64, size(X)) : ΔY
             ΔY_total = ΔY_mat .+ ΔY_from_C2
             ΔC1 = F' \ ΔY_total
@@ -728,7 +726,6 @@ function ChainRulesCore.rrule(::typeof(batch_solve), ε_geom, n_geom, Ls, ωs, �
             ΔB = F' \ ΔX_total
 
             # F) Gradients w.r.t the diagonal vector `p` of matrix `A`.
-            # Each linear solve A\R contributes −(A^{-H}ΔO) ⊙ conj(O) to Δp.
             Δp = -vec(sum(ΔB  .* conj.(X), dims=2)) .-
                   vec(sum(ΔC1 .* conj.(Y), dims=2)) .-
                   vec(sum(ΔC2 .* conj.(Z), dims=2))
@@ -1007,90 +1004,80 @@ end
 # Lattice port-power forward model and analytical Jacobian ∂μ/∂vec(Δn)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared lattice interconnection core
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# _lattice_core assembles the block S-matrices, solves the interconnection,
+# and returns all intermediate quantities needed by the public API functions.
+# This avoids triplicating the S-matrix assembly + LU solve across
+# powers_only / jac_only / jac_and_dirderiv_s.
+
+function _lattice_freq_core(k, Δn, n_lat, a_in, S_arr, dSdn_arr, d2Sdn2_arr,
+                            n_int, P, scat_groups; da_in=nothing)
+    S_b  = [S_arr[k]    .+ dSdn_arr[k]     .* Δn[i,j] .+ d2Sdn2_arr[k] .* Δn[i,j]^2
+            for i in 1:n_lat, j in 1:n_lat]
+    dS_b = [dSdn_arr[k] .+ 2 .* d2Sdn2_arr[k] .* Δn[i,j]
+            for i in 1:n_lat, j in 1:n_lat]
+
+    S_ee = sum(sg -> sg.E_ext * S_b[sg.si,sg.sj][sg.ep, sg.ep] * sg.E_ext', scat_groups)
+    S_ec = sum(sg -> sg.E_ext * S_b[sg.si,sg.sj][sg.ep, sg.ip] * sg.E_int', scat_groups)
+    S_ce = sum(sg -> sg.E_int * S_b[sg.si,sg.sj][sg.ip, sg.ep] * sg.E_ext', scat_groups)
+    S_cc = sum(sg -> sg.E_int * S_b[sg.si,sg.sj][sg.ip, sg.ip] * sg.E_int', scat_groups)
+
+    A      = I(n_int) - S_cc * P
+    A_lu   = lu(A)                       # factorize once, reuse for all solves
+    a_int  = P * (A_lu \ (S_ce * a_in))
+    a_out  = S_ee * a_in + S_ec * a_int
+
+    da_int = da_in !== nothing ? P * (A_lu \ (S_ce * da_in)) : nothing
+    da_out = da_in !== nothing ? S_ee * da_in + S_ec * da_int : nothing
+
+    return (; S_b, dS_b, S_ec, A_lu, P, a_in, a_int, a_out,
+              da_in, da_int, da_out)
+end
+
 """
     jac_only(Δn, φ₁, φ₂, S_arr, dSdn_arr, d2Sdn2_arr, GΔω) -> J
 
-Compute the analytical Jacobian J = ∂μ/∂vec(Δn) (size n_ext × n²_lat) for an
-n_lat×n_lat lattice of 4-port scattering blocks, where μ is the port-power vector.
-
-# Arguments
-- `Δn`         — n_lat×n_lat matrix of refractive-index perturbations per block
-- `φ₁`, `φ₂`  — phases of inputs at external ports 2 and 3 (port 1 has phase 0)
-- `S_arr`      — length-K vector of 4×4 block S-matrices (at Δn=0)
-- `dSdn_arr`   — length-K vector of ∂S/∂(Δn) matrices
-- `d2Sdn2_arr` — length-K vector of ∂²S/∂(Δn)² matrices
-- `GΔω`        — length-K spectral weight vector (G(ωₖ)·Δω)
-
-# Block S-matrix Taylor expansion (per frequency k, per block (i,j)):
-    S(ωₖ, Δnᵢⱼ) = S_arr[k] + dSdn_arr[k]·Δnᵢⱼ + d2Sdn2_arr[k]·Δnᵢⱼ²
-
-# Sensitivity formula:
-    δa_out = E_ext·(F_ext'·δb) + S_ec·P·(I − S_cc·P)⁻¹·E_int·(F_int'·δb)
-    δb = dS_block·a_block,  ∂μ_p/∂Δnᵢⱼ = Σ_k 2·Re(conj(a_out_p)·δa_out_p)·GΔω[k]
+Compute the analytical Jacobian J = ∂μ/∂vec(Δn) (size n_ext × n²_lat).
 
 Compatible with Zygote and ForwardDiff.
 """
 function jac_only(Δn::Matrix, φ₁, φ₂, S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
     n_lat = size(Δn, 1)
-
     meta = @ignore_derivatives _lattice_index_metadata(n_lat)
     (; n_ext, n_int, P, scat_groups) = meta
 
     cT   = typeof(cis(float(one(φ₁))))
     a_in = vcat(one(cT), cis(φ₁), cis(φ₂), zeros(cT, n_ext - 3))
+    n_scat = length(scat_groups)
 
     Js = map(eachindex(S_arr)) do k
-        S_b  = [S_arr[k]    .+ dSdn_arr[k]     .* Δn[i,j] .+ d2Sdn2_arr[k] .* Δn[i,j]^2
-                for i in 1:n_lat, j in 1:n_lat]
-        dS_b = [dSdn_arr[k] .+ 2 .* d2Sdn2_arr[k] .* Δn[i,j]
-                for i in 1:n_lat, j in 1:n_lat]
-
-        S_ee = sum(sg -> sg.E_ext * S_b[sg.si,sg.sj][sg.ep, sg.ep] * sg.E_ext', scat_groups)
-        S_ec = sum(sg -> sg.E_ext * S_b[sg.si,sg.sj][sg.ep, sg.ip] * sg.E_int', scat_groups)
-        S_ce = sum(sg -> sg.E_int * S_b[sg.si,sg.sj][sg.ip, sg.ep] * sg.E_ext', scat_groups)
-        S_cc = sum(sg -> sg.E_int * S_b[sg.si,sg.sj][sg.ip, sg.ip] * sg.E_int', scat_groups)
-
-        A     = I(n_int) - S_cc * P
-        a_int = P * (A \ (S_ce * a_in))
-        a_out = S_ee * a_in + S_ec * a_int
-
+        fc = _lattice_freq_core(k, Δn, n_lat, a_in, S_arr, dSdn_arr, d2Sdn2_arr,
+                                n_int, P, scat_groups)
         Gk_dω = GΔω[k]
 
-        J_k = reduce(hcat, map(scat_groups) do sg
-            a_blk  = sg.F_ext * (sg.E_ext' * a_in) + sg.F_int * (sg.E_int' * a_int)
-            δb     = dS_b[sg.si, sg.sj] * a_blk
-            δa_out = sg.E_ext * (sg.F_ext' * δb) + S_ec * (P * (A \ (sg.E_int * (sg.F_int' * δb))))
-            2 .* real.(conj.(a_out) .* δa_out) .* Gk_dω
-        end)
-
-        J_k
+        J_k = map(scat_groups) do sg
+            a_blk  = sg.F_ext * (sg.E_ext' * fc.a_in) + sg.F_int * (sg.E_int' * fc.a_int)
+            δb     = fc.dS_b[sg.si, sg.sj] * a_blk
+            δa_out = sg.E_ext * (sg.F_ext' * δb) +
+                     fc.S_ec * (fc.P * (fc.A_lu \ (sg.E_int * (sg.F_int' * δb))))
+            2 .* real.(conj.(fc.a_out) .* δa_out) .* Gk_dω
+        end
+        reduce(hcat, J_k)
     end
-
-    J = sum(Js)
-    return J
+    return sum(Js)
 end
-
 
 """
     jac_and_dirderiv_s(Δn, φ₁, φ₂, λ, S_arr, dSdn_arr, d2Sdn2_arr, GΔω) -> (J, dJ_λ)
 
-Compute the Jacobian J = ∂μ/∂vec(Δn) **and** its directional derivative
-dJ_λ = Σ_k λ_k · ∂J/∂s_k in the sensor-parameter direction `λ ∈ ℝ^2`.
-
-Since `s = (φ₁, φ₂)` enters the lattice model only through `a_in`, the
-s-derivative is computed analytically by propagating `da_in/ds · λ` through
-the same interconnection equations — no ForwardDiff needed.
-
-This function is designed for the IFT pullback: the scalar
-`λ'·∇_s bfim_trace = (2/σ²)·sum(J .* dJ_λ)` and its Zygote gradient w.r.t.
-`c` (through the S-matrices) yield the cotangent `c̄ = J_c'λ` in O(1) reverse
-passes instead of O(dc/chunk) ForwardDiff passes.
-
-Compatible with Zygote (no ForwardDiff types in the computation).
+Compute J = ∂μ/∂vec(Δn) **and** its directional derivative
+dJ_λ = Σ_k λ_k · ∂J/∂s_k analytically.  No ForwardDiff types in the computation.
 """
 function jac_and_dirderiv_s(Δn::Matrix, φ₁, φ₂, λ, S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
     n_lat = size(Δn, 1)
-
     meta = @ignore_derivatives _lattice_index_metadata(n_lat)
     (; n_ext, n_int, P, scat_groups) = meta
 
@@ -1100,38 +1087,24 @@ function jac_and_dirderiv_s(Δn::Matrix, φ₁, φ₂, λ, S_arr, dSdn_arr, d2Sd
                  zeros(ComplexF64, n_ext - 3))
 
     results = map(eachindex(S_arr)) do k
-        S_b  = [S_arr[k]    .+ dSdn_arr[k]     .* Δn[i,j] .+ d2Sdn2_arr[k] .* Δn[i,j]^2
-                for i in 1:n_lat, j in 1:n_lat]
-        dS_b = [dSdn_arr[k] .+ 2 .* d2Sdn2_arr[k] .* Δn[i,j]
-                for i in 1:n_lat, j in 1:n_lat]
-
-        S_ee = sum(sg -> sg.E_ext * S_b[sg.si,sg.sj][sg.ep, sg.ep] * sg.E_ext', scat_groups)
-        S_ec = sum(sg -> sg.E_ext * S_b[sg.si,sg.sj][sg.ep, sg.ip] * sg.E_int', scat_groups)
-        S_ce = sum(sg -> sg.E_int * S_b[sg.si,sg.sj][sg.ip, sg.ep] * sg.E_ext', scat_groups)
-        S_cc = sum(sg -> sg.E_int * S_b[sg.si,sg.sj][sg.ip, sg.ip] * sg.E_int', scat_groups)
-
-        A      = I(n_int) - S_cc * P
-        a_int  = P * (A \ (S_ce * a_in))
-        a_out  = S_ee * a_in  + S_ec * a_int
-        da_int = P * (A \ (S_ce * da_in))
-        da_out = S_ee * da_in + S_ec * da_int
-
+        fc = _lattice_freq_core(k, Δn, n_lat, a_in, S_arr, dSdn_arr, d2Sdn2_arr,
+                                n_int, P, scat_groups; da_in=da_in)
         Gk_dω = GΔω[k]
 
         cols = map(scat_groups) do sg
-            a_blk   = sg.F_ext * (sg.E_ext' * a_in)  + sg.F_int * (sg.E_int' * a_int)
-            δb      = dS_b[sg.si, sg.sj] * a_blk
+            a_blk   = sg.F_ext * (sg.E_ext' * fc.a_in)  + sg.F_int * (sg.E_int' * fc.a_int)
+            δb      = fc.dS_b[sg.si, sg.sj] * a_blk
             δa_out  = sg.E_ext * (sg.F_ext' * δb) +
-                      S_ec * (P * (A \ (sg.E_int * (sg.F_int' * δb))))
+                      fc.S_ec * (fc.P * (fc.A_lu \ (sg.E_int * (sg.F_int' * δb))))
 
-            da_blk  = sg.F_ext * (sg.E_ext' * da_in) + sg.F_int * (sg.E_int' * da_int)
-            dδb     = dS_b[sg.si, sg.sj] * da_blk
+            da_blk  = sg.F_ext * (sg.E_ext' * fc.da_in) + sg.F_int * (sg.E_int' * fc.da_int)
+            dδb     = fc.dS_b[sg.si, sg.sj] * da_blk
             dδa_out = sg.E_ext * (sg.F_ext' * dδb) +
-                      S_ec * (P * (A \ (sg.E_int * (sg.F_int' * dδb))))
+                      fc.S_ec * (fc.P * (fc.A_lu \ (sg.E_int * (sg.F_int' * dδb))))
 
-            j_col  = 2 .* real.(conj.(a_out)  .* δa_out) .* Gk_dω
-            dj_col = 2 .* real.(conj.(da_out) .* δa_out .+
-                                conj.(a_out)  .* dδa_out) .* Gk_dω
+            j_col  = 2 .* real.(conj.(fc.a_out)  .* δa_out) .* Gk_dω
+            dj_col = 2 .* real.(conj.(fc.da_out) .* δa_out .+
+                                conj.(fc.a_out)  .* dδa_out) .* Gk_dω
             (j_col, dj_col)
         end
 
@@ -1147,41 +1120,19 @@ end
 
 function powers_only(Δn::Matrix, φ₁, φ₂, S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
     n_lat = size(Δn, 1)
-
-    # Non-differentiable metadata: @ignore_derivatives keeps it off the AD tape for
-    # both Zygote (avoids tracing Dict cache mutations) and is a no-op for ForwardDiff
-    # (which never sees Duals here since n_lat::Int).
     meta = @ignore_derivatives _lattice_index_metadata(n_lat)
     (; n_ext, n_int, P, scat_groups) = meta
 
     # a_in element type tracks φ₁, φ₂ so ForwardDiff Duals propagate correctly.
-    # Size n_ext from metadata; first 3 ports excited with phases [1, e^{iφ₁}, e^{iφ₂}].
     cT   = typeof(cis(float(one(φ₁))))
     a_in = vcat(one(cT), cis(φ₁), cis(φ₂), zeros(cT, n_ext - 3))
 
-    # Functional frequency accumulation — compatible with Zygote and ForwardDiff.
     μs = map(eachindex(S_arr)) do k
-        S_b  = [S_arr[k]    .+ dSdn_arr[k]     .* Δn[i,j] .+ d2Sdn2_arr[k] .* Δn[i,j]^2
-                for i in 1:n_lat, j in 1:n_lat]
-
-        # Assemble partitioned global S via constant embedding: Σ_l E_a·S_l[ap,bp]·E_b'
-        S_ee = sum(sg -> sg.E_ext * S_b[sg.si,sg.sj][sg.ep, sg.ep] * sg.E_ext', scat_groups)
-        S_ec = sum(sg -> sg.E_ext * S_b[sg.si,sg.sj][sg.ep, sg.ip] * sg.E_int', scat_groups)
-        S_ce = sum(sg -> sg.E_int * S_b[sg.si,sg.sj][sg.ip, sg.ep] * sg.E_ext', scat_groups)
-        S_cc = sum(sg -> sg.E_int * S_b[sg.si,sg.sj][sg.ip, sg.ip] * sg.E_int', scat_groups)
-
-        # Forward interconnection solve; both Zygote and ForwardDiff differentiate through \
-        A     = I(n_int) - S_cc * P
-        a_int = P * (A \ (S_ce * a_in))
-        a_out = S_ee * a_in + S_ec * a_int
-
-        μ_k   = abs2.(a_out) .* GΔω[k]
-
-        μ_k
+        fc = _lattice_freq_core(k, Δn, n_lat, a_in, S_arr, dSdn_arr, d2Sdn2_arr,
+                                n_int, P, scat_groups)
+        abs2.(fc.a_out) .* GΔω[k]
     end
-
-    μ = sum(μs)
-    return μ
+    return sum(μs)
 end
 
 end  # module SimGeomBroadBand
