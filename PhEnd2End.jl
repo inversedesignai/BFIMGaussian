@@ -92,7 +92,9 @@ end
         jac_and_dirderiv_s(Δn, s[1], s[2], λ, S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
     end
 
-    ModelFunctions(f=f, fx=fx, fxs=fxs, σ²=σ², dy=4n, dx=n^2, ds=2, dc=96*nω, αr=αr, zero_s_init=true)
+    # Set BFIM_FXS=0 to disable analytical fxs path and use ForwardDiff fallback in IFT rrule.
+    _use_fxs = get(ENV, "BFIM_FXS", "1") != "0"
+    ModelFunctions(f=f, fx=fx, fxs=_use_fxs ? fxs : nothing, σ²=σ², dy=4n, dx=n^2, ds=2, dc=96*nω, αr=αr, zero_s_init=true)
 
 end
 
