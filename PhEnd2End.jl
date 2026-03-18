@@ -738,33 +738,62 @@ if _run_test("ekf")
         println("      AD=$(round(ad_3d, sigdigits=6))  FD=$(round(fd_3d, sigdigits=6))  rel_err=$(round(re_3d, sigdigits=3))")
         @assert re_3d < 1e-3  "2-step EKF (fixed s) gradient check failed: rel_err=$re_3d"
 
-        # ── 3e. Two EKF steps WITH get_sopt ──────────────────────────────────
-        println("  3e. Zygote ∂(2 EKF steps with get_sopt)/∂c:")
-        two_step_sopt_c = c_ -> begin
+        # ── 3e. Two EKF steps WITH get_sopt (warm-started FD) ─────────────────
+        # The inner get_sopt optimizer can jump basins under small δc perturbation
+        # (see 3c'' diagnostic), making naive FD unreliable. We use warm-started
+        # _get_sopt (passing nominal s★ as initial guess) so FD stays in the same
+        # basin as the AD gradient (which uses the IFT for the smooth branch).
+        println("  3e. Zygote ∂(2 EKF steps with get_sopt)/∂c  [warm-started FD]:")
+        # Compute nominal s★ at each step for warm-starting
+        sk1_nom = get_sopt(c_nom, μ0, mf_check)
+        yk1_nom = mf_check.f(x0_check, sk1_nom, c_nom) + noise_1
+        μ1_nom, Σ1_nom = ekf_update(μ0, Σ0, yk1_nom, sk1_nom, c_nom, mf_check)
+        sk2_nom = get_sopt(c_nom, μ1_nom, mf_check)
+
+        two_step_warm_c = c_ -> begin
+            # Step 1: warm-start from sk1_nom
+            sk1 = BFIMGaussian._get_sopt(c_, μ0, mf_check, sk1_nom)
+            yk1 = mf_check.f(x0_check, sk1, c_) + noise_1
+            μ1, Σ1 = ekf_update(μ0, Σ0, yk1, sk1, c_, mf_check)
+            # Step 2: warm-start from sk2_nom
+            sk2 = BFIMGaussian._get_sopt(c_, μ1, mf_check, sk2_nom)
+            yk2 = mf_check.f(x0_check, sk2, c_) + noise_2
+            μ2, Σ2 = ekf_update(μ1, Σ1, yk2, sk2, c_, mf_check)
+            sum(abs2, μ2 - x0_check)
+        end
+        _, (grad_3e,) = Zygote.withgradient(two_step_warm_c, c_nom)
+        # FD uses the same warm-started function (same basins)
+        fd_3e = (two_step_warm_c(c_nom .+ ε .* v_c) - two_step_warm_c(c_nom .- ε .* v_c)) / (2ε)
+        ad_3e = dot(grad_3e, v_c)
+        re_3e = abs(fd_3e - ad_3e) / (abs(ad_3e) + 1e-12)
+        println("      AD=$(round(ad_3e, sigdigits=6))  FD=$(round(fd_3e, sigdigits=6))  rel_err=$(round(re_3e, sigdigits=3))")
+        @assert re_3e < 1e-2  "2-step EKF (warm-started) gradient check failed: rel_err=$re_3e"
+
+        # ── 3f. Full episode_loss (warm-started FD) ───────────────────────────
+        println("  3f. Zygote ∂(episode_loss)/∂c  (N_steps=$N_steps) [warm-started FD]:")
+        # Pre-compute nominal s★ trajectory for warm-starting
+        s_noms = Vector{Vector{Float64}}(undef, N_steps)
+        μ_run, Σ_run = μ0, Σ0
+        for k in 1:N_steps
+            s_noms[k] = get_sopt(c_nom, μ_run, mf_check)
+            yk_run = mf_check.f(x0_check, s_noms[k], c_nom) + noise_bank[1][k]
+            μ_run, Σ_run = ekf_update(μ_run, Σ_run, yk_run, s_noms[k], c_nom, mf_check)
+        end
+        ep_warm_c = c_ -> begin
             μ, Σ = μ0, Σ0
-            for noise_k in [noise_1, noise_2]
-                sk = get_sopt(c_, μ, mf_check)
-                yk = mf_check.f(x0_check, sk, c_) + noise_k
+            for k in 1:N_steps
+                sk = BFIMGaussian._get_sopt(c_, μ, mf_check, s_noms[k])
+                yk = mf_check.f(x0_check, sk, c_) + noise_bank[1][k]
                 μ, Σ = ekf_update(μ, Σ, yk, sk, c_, mf_check)
             end
             sum(abs2, μ - x0_check)
         end
-        _, (grad_3e,) = Zygote.withgradient(two_step_sopt_c, c_nom)
-        fd_3e = (two_step_sopt_c(c_nom .+ ε .* v_c) - two_step_sopt_c(c_nom .- ε .* v_c)) / (2ε)
-        ad_3e = dot(grad_3e, v_c)
-        re_3e = abs(fd_3e - ad_3e) / (abs(ad_3e) + 1e-12)
-        println("      AD=$(round(ad_3e, sigdigits=6))  FD=$(round(fd_3e, sigdigits=6))  rel_err=$(round(re_3e, sigdigits=3))")
-        @assert re_3e < 1e-2  "2-step EKF (with get_sopt) gradient check failed: rel_err=$re_3e"
-
-        # ── 3f. Full episode_loss (N_steps EKF steps) ─────────────────────────
-        println("  3f. Zygote ∂(episode_loss)/∂c  (N_steps=$N_steps):")
-        ep_c = c_ -> episode_loss(x0_check, c_, mf_check, μ0, Σ0, noise_bank[1])
-        _, (grad_3f,) = Zygote.withgradient(ep_c, c_nom)
-        fd_3f = (ep_c(c_nom .+ ε .* v_c) - ep_c(c_nom .- ε .* v_c)) / (2ε)
+        _, (grad_3f,) = Zygote.withgradient(ep_warm_c, c_nom)
+        fd_3f = (ep_warm_c(c_nom .+ ε .* v_c) - ep_warm_c(c_nom .- ε .* v_c)) / (2ε)
         ad_3f = dot(grad_3f, v_c)
         re_3f = abs(fd_3f - ad_3f) / (abs(ad_3f) + 1e-12)
         println("      AD=$(round(ad_3f, sigdigits=6))  FD=$(round(fd_3f, sigdigits=6))  rel_err=$(round(re_3f, sigdigits=3))")
-        @assert re_3f < 1e-2  "episode_loss gradient check failed: rel_err=$re_3f"
+        @assert re_3f < 1e-2  "episode_loss (warm-started) gradient check failed: rel_err=$re_3f"
 
         println("═══ EKF gradient tests complete ═══"); flush(stdout)
     end
