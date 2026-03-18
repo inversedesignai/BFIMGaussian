@@ -404,7 +404,7 @@ end
 # ══════════════════════════════════════════════════════════════════════════════
 # Gradient / correctness tests
 # Control via env var BFIM_TEST: "all", or comma-separated subset of
-#   sim_geom, mf_f, mf_fx, lattice, ekf, sopt_heatmap, sopt_grad, episode, batch
+#   sim_geom, mf_f, mf_fx, lattice, ekf, sopt_heatmap, sopt_grad, episode, episode_warm, batch
 # Example:  BFIM_TEST=sopt_grad,episode julia PhEnd2End.jl
 # ══════════════════════════════════════════════════════════════════════════════
 const _TEST_ENV = get(ENV, "BFIM_TEST", "")
@@ -901,6 +901,48 @@ if _run_test("episode")
                 println("    ε=$ε  FD=$(round(fd_deriv, sigdigits=6))  rel_err=$(round(rel_err, sigdigits=3))"); flush(stdout)
             end
             @assert best_err < 1e-2  "episode_loss gradient check failed at trial $trial: best rel_err=$best_err across all ε"
+        end
+    end
+end
+
+# ── Warm-started episode test (accurate FD via basin-stable get_sopt) ─────────
+if _run_test("episode_warm")
+    let ε = 1e-5, n_trials = 3
+        mf_check  = make_model(nω, n_lat, GΔω, σ², αr)
+        rng_check = MersenneTwister(104)
+        println("episode_loss gradient check (warm-started FD) — $n_trials trials:"); flush(stdout)
+        for trial in 1:n_trials
+            x0_check    = x0_list[mod1(trial, length(x0_list))]
+            noise_check = noise_bank[mod1(trial, length(noise_bank))]
+
+            # Pre-compute nominal s★ trajectory for warm-starting FD
+            s_noms_ep = Vector{Vector{Float64}}(undef, length(noise_check))
+            μ_run, Σ_run = μ0, Σ0
+            for k in eachindex(noise_check)
+                s_noms_ep[k] = get_sopt(c_nom, μ_run, mf_check)
+                yk = mf_check.f(x0_check, s_noms_ep[k], c_nom) + noise_check[k]
+                μ_run, Σ_run = ekf_update(μ_run, Σ_run, yk, s_noms_ep[k], c_nom, mf_check)
+            end
+
+            # Warm-started episode: uses _get_sopt with nominal s★ as init
+            ep_warm = c_ -> begin
+                μ, Σ = μ0, Σ0
+                for k in eachindex(noise_check)
+                    sk = BFIMGaussian._get_sopt(c_, μ, mf_check, s_noms_ep[k])
+                    yk = mf_check.f(x0_check, sk, c_) + noise_check[k]
+                    μ, Σ = ekf_update(μ, Σ, yk, sk, c_, mf_check)
+                end
+                sum(abs2, μ - x0_check)
+            end
+
+            L_nom, (grad,) = Zygote.withgradient(ep_warm, c_nom)
+            v = randn(rng_check, length(c_nom)); v ./= norm(v)
+            ad_deriv = dot(grad, v)
+            fd_deriv = (ep_warm(c_nom .+ ε .* v) - ep_warm(c_nom .- ε .* v)) / (2ε)
+            rel_err  = abs(fd_deriv - ad_deriv) / (abs(ad_deriv) + 1e-12)
+            println("  trial $trial: loss=$(round(L_nom, sigdigits=6))  AD=$(round(ad_deriv, sigdigits=6))  " *
+                    "FD=$(round(fd_deriv, sigdigits=6))  rel_err=$(round(rel_err, sigdigits=3))"); flush(stdout)
+            @assert rel_err < 1e-3  "episode_loss (warm-started) gradient check failed at trial $trial: rel_err=$rel_err"
         end
     end
 end
