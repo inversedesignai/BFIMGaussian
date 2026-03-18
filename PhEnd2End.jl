@@ -14,9 +14,24 @@ println("Workers: $(nworkers())  |  Sys.CPU_THREADS: $(Sys.CPU_THREADS)")
 # on each worker.
 const src_dir = @__DIR__
 @everywhere push!(LOAD_PATH, $src_dir)
+# ── Sensor selection criterion ────────────────────────────────────────────────
+# This script uses BFIMGaussian (BFIM trace criterion) by default.
+# To switch to the posterior-covariance criterion (A-optimal design), replace
+#   using BFIMGaussian
+# with
+#   using PosteriorCovGaussian
+# everywhere below (including the main-process `using` on line 39).
+#
+# API differences when using PosteriorCovGaussian:
+#   - get_sopt(c, μ, Σ, model)       ← takes Σ (was: get_sopt(c, μ, model))
+#   - episode_loss is unchanged       (internally passes Σ to get_sopt)
+#   - _run_episode_grad is unchanged  (episode_loss signature is the same)
+#   - posterior_cov_trace(μ,s,c,model,Σ)  replaces  bfim_trace(μ,s,c,model)
+#   - posterior_grad_s / posterior_hessian_s  replace  bfim_grad_s / bfim_hessian_s
+# ──────────────────────────────────────────────────────────────────────────────
 @everywhere begin
     using SimGeomBroadBand
-    using BFIMGaussian
+    using BFIMGaussian          # swap to: using PosteriorCovGaussian
     using LinearAlgebra
     using Random
     using Zygote
@@ -36,7 +51,7 @@ using ForwardDiff
 using Optim
 using Serialization
 using Statistics
-using BFIMGaussian
+using BFIMGaussian          # swap to: using PosteriorCovGaussian
 
 # Unpack the flat real coefficient vector c into arrays of complex 4×4 S-matrices.
 # Uses only indexing — fully Zygote-differentiable.
