@@ -367,11 +367,17 @@ println("[optim] Starting Adam optimisation..."); flush(stdout)
 
 ε_geom_opt = fill(0.5, Ny_d, Nx_d)
 
-ε_geom_opt, losses = train_adam!(
-    ε_geom_opt, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
-    monitors_array, a_f_array, a_b_array,
-    x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
-    n_iters=200, lr=1e-3, x0_min=x0_min, x0_max=x0_max)
+# ε_geom_opt, losses = train_adam!(
+#     ε_geom_opt, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
+#     monitors_array, a_f_array, a_b_array,
+#     x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
+#     n_iters=200, lr=1e-3, x0_min=x0_min, x0_max=x0_max)
+
+train_mma!(ε_geom_opt, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
+            monitors_array, a_f_array, a_b_array,
+            x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
+            n_iters=1000000, ftol_rel=1e-8, xtol_rel=1e-8,
+            save_every=10)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Gradient / correctness tests
