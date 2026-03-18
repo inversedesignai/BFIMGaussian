@@ -362,22 +362,42 @@ Ny_d = length(grid_info.design_iy)
 Nx_d = length(grid_info.design_ix)
 println("[setup] Design region: $(Ny_d)×$(Nx_d) = $(Ny_d*Nx_d) parameters"); flush(stdout)
 
-# ── Run optimisation ─────────────────────────────────────────────────────────
-println("[optim] Starting Adam optimisation..."); flush(stdout)
+# ── Run mode ─────────────────────────────────────────────────────────────────
+# Control via env var BFIM_MODE:
+#   "adam"  — Adam optimisation (default)
+#   "mma"   — NLopt MMA optimisation
+#   "test"  — skip optimisation, run only gradient tests (set BFIM_TEST too)
+#   "none"  — setup only, no optimisation or tests
+const _MODE = lowercase(get(ENV, "BFIM_MODE", "adam"))
 
-ε_geom_opt = fill(0.5, Ny_d, Nx_d)
+if _MODE == "adam"
+    println("[optim] Mode: Adam"); flush(stdout)
+    ε_geom_opt = fill(0.5, Ny_d, Nx_d)
+    ε_geom_opt, losses = train_adam!(
+        ε_geom_opt, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
+        monitors_array, a_f_array, a_b_array,
+        x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
+        n_iters=200, lr=1e-3, x0_min=x0_min, x0_max=x0_max)
 
-# ε_geom_opt, losses = train_adam!(
-#     ε_geom_opt, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
-#     monitors_array, a_f_array, a_b_array,
-#     x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
-#     n_iters=200, lr=1e-3, x0_min=x0_min, x0_max=x0_max)
+elseif _MODE == "mma"
+    println("[optim] Mode: MMA"); flush(stdout)
+    ε_geom_opt = fill(0.5, Ny_d, Nx_d)
+    ε_geom_opt, losses = train_mma!(
+        ε_geom_opt, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
+        monitors_array, a_f_array, a_b_array,
+        x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
+        n_iters=1000000, ftol_rel=1e-8, xtol_rel=1e-8,
+        save_every=10)
 
-train_mma!(ε_geom_opt, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
-            monitors_array, a_f_array, a_b_array,
-            x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
-            n_iters=1000000, ftol_rel=1e-8, xtol_rel=1e-8,
-            save_every=10)
+elseif _MODE == "test"
+    println("[mode] Test only — skipping optimisation"); flush(stdout)
+
+elseif _MODE == "none"
+    println("[mode] Setup only — no optimisation, no tests"); flush(stdout)
+
+else
+    error("Unknown BFIM_MODE=\"$_MODE\". Use: adam, mma, test, none")
+end
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Gradient / correctness tests
