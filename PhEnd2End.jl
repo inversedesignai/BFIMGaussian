@@ -687,6 +687,37 @@ if _run_test("ekf")
         println("      AD=$(round(ad_3c, sigdigits=6))  FD=$(round(fd_3c, sigdigits=6))  rel_err=$(round(re_3c, sigdigits=3))")
         @assert re_3c < 1e-3  "single EKF step gradient check failed: rel_err=$re_3c"
 
+        # ── 3c'. IFT rrule μ̄ test: ∂(get_sopt)/∂μ ─────────────────────────
+        # Tests the μ̄ = J_μ' * λ component in isolation.
+        # If this fails, the IFT μ̄ is wrong.
+        println("  3c'. Zygote ∂(get_sopt)/∂μ  (IFT μ̄ pathway):")
+        v_mu = randn(MersenneTwister(301), dx); v_mu ./= norm(v_mu)
+        μ_test = x0_list[1]  # non-zero μ to test general case
+        # Scalar function of μ through get_sopt:
+        sopt_of_mu = μ_ -> begin
+            s_opt = get_sopt(c_nom, μ_, mf_check)
+            sum(real.(exp.(im .* s_opt)))   # smooth scalar proxy
+        end
+        _, (grad_mu,) = Zygote.withgradient(sopt_of_mu, μ_test)
+        for ε_test in [1e-4, 1e-5, 1e-6]
+            fd_mu = (sopt_of_mu(μ_test .+ ε_test .* v_mu) - sopt_of_mu(μ_test .- ε_test .* v_mu)) / (2ε_test)
+            ad_mu = dot(grad_mu, v_mu)
+            re_mu = abs(fd_mu - ad_mu) / (abs(ad_mu) + 1e-12)
+            println("      ε=$ε_test  AD=$(round(ad_mu, sigdigits=6))  FD=$(round(fd_mu, sigdigits=6))  rel_err=$(round(re_mu, sigdigits=3))")
+        end
+        # Also test with μ1 from a single EKF step (the actual multi-step scenario)
+        println("  3c''. Same test at μ₁ (post-EKF point):")
+        sk0 = get_sopt(c_nom, μ0, mf_check)
+        y0  = mf_check.f(x0_check, sk0, c_nom) + noise_1
+        μ1_test, _ = ekf_update(μ0, Σ0, y0, sk0, c_nom, mf_check)
+        _, (grad_mu1,) = Zygote.withgradient(sopt_of_mu, μ1_test)
+        for ε_test in [1e-4, 1e-5, 1e-6]
+            fd_mu1 = (sopt_of_mu(μ1_test .+ ε_test .* v_mu) - sopt_of_mu(μ1_test .- ε_test .* v_mu)) / (2ε_test)
+            ad_mu1 = dot(grad_mu1, v_mu)
+            re_mu1 = abs(fd_mu1 - ad_mu1) / (abs(ad_mu1) + 1e-12)
+            println("      ε=$ε_test  AD=$(round(ad_mu1, sigdigits=6))  FD=$(round(fd_mu1, sigdigits=6))  rel_err=$(round(re_mu1, sigdigits=3))")
+        end
+
         # ── 3d. Two EKF steps, FIXED s, no get_sopt ─────────────────────────
         # Isolates multi-step ekf_update gradient from IFT rrule.
         println("  3d. Zygote ∂(2 EKF steps, fixed s, no get_sopt)/∂c:")
