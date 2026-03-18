@@ -226,6 +226,84 @@ function train_adam!(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
     return ε_geom, losses
 end
 
+# ── MMA optimisation of ε_geom (deterministic, gradient-based) ───────────────
+
+using NLopt
+
+function train_mma!(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
+                    monitors_array, a_f_array, a_b_array,
+                    x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
+                    n_iters=200, ftol_rel=1e-8, xtol_rel=1e-8,
+                    save_every=10, save_dir=joinpath(@__DIR__, "checkpoints_mma"))
+
+    mkpath(save_dir)
+    n_params = length(ε_geom)
+    losses = Float64[]
+    iter_count = Ref(0)
+
+    function nlopt_obj(x::Vector{Float64}, grad::Vector{Float64})
+        t_start = time()
+        iter_count[] += 1
+        t = iter_count[]
+
+        # Reshape flat x back to design-region matrix
+        ε_mat = reshape(x, size(ε_geom))
+
+        loss, g = end2end(ε_mat, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
+                          monitors_array, a_f_array, a_b_array,
+                          x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr)
+        push!(losses, loss)
+
+        # NLopt expects gradient written into `grad` in-place
+        if length(grad) > 0
+            grad .= vec(g)
+        end
+
+        # Diagnostics
+        g_abs   = abs.(vec(g))
+        Δloss   = t > 1 ? loss - losses[end-1] : NaN
+        elapsed = round(time() - t_start, digits=1)
+        println("iter $t  $(elapsed)s  loss=$(round(loss, sigdigits=6))  Δloss=$(round(Δloss, sigdigits=3))  " *
+                "|grad| min=$(round(minimum(g_abs), sigdigits=3)) avg=$(round(mean(g_abs), sigdigits=3)) " *
+                "max=$(round(maximum(g_abs), sigdigits=3))  " *
+                "ε range=[$(round(minimum(x), digits=4)), $(round(maximum(x), digits=4))]")
+        flush(stdout)
+
+        # Save checkpoint
+        if mod(t, save_every) == 0
+            path = joinpath(save_dir, "eps_geom_step_$(lpad(t, 5, '0')).jls")
+            serialize(path, (; step=t, loss, ε_geom=copy(ε_mat), losses=copy(losses)))
+            println("  saved → $path"); flush(stdout)
+        end
+
+        return loss
+    end
+
+    opt = NLopt.Opt(:LD_MMA, n_params)
+    opt.lower_bounds = zeros(n_params)
+    opt.upper_bounds = ones(n_params)
+    opt.min_objective = nlopt_obj
+    opt.maxeval = n_iters
+    opt.ftol_rel = ftol_rel
+    opt.xtol_rel = xtol_rel
+
+    println("[mma] Starting MMA optimisation ($n_params parameters, maxeval=$n_iters)"); flush(stdout)
+
+    x0 = vec(copy(ε_geom))
+    (minf, minx, ret) = NLopt.optimize(opt, x0)
+
+    println("[mma] Finished: ret=$ret  final_loss=$minf  iters=$(iter_count[])"); flush(stdout)
+
+    # Save final
+    ε_final = reshape(minx, size(ε_geom))
+    path = joinpath(save_dir, "eps_geom_final.jls")
+    serialize(path, (; ret, loss=minf, ε_geom=copy(ε_final), losses=copy(losses)))
+    println("[mma] saved → $path"); flush(stdout)
+
+    ε_geom .= ε_final
+    return ε_geom, losses
+end
+
 # ── Parameters ────────────────────────────────────────────────────────────────
 n_lat              = 2
 n_core, w          = 2.0, 0.5
