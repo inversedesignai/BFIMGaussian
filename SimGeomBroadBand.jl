@@ -1026,14 +1026,15 @@ function _lattice_freq_core(k, Δn, n_lat, a_in, S_arr, dSdn_arr, d2Sdn2_arr,
     S_cc = sum(sg -> sg.E_int * S_b[sg.si,sg.sj][sg.ip, sg.ip] * sg.E_int', scat_groups)
 
     A      = I(n_int) - S_cc * P
-    A_lu   = lu(A)                       # factorize once, reuse for all solves
-    a_int  = P * (A_lu \ (S_ce * a_in))
+    # NOTE: use A \ b (not lu(A) \ b) so Zygote can differentiate through \.
+    # The lattice system is small (n_int ≤ ~8 for n_lat=2), so re-factorizing is cheap.
+    a_int  = P * (A \ (S_ce * a_in))
     a_out  = S_ee * a_in + S_ec * a_int
 
-    da_int = da_in !== nothing ? P * (A_lu \ (S_ce * da_in)) : nothing
+    da_int = da_in !== nothing ? P * (A \ (S_ce * da_in)) : nothing
     da_out = da_in !== nothing ? S_ee * da_in + S_ec * da_int : nothing
 
-    return (; S_b, dS_b, S_ec, A_lu, P, a_in, a_int, a_out,
+    return (; S_b, dS_b, S_ec, A, P, a_in, a_int, a_out,
               da_in, da_int, da_out)
 end
 
@@ -1061,7 +1062,7 @@ function jac_only(Δn::Matrix, φ₁, φ₂, S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
             a_blk  = sg.F_ext * (sg.E_ext' * fc.a_in) + sg.F_int * (sg.E_int' * fc.a_int)
             δb     = fc.dS_b[sg.si, sg.sj] * a_blk
             δa_out = sg.E_ext * (sg.F_ext' * δb) +
-                     fc.S_ec * (fc.P * (fc.A_lu \ (sg.E_int * (sg.F_int' * δb))))
+                     fc.S_ec * (fc.P * (fc.A \ (sg.E_int * (sg.F_int' * δb))))
             2 .* real.(conj.(fc.a_out) .* δa_out) .* Gk_dω
         end
         reduce(hcat, J_k)
@@ -1094,12 +1095,12 @@ function jac_and_dirderiv_s(Δn::Matrix, φ₁, φ₂, λ, S_arr, dSdn_arr, d2Sd
             a_blk   = sg.F_ext * (sg.E_ext' * fc.a_in)  + sg.F_int * (sg.E_int' * fc.a_int)
             δb      = fc.dS_b[sg.si, sg.sj] * a_blk
             δa_out  = sg.E_ext * (sg.F_ext' * δb) +
-                      fc.S_ec * (fc.P * (fc.A_lu \ (sg.E_int * (sg.F_int' * δb))))
+                      fc.S_ec * (fc.P * (fc.A \ (sg.E_int * (sg.F_int' * δb))))
 
             da_blk  = sg.F_ext * (sg.E_ext' * fc.da_in) + sg.F_int * (sg.E_int' * fc.da_int)
             dδb     = fc.dS_b[sg.si, sg.sj] * da_blk
             dδa_out = sg.E_ext * (sg.F_ext' * dδb) +
-                      fc.S_ec * (fc.P * (fc.A_lu \ (sg.E_int * (sg.F_int' * dδb))))
+                      fc.S_ec * (fc.P * (fc.A \ (sg.E_int * (sg.F_int' * dδb))))
 
             j_col  = 2 .* real.(conj.(fc.a_out)  .* δa_out) .* Gk_dω
             dj_col = 2 .* real.(conj.(fc.da_out) .* δa_out .+
