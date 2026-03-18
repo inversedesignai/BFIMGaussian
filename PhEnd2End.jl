@@ -1,5 +1,9 @@
 push!(LOAD_PATH, @__DIR__)
 
+# Flush stdout after every write so nohup.out gets output in real time.
+ENV["JULIA_DEBUG"] = ""   # ensure no debug buffering
+flush(stdout)
+
 using Distributed
 
 addprocs(4)
@@ -180,12 +184,14 @@ function train_adam!(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
                 "max=$(round(maximum(g_abs), sigdigits=3))  " *
                 "|step| avg=$(round(mean(step_abs), sigdigits=3)) max=$(round(maximum(step_abs), sigdigits=3))  " *
                 "ε range=[$(round(minimum(ε_geom), digits=4)), $(round(maximum(ε_geom), digits=4))]")
+        flush(stdout)
 
         # Save checkpoint
         if mod(t, save_every) == 0 || t == n_iters
             path = joinpath(save_dir, "eps_geom_step_$(lpad(t, 5, '0')).jls")
             serialize(path, (; step=t, loss, ε_geom=copy(ε_geom), losses=copy(losses)))
             println("  saved → $path")
+            flush(stdout)
         end
     end
 

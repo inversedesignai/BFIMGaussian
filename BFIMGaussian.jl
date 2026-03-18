@@ -133,11 +133,11 @@ function _get_sopt(c, μ, model::ModelFunctions, s_init::AbstractVector)
     result = optimize(obj, grad_obj, s_init, LBFGS(),
                       Optim.Options(g_tol=1e-12, iterations=10000), inplace=false)
     sopt = Optim.minimizer(result)
-    converged = Optim.converged(result)
-    if !converged
-        gnorm = norm(grad_obj(sopt))
-        @warn "Optimizer did not converge. Gradient norm at sopt: $(gnorm)"
-    end
+    # converged = Optim.converged(result)
+    # if !converged
+    #     gnorm = norm(grad_obj(sopt))
+    #     @warn "Optimizer did not converge. Gradient norm at sopt: $(gnorm)"
+    # end
     return sopt
 end
 

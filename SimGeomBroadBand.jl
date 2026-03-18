@@ -1051,7 +1051,6 @@ function jac_only(Δn::Matrix, φ₁, φ₂, S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
 
     cT   = typeof(cis(float(one(φ₁))))
     a_in = vcat(one(cT), cis(φ₁), cis(φ₂), zeros(cT, n_ext - 3))
-    n_scat = length(scat_groups)
 
     Js = map(eachindex(S_arr)) do k
         fc = _lattice_freq_core(k, Δn, n_lat, a_in, S_arr, dSdn_arr, d2Sdn2_arr,
