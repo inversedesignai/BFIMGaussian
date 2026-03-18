@@ -7,7 +7,7 @@ flush(stdout)
 using Distributed
 
 println("[startup] Adding worker processes..."); flush(stdout)
-addprocs(4)
+addprocs(200)
 println("[startup] Workers: $(nworkers())  |  Sys.CPU_THREADS: $(Sys.CPU_THREADS)"); flush(stdout)
 
 # Broadcast LOAD_PATH and module imports to all workers.
@@ -220,7 +220,7 @@ function train_adam!(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
         if mod(t, save_every) == 0 || t == n_iters
             path = joinpath(save_dir, "eps_geom_step_$(lpad(t, 5, '0')).jls")
             serialize(path, (; step=t, loss, ε_geom=copy(ε_geom), losses=copy(losses)))
-            println("  saved → $path")
+            println("  saved → $path"); flush(stdout)
             flush(stdout)
         end
     end
@@ -331,7 +331,7 @@ N_steps            = 3                                # EKF steps per episode
 μ0                 = zeros(dx)                                      # initial belief mean
 Σ0                 = 0.01 *Matrix{Float64}(I, dx, dx)              # initial belief covariance
 σ²                 = 0.01
-αr                 = 10.0
+αr                 = 100.0
 
 x0_min             = -0.01
 x0_max             =  0.01
@@ -339,7 +339,7 @@ rng                = MersenneTwister(42)
 x0_list            = [x0_min .+ (x0_max - x0_min) .* rand(rng, dx) for _ in 1:n_episodes]
 noise_bank         = sample_noise_bank(rng, n_episodes, N_steps, dy, σ²)
 
-println("[params] nω=$nω  workers=$(nworkers())  n_lat=$n_lat  res=$res  grid=$(round(Int,Lx*res))×$(round(Int,Ly*res))  design=$(d_length)×$(d_width)")
+println("[params] nω=$nω  workers=$(nworkers())  n_lat=$n_lat  res=$res  grid=$(round(Int,Lx*res))×$(round(Int,Ly*res))  design=$(d_length)×$(d_width)"); flush(stdout)
 flush(stdout)
 
 # ── Geometry and calibration setup ───────────────────────────────────────────
@@ -412,18 +412,18 @@ const _RUN_ALL  = _TEST_ENV == "all"
 _run_test(name) = _RUN_ALL || name in split(_TEST_ENV, ",")
 
 if _TEST_ENV != ""
-    println("\n═══ Running selected gradient checks: $(_RUN_ALL ? "all" : _TEST_ENV) ═══\n")
+    println("\n═══ Running selected gradient checks: $(_RUN_ALL ? "all" : _TEST_ENV) ═══\n"); flush(stdout)
 
     # ── Compute / load nominal c (shared by all tests) ───────────────────────
     c_nom_path = joinpath(@__DIR__, "c_nom.jls")
     if isfile(c_nom_path)
         c_nom = deserialize(c_nom_path)
-        println("Loaded c_nom from $c_nom_path  (length=$(length(c_nom)))")
+        println("Loaded c_nom from $c_nom_path  (length=$(length(c_nom)))"); flush(stdout)
     else
         ε_geom = rand(MersenneTwister(1234), Ny_d, Nx_d)
         c_nom = sim_geom(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info, monitors_array, a_f_array, a_b_array)
         serialize(c_nom_path, c_nom)
-        println("Computed and saved c_nom to $c_nom_path")
+        println("Computed and saved c_nom to $c_nom_path"); flush(stdout)
     end
 end
 
@@ -437,8 +437,8 @@ if _run_test("sim_geom")
         fd_deriv = (scalar_sg(ε_geom_check .+ ε .* v) - scalar_sg(ε_geom_check .- ε .* v)) / (2ε)
         ad_deriv = dot(grad, v)
         rel_err  = abs(fd_deriv - ad_deriv) / (abs(ad_deriv) + 1e-12)
-        println("sim_geom gradient check (AD vs FD):")
-        println("  AD=$ad_deriv  FD=$fd_deriv  rel_err=$rel_err")
+        println("sim_geom gradient check (AD vs FD):"); flush(stdout)
+        println("  AD=$ad_deriv  FD=$fd_deriv  rel_err=$rel_err"); flush(stdout)
         @assert rel_err < 1e-3  "sim_geom gradient check failed: rel_err=$rel_err"
     end
 end
@@ -457,10 +457,10 @@ if _run_test("mf_f")
         ad_deriv = dot(grad, v)
         rel_err  = abs(fd_deriv - ad_deriv) / (abs(ad_deriv) + 1e-12)
 
-        println("mf.f gradient check w.r.t. c (AD vs FD):")
-        println("  AD directional derivative : $ad_deriv")
-        println("  FD directional derivative : $fd_deriv")
-        println("  relative error            : $rel_err")
+        println("mf.f gradient check w.r.t. c (AD vs FD):"); flush(stdout)
+        println("  AD directional derivative : $ad_deriv"); flush(stdout)
+        println("  FD directional derivative : $fd_deriv"); flush(stdout)
+        println("  relative error            : $rel_err"); flush(stdout)
         @assert rel_err < 1e-3  "mf.f gradient check failed: relative error = $rel_err"
     end
 end
@@ -478,8 +478,8 @@ if _run_test("mf_fx")
                     mf_check.f(x_check .- ε .* v, s_check, c_nom)) ./ (2ε)
         rel_err_dir = norm(jac_v .- fd_jac_v) / (norm(jac_v) + 1e-12)
 
-        println("mf.fx directional check (analytical vs FD):")
-        println("  ‖jac_v‖ = $(norm(jac_v))  ‖fd_jac_v‖ = $(norm(fd_jac_v))  rel_err = $rel_err_dir")
+        println("mf.fx directional check (analytical vs FD):"); flush(stdout)
+        println("  ‖jac_v‖ = $(norm(jac_v))  ‖fd_jac_v‖ = $(norm(fd_jac_v))  rel_err = $rel_err_dir"); flush(stdout)
         @assert rel_err_dir < 1e-3  "mf.fx directional check failed: relative error = $rel_err_dir"
 
         # 2. Full Jacobian check — column i = (f(x+ε eᵢ) - f(x-ε eᵢ)) / 2ε
@@ -490,16 +490,16 @@ if _run_test("mf_fx")
             for i in 1:dx]...)
         rel_err_full = norm(J_anal .- J_fd) / (norm(J_anal) + 1e-12)
 
-        println("mf.fx full Jacobian check (analytical vs FD):")
-        println("  ‖J_anal‖ = $(norm(J_anal))  ‖J_fd‖ = $(norm(J_fd))  rel_err = $rel_err_full")
+        println("mf.fx full Jacobian check (analytical vs FD):"); flush(stdout)
+        println("  ‖J_anal‖ = $(norm(J_anal))  ‖J_fd‖ = $(norm(J_fd))  rel_err = $rel_err_full"); flush(stdout)
         if rel_err_full >= 1e-3
-            println("  --- diagnostic: J_anal ---")
-            show(stdout, "text/plain", J_anal); println()
-            println("  --- diagnostic: J_fd ---")
-            show(stdout, "text/plain", J_fd); println()
-            println("  --- diagnostic: element-wise ratio J_anal ./ J_fd ---")
-            show(stdout, "text/plain", J_anal ./ J_fd); println()
-            println("  --- diagnostic: does -J_anal ≈ J_fd? rel_err = $(norm(J_anal .+ J_fd)/norm(J_anal))")
+            println("  --- diagnostic: J_anal ---"); flush(stdout)
+            show(stdout, "text/plain", J_anal); println(); flush(stdout)
+            println("  --- diagnostic: J_fd ---"); flush(stdout)
+            show(stdout, "text/plain", J_fd); println(); flush(stdout)
+            println("  --- diagnostic: element-wise ratio J_anal ./ J_fd ---"); flush(stdout)
+            show(stdout, "text/plain", J_anal ./ J_fd); println(); flush(stdout)
+            println("  --- diagnostic: does -J_anal ≈ J_fd? rel_err = $(norm(J_anal .+ J_fd)/norm(J_anal))"); flush(stdout)
         end
         @assert rel_err_full < 1e-3  "mf.fx full Jacobian check failed: relative error = $rel_err_full"
     end
@@ -522,7 +522,7 @@ if _run_test("lattice")
 
         # ── 1a. jac_only vs FD of powers_only ────────────────────────────────
         # J[:,k] should equal (powers_only(x+ε·eₖ) − powers_only(x−ε·eₖ)) / 2ε
-        println("  1a. jac_only vs FD(powers_only) w.r.t. Δn:")
+        println("  1a. jac_only vs FD(powers_only) w.r.t. Δn:"); flush(stdout)
         J_anal = jac_only(Δn, φ₁, φ₂, S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
         J_fd   = hcat([begin
             eₖ = zeros(n_lat, n_lat); eₖ[k] = 1.0
@@ -530,11 +530,11 @@ if _run_test("lattice")
              powers_only(Δn .- ε .* eₖ, φ₁, φ₂, S_arr, dSdn_arr, d2Sdn2_arr, GΔω)) ./ (2ε)
         end for k in 1:length(Δn)]...)
         re_jac = norm(J_anal - J_fd) / (norm(J_anal) + 1e-12)
-        println("      ‖J_anal‖=$(round(norm(J_anal), sigdigits=4))  ‖J_fd‖=$(round(norm(J_fd), sigdigits=4))  rel_err=$(round(re_jac, sigdigits=3))")
+        println("      ‖J_anal‖=$(round(norm(J_anal), sigdigits=4))  ‖J_fd‖=$(round(norm(J_fd), sigdigits=4))  rel_err=$(round(re_jac, sigdigits=3))"); flush(stdout)
         @assert re_jac < 1e-3  "jac_only vs FD(powers_only) failed: rel_err=$re_jac"
 
         # ── 1b. jac_only vs FD of powers_only w.r.t. s (phases) ──────────────
-        println("  1b. jac_only vs FD(powers_only) w.r.t. s:")
+        println("  1b. jac_only vs FD(powers_only) w.r.t. s:"); flush(stdout)
         for (si, name) in [(1, "φ₁"), (2, "φ₂")]
             μ_plus  = powers_only(Δn, (si==1 ? φ₁+ε : φ₁), (si==2 ? φ₂+ε : φ₂),
                                   S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
@@ -546,12 +546,12 @@ if _run_test("lattice")
                 t -> powers_only(Δn, (si==1 ? φ₁+t : φ₁), (si==2 ? φ₂+t : φ₂),
                                  S_arr, dSdn_arr, d2Sdn2_arr, GΔω), 0.0)
             re_s = norm(dμ_ds_ad - dμ_ds_fd) / (norm(dμ_ds_ad) + 1e-12)
-            println("      ∂μ/∂$name: ‖AD‖=$(round(norm(dμ_ds_ad), sigdigits=4))  ‖FD‖=$(round(norm(dμ_ds_fd), sigdigits=4))  rel_err=$(round(re_s, sigdigits=3))")
+            println("      ∂μ/∂$name: ‖AD‖=$(round(norm(dμ_ds_ad), sigdigits=4))  ‖FD‖=$(round(norm(dμ_ds_fd), sigdigits=4))  rel_err=$(round(re_s, sigdigits=3))"); flush(stdout)
             @assert re_s < 1e-3  "∂μ/∂$name check failed: rel_err=$re_s"
         end
 
         # ── 1c. jac_and_dirderiv_s vs FD of jac_only w.r.t. s ────────────────
-        println("  1c. jac_and_dirderiv_s vs FD(jac_only) w.r.t. s:")
+        println("  1c. jac_and_dirderiv_s vs FD(jac_only) w.r.t. s:"); flush(stdout)
         λ_test = [0.7, -0.4]
         J0, dJ_λ = jac_and_dirderiv_s(Δn, φ₁, φ₂, λ_test, S_arr, dSdn_arr, d2Sdn2_arr, GΔω)
         # FD: directional derivative of jac_only along λ in s-space
@@ -561,13 +561,13 @@ if _run_test("lattice")
         # Also check J0 == jac_only at the same point
         re_J0 = norm(J0 - J_anal) / (norm(J_anal) + 1e-12)
         re_dJ = norm(dJ_λ - dJ_fd) / (norm(dJ_fd) + 1e-12)
-        println("      J consistency: rel_err=$(round(re_J0, sigdigits=3))")
-        println("      dJ_λ: ‖anal‖=$(round(norm(dJ_λ), sigdigits=4))  ‖FD‖=$(round(norm(dJ_fd), sigdigits=4))  rel_err=$(round(re_dJ, sigdigits=3))")
+        println("      J consistency: rel_err=$(round(re_J0, sigdigits=3))"); flush(stdout)
+        println("      dJ_λ: ‖anal‖=$(round(norm(dJ_λ), sigdigits=4))  ‖FD‖=$(round(norm(dJ_fd), sigdigits=4))  rel_err=$(round(re_dJ, sigdigits=3))"); flush(stdout)
         @assert re_J0 < 1e-10  "J from jac_and_dirderiv_s != jac_only: rel_err=$re_J0"
         @assert re_dJ < 1e-3   "dJ_λ vs FD(jac_only) failed: rel_err=$re_dJ"
 
         # ── 2a. Zygote gradient of powers_only w.r.t. c ──────────────────────
-        println("  2a. Zygote ∂(powers_only)/∂c:")
+        println("  2a. Zygote ∂(powers_only)/∂c:"); flush(stdout)
         v_c = randn(MersenneTwister(200), length(c_nom)); v_c ./= norm(v_c)
         scalar_po = c_ -> begin
             Sa, dSa, d2Sa = unpack_c(c_, nω)
@@ -577,11 +577,11 @@ if _run_test("lattice")
         fd_po = (scalar_po(c_nom .+ ε .* v_c) - scalar_po(c_nom .- ε .* v_c)) / (2ε)
         ad_po = dot(grad_po, v_c)
         re_po = abs(fd_po - ad_po) / (abs(ad_po) + 1e-12)
-        println("      AD=$(round(ad_po, sigdigits=6))  FD=$(round(fd_po, sigdigits=6))  rel_err=$(round(re_po, sigdigits=3))")
+        println("      AD=$(round(ad_po, sigdigits=6))  FD=$(round(fd_po, sigdigits=6))  rel_err=$(round(re_po, sigdigits=3))"); flush(stdout)
         @assert re_po < 1e-3  "Zygote ∂(powers_only)/∂c failed: rel_err=$re_po"
 
         # ── 2b. Zygote gradient of jac_only w.r.t. c ─────────────────────────
-        println("  2b. Zygote ∂(jac_only)/∂c:")
+        println("  2b. Zygote ∂(jac_only)/∂c:"); flush(stdout)
         scalar_jo = c_ -> begin
             Sa, dSa, d2Sa = unpack_c(c_, nω)
             sum(abs2, jac_only(Δn, φ₁, φ₂, Sa, dSa, d2Sa, GΔω))
@@ -590,11 +590,11 @@ if _run_test("lattice")
         fd_jo = (scalar_jo(c_nom .+ ε .* v_c) - scalar_jo(c_nom .- ε .* v_c)) / (2ε)
         ad_jo = dot(grad_jo, v_c)
         re_jo = abs(fd_jo - ad_jo) / (abs(ad_jo) + 1e-12)
-        println("      AD=$(round(ad_jo, sigdigits=6))  FD=$(round(fd_jo, sigdigits=6))  rel_err=$(round(re_jo, sigdigits=3))")
+        println("      AD=$(round(ad_jo, sigdigits=6))  FD=$(round(fd_jo, sigdigits=6))  rel_err=$(round(re_jo, sigdigits=3))"); flush(stdout)
         @assert re_jo < 1e-3  "Zygote ∂(jac_only)/∂c failed: rel_err=$re_jo"
 
         # ── 2c. Zygote gradient of jac_and_dirderiv_s w.r.t. c ───────────────
-        println("  2c. Zygote ∂(jac_and_dirderiv_s)/∂c:")
+        println("  2c. Zygote ∂(jac_and_dirderiv_s)/∂c:"); flush(stdout)
         scalar_jds = c_ -> begin
             Sa, dSa, d2Sa = unpack_c(c_, nω)
             F, dF = jac_and_dirderiv_s(Δn, φ₁, φ₂, λ_test, Sa, dSa, d2Sa, GΔω)
@@ -604,13 +604,13 @@ if _run_test("lattice")
         fd_jds = (scalar_jds(c_nom .+ ε .* v_c) - scalar_jds(c_nom .- ε .* v_c)) / (2ε)
         ad_jds = dot(grad_jds, v_c)
         re_jds = abs(fd_jds - ad_jds) / (abs(ad_jds) + 1e-12)
-        println("      AD=$(round(ad_jds, sigdigits=6))  FD=$(round(fd_jds, sigdigits=6))  rel_err=$(round(re_jds, sigdigits=3))")
+        println("      AD=$(round(ad_jds, sigdigits=6))  FD=$(round(fd_jds, sigdigits=6))  rel_err=$(round(re_jds, sigdigits=3))"); flush(stdout)
         @assert re_jds < 1e-3  "Zygote ∂(jac_and_dirderiv_s)/∂c failed: rel_err=$re_jds"
 
         # ── 2d. Zygote gradient of bfim_trace_dirderiv (IFT scalar) w.r.t. c ─
         # This is the scalar λ'·∇_s(bfim_trace) = 2·sum(F.*dF_λ)/σ² that the
         # IFT rrule differentiates w.r.t. c.
-        println("  2d. Zygote ∂(λ'·∇_s bfim_trace)/∂c  (IFT scalar):")
+        println("  2d. Zygote ∂(λ'·∇_s bfim_trace)/∂c  (IFT scalar):"); flush(stdout)
         scalar_ift = c_ -> begin
             Sa, dSa, d2Sa = unpack_c(c_, nω)
             Δn_ = reshape(x_check, n_lat, n_lat)
@@ -621,7 +621,7 @@ if _run_test("lattice")
         fd_ift = (scalar_ift(c_nom .+ ε .* v_c) - scalar_ift(c_nom .- ε .* v_c)) / (2ε)
         ad_ift = dot(grad_ift, v_c)
         re_ift = abs(fd_ift - ad_ift) / (abs(ad_ift) + 1e-12)
-        println("      AD=$(round(ad_ift, sigdigits=6))  FD=$(round(fd_ift, sigdigits=6))  rel_err=$(round(re_ift, sigdigits=3))")
+        println("      AD=$(round(ad_ift, sigdigits=6))  FD=$(round(fd_ift, sigdigits=6))  rel_err=$(round(re_ift, sigdigits=3))"); flush(stdout)
         @assert re_ift < 1e-3  "Zygote ∂(IFT scalar)/∂c failed: rel_err=$re_ift"
 
         println("═══ All lattice tests passed ═══"); flush(stdout)
@@ -643,7 +643,7 @@ if _run_test("ekf")
 
         # ── 3a. ekf_update only (fixed s, no get_sopt) ───────────────────────
         # Differentiate ‖μ_new‖² w.r.t. c through one ekf_update call.
-        println("  3a. Zygote ∂(ekf_update μ_new)/∂c  (fixed s, no get_sopt):")
+        println("  3a. Zygote ∂(ekf_update μ_new)/∂c  (fixed s, no get_sopt):"); flush(stdout)
         ekf_mu_c = c_ -> begin
             y = mf_check.f(x0_check, s_check, c_) + noise_1
             μ_new, _ = ekf_update(μ0, Σ0, y, s_check, c_, mf_check)
@@ -653,12 +653,12 @@ if _run_test("ekf")
         fd_3a = (ekf_mu_c(c_nom .+ ε .* v_c) - ekf_mu_c(c_nom .- ε .* v_c)) / (2ε)
         ad_3a = dot(grad_3a, v_c)
         re_3a = abs(fd_3a - ad_3a) / (abs(ad_3a) + 1e-12)
-        println("      AD=$(round(ad_3a, sigdigits=6))  FD=$(round(fd_3a, sigdigits=6))  rel_err=$(round(re_3a, sigdigits=3))")
+        println("      AD=$(round(ad_3a, sigdigits=6))  FD=$(round(fd_3a, sigdigits=6))  rel_err=$(round(re_3a, sigdigits=3))"); flush(stdout)
         @assert re_3a < 1e-3  "ekf_update μ gradient check failed: rel_err=$re_3a"
 
         # ── 3b. ekf_update Σ_new (fixed s) ───────────────────────────────────
         # Differentiate tr(Σ_new) w.r.t. c — tests Joseph form backward pass.
-        println("  3b. Zygote ∂(tr(Σ_new))/∂c  (fixed s):")
+        println("  3b. Zygote ∂(tr(Σ_new))/∂c  (fixed s):"); flush(stdout)
         ekf_sig_c = c_ -> begin
             y = mf_check.f(x0_check, s_check, c_) + noise_1
             _, Σ_new = ekf_update(μ0, Σ0, y, s_check, c_, mf_check)
@@ -668,12 +668,12 @@ if _run_test("ekf")
         fd_3b = (ekf_sig_c(c_nom .+ ε .* v_c) - ekf_sig_c(c_nom .- ε .* v_c)) / (2ε)
         ad_3b = dot(grad_3b, v_c)
         re_3b = abs(fd_3b - ad_3b) / (abs(ad_3b) + 1e-12)
-        println("      AD=$(round(ad_3b, sigdigits=6))  FD=$(round(fd_3b, sigdigits=6))  rel_err=$(round(re_3b, sigdigits=3))")
+        println("      AD=$(round(ad_3b, sigdigits=6))  FD=$(round(fd_3b, sigdigits=6))  rel_err=$(round(re_3b, sigdigits=3))"); flush(stdout)
         @assert re_3b < 1e-3  "ekf_update Σ gradient check failed: rel_err=$re_3b"
 
         # ── 3c. Single EKF step with get_sopt (IFT + ekf) ────────────────────
         # Differentiate ‖μ_new − x0‖² w.r.t. c through get_sopt + ekf_update.
-        println("  3c. Zygote ∂(single EKF step with get_sopt)/∂c:")
+        println("  3c. Zygote ∂(single EKF step with get_sopt)/∂c:"); flush(stdout)
         single_step_c = c_ -> begin
             sk = get_sopt(c_, μ0, mf_check)
             yk = mf_check.f(x0_check, sk, c_) + noise_1
@@ -684,13 +684,13 @@ if _run_test("ekf")
         fd_3c = (single_step_c(c_nom .+ ε .* v_c) - single_step_c(c_nom .- ε .* v_c)) / (2ε)
         ad_3c = dot(grad_3c, v_c)
         re_3c = abs(fd_3c - ad_3c) / (abs(ad_3c) + 1e-12)
-        println("      AD=$(round(ad_3c, sigdigits=6))  FD=$(round(fd_3c, sigdigits=6))  rel_err=$(round(re_3c, sigdigits=3))")
+        println("      AD=$(round(ad_3c, sigdigits=6))  FD=$(round(fd_3c, sigdigits=6))  rel_err=$(round(re_3c, sigdigits=3))"); flush(stdout)
         @assert re_3c < 1e-3  "single EKF step gradient check failed: rel_err=$re_3c"
 
         # ── 3c'. IFT rrule μ̄ test: ∂(get_sopt)/∂μ ─────────────────────────
         # Tests the μ̄ = J_μ' * λ component in isolation.
         # If this fails, the IFT μ̄ is wrong.
-        println("  3c'. Zygote ∂(get_sopt)/∂μ  (IFT μ̄ pathway):")
+        println("  3c'. Zygote ∂(get_sopt)/∂μ  (IFT μ̄ pathway):"); flush(stdout)
         v_mu = randn(MersenneTwister(301), dx); v_mu ./= norm(v_mu)
         μ_test = x0_list[1]  # non-zero μ to test general case
         # Scalar function of μ through get_sopt:
@@ -703,10 +703,10 @@ if _run_test("ekf")
             fd_mu = (sopt_of_mu(μ_test .+ ε_test .* v_mu) - sopt_of_mu(μ_test .- ε_test .* v_mu)) / (2ε_test)
             ad_mu = dot(grad_mu, v_mu)
             re_mu = abs(fd_mu - ad_mu) / (abs(ad_mu) + 1e-12)
-            println("      ε=$ε_test  AD=$(round(ad_mu, sigdigits=6))  FD=$(round(fd_mu, sigdigits=6))  rel_err=$(round(re_mu, sigdigits=3))")
+            println("      ε=$ε_test  AD=$(round(ad_mu, sigdigits=6))  FD=$(round(fd_mu, sigdigits=6))  rel_err=$(round(re_mu, sigdigits=3))"); flush(stdout)
         end
         # Also test with μ1 from a single EKF step (the actual multi-step scenario)
-        println("  3c''. Same test at μ₁ (post-EKF point):")
+        println("  3c''. Same test at μ₁ (post-EKF point):"); flush(stdout)
         sk0 = get_sopt(c_nom, μ0, mf_check)
         y0  = mf_check.f(x0_check, sk0, c_nom) + noise_1
         μ1_test, _ = ekf_update(μ0, Σ0, y0, sk0, c_nom, mf_check)
@@ -715,12 +715,12 @@ if _run_test("ekf")
             fd_mu1 = (sopt_of_mu(μ1_test .+ ε_test .* v_mu) - sopt_of_mu(μ1_test .- ε_test .* v_mu)) / (2ε_test)
             ad_mu1 = dot(grad_mu1, v_mu)
             re_mu1 = abs(fd_mu1 - ad_mu1) / (abs(ad_mu1) + 1e-12)
-            println("      ε=$ε_test  AD=$(round(ad_mu1, sigdigits=6))  FD=$(round(fd_mu1, sigdigits=6))  rel_err=$(round(re_mu1, sigdigits=3))")
+            println("      ε=$ε_test  AD=$(round(ad_mu1, sigdigits=6))  FD=$(round(fd_mu1, sigdigits=6))  rel_err=$(round(re_mu1, sigdigits=3))"); flush(stdout)
         end
 
         # ── 3d. Two EKF steps, FIXED s, no get_sopt ─────────────────────────
         # Isolates multi-step ekf_update gradient from IFT rrule.
-        println("  3d. Zygote ∂(2 EKF steps, fixed s, no get_sopt)/∂c:")
+        println("  3d. Zygote ∂(2 EKF steps, fixed s, no get_sopt)/∂c:"); flush(stdout)
         noise_2  = noise_bank[1][2]
         s_fixed1 = [0.3, -0.2]
         s_fixed2 = [0.1,  0.5]
@@ -735,7 +735,7 @@ if _run_test("ekf")
         fd_3d = (two_step_fixed_c(c_nom .+ ε .* v_c) - two_step_fixed_c(c_nom .- ε .* v_c)) / (2ε)
         ad_3d = dot(grad_3d, v_c)
         re_3d = abs(fd_3d - ad_3d) / (abs(ad_3d) + 1e-12)
-        println("      AD=$(round(ad_3d, sigdigits=6))  FD=$(round(fd_3d, sigdigits=6))  rel_err=$(round(re_3d, sigdigits=3))")
+        println("      AD=$(round(ad_3d, sigdigits=6))  FD=$(round(fd_3d, sigdigits=6))  rel_err=$(round(re_3d, sigdigits=3))"); flush(stdout)
         @assert re_3d < 1e-3  "2-step EKF (fixed s) gradient check failed: rel_err=$re_3d"
 
         # ── 3e. Two EKF steps WITH get_sopt (warm-started FD) ─────────────────
@@ -743,7 +743,7 @@ if _run_test("ekf")
         # (see 3c'' diagnostic), making naive FD unreliable. We use warm-started
         # _get_sopt (passing nominal s★ as initial guess) so FD stays in the same
         # basin as the AD gradient (which uses the IFT for the smooth branch).
-        println("  3e. Zygote ∂(2 EKF steps with get_sopt)/∂c  [warm-started FD]:")
+        println("  3e. Zygote ∂(2 EKF steps with get_sopt)/∂c  [warm-started FD]:"); flush(stdout)
         # Compute nominal s★ at each step for warm-starting
         sk1_nom = get_sopt(c_nom, μ0, mf_check)
         yk1_nom = mf_check.f(x0_check, sk1_nom, c_nom) + noise_1
@@ -766,11 +766,11 @@ if _run_test("ekf")
         fd_3e = (two_step_warm_c(c_nom .+ ε .* v_c) - two_step_warm_c(c_nom .- ε .* v_c)) / (2ε)
         ad_3e = dot(grad_3e, v_c)
         re_3e = abs(fd_3e - ad_3e) / (abs(ad_3e) + 1e-12)
-        println("      AD=$(round(ad_3e, sigdigits=6))  FD=$(round(fd_3e, sigdigits=6))  rel_err=$(round(re_3e, sigdigits=3))")
+        println("      AD=$(round(ad_3e, sigdigits=6))  FD=$(round(fd_3e, sigdigits=6))  rel_err=$(round(re_3e, sigdigits=3))"); flush(stdout)
         @assert re_3e < 1e-2  "2-step EKF (warm-started) gradient check failed: rel_err=$re_3e"
 
         # ── 3f. Full episode_loss (warm-started FD) ───────────────────────────
-        println("  3f. Zygote ∂(episode_loss)/∂c  (N_steps=$N_steps) [warm-started FD]:")
+        println("  3f. Zygote ∂(episode_loss)/∂c  (N_steps=$N_steps) [warm-started FD]:"); flush(stdout)
         # Pre-compute nominal s★ trajectory for warm-starting
         s_noms = Vector{Vector{Float64}}(undef, N_steps)
         μ_run, Σ_run = μ0, Σ0
@@ -792,7 +792,7 @@ if _run_test("ekf")
         fd_3f = (ep_warm_c(c_nom .+ ε .* v_c) - ep_warm_c(c_nom .- ε .* v_c)) / (2ε)
         ad_3f = dot(grad_3f, v_c)
         re_3f = abs(fd_3f - ad_3f) / (abs(ad_3f) + 1e-12)
-        println("      AD=$(round(ad_3f, sigdigits=6))  FD=$(round(fd_3f, sigdigits=6))  rel_err=$(round(re_3f, sigdigits=3))")
+        println("      AD=$(round(ad_3f, sigdigits=6))  FD=$(round(fd_3f, sigdigits=6))  rel_err=$(round(re_3f, sigdigits=3))"); flush(stdout)
         @assert re_3f < 1e-2  "episode_loss (warm-started) gradient check failed: rel_err=$re_3f"
 
         println("═══ EKF gradient tests complete ═══"); flush(stdout)
@@ -805,7 +805,7 @@ if _run_test("sopt_heatmap")
         φ_range   = range(-π, π, length=n_grid)
         reg_obj(μ, s) = bfim_trace(μ, s, c_nom, mf_check) - mf_check.αr * sum(abs2, s)
 
-        println("get_sopt heatmap validation — $n_trials trials:")
+        println("get_sopt heatmap validation — $n_trials trials:"); flush(stdout)
         plts = map(1:n_trials) do trial
             μ = x0_list[mod1(trial, length(x0_list))]
             Z_bfim = [bfim_trace(μ, [φ₁, φ₂], c_nom, mf_check)
@@ -817,7 +817,7 @@ if _run_test("sopt_heatmap")
             Δs     = norm(s_grid .- s★)
 
             println("  trial $trial: grid=$(round.(s_grid, digits=3))  " *
-                    "get_sopt=$(round.(s★, digits=3))  ‖Δs‖=$(round(Δs, sigdigits=2))")
+                    "get_sopt=$(round.(s★, digits=3))  ‖Δs‖=$(round(Δs, sigdigits=2))"); flush(stdout)
 
             p = heatmap(φ_range, φ_range, Z_bfim;
                         xlabel="φ₁", ylabel="φ₂",
@@ -835,7 +835,7 @@ if _run_test("sopt_heatmap")
         fig = plot(plts...; layout=(2, 5), size=(1600, 700),
                    plot_title="BFIM trace landscape  (αr=$(mf_check.αr), markers: × grid argmax, ○ get_sopt)")
         savefig(fig, joinpath(@__DIR__, "bfim_heatmaps.png"))
-        println("Saved → $(joinpath(@__DIR__, "bfim_heatmaps.png"))")
+        println("Saved → $(joinpath(@__DIR__, "bfim_heatmaps.png"))"); flush(stdout)
         display(fig)
     end
 end
@@ -844,18 +844,18 @@ if _run_test("sopt_grad")
     let ε = 1e-5, n_trials = 10
         mf_check  = make_model(nω, n_lat, GΔω, σ², αr)
         rng_check = MersenneTwister(101)
-        println("get_sopt gradient check (IFT rrule) w.r.t. c — $n_trials trials:")
+        println("get_sopt gradient check (IFT rrule) w.r.t. c — $n_trials trials:"); flush(stdout)
         for trial in 1:n_trials
             μ_check     = x0_list[mod1(trial, length(x0_list))]
             sopt_nom    = get_sopt(c_nom, μ_check, mf_check)
-            println("  trial $trial: s★ = $(round.(sopt_nom, digits=4))")
+            println("  trial $trial: s★ = $(round.(sopt_nom, digits=4))"); flush(stdout)
             scalar_sopt = c_ -> sum(real.(exp.(im .* BFIMGaussian._get_sopt(c_, μ_check, mf_check, sopt_nom))))
             _, (grad,)  = Zygote.withgradient(scalar_sopt, c_nom)
             v           = randn(rng_check, length(c_nom)); v ./= norm(v)
             fd_deriv    = (scalar_sopt(c_nom .+ ε .* v) - scalar_sopt(c_nom .- ε .* v)) / (2ε)
             ad_deriv    = dot(grad, v)
             rel_err     = abs(fd_deriv - ad_deriv) / (abs(ad_deriv) + 1e-12)
-            println("  trial $trial: AD=$ad_deriv  FD=$fd_deriv  rel_err=$rel_err")
+            println("  trial $trial: AD=$ad_deriv  FD=$fd_deriv  rel_err=$rel_err"); flush(stdout)
             @assert rel_err < 1e-3  "get_sopt gradient check failed at trial $trial: rel_err=$rel_err"
         end
     end
@@ -865,7 +865,7 @@ if _run_test("episode")
     let n_trials = 3
         mf_check  = make_model(nω, n_lat, GΔω, σ², αr)
         rng_check = MersenneTwister(103)
-        println("episode_loss gradient check (AD vs FD) — $n_trials trials, multiple ε:")
+        println("episode_loss gradient check (AD vs FD) — $n_trials trials, multiple ε:"); flush(stdout)
         for trial in 1:n_trials
             x0_check    = x0_list[mod1(trial, length(x0_list))]
             noise_check = noise_bank[mod1(trial, length(noise_bank))]
@@ -873,13 +873,13 @@ if _run_test("episode")
             L_nom, (grad,) = Zygote.withgradient(eloss, c_nom)
             v = randn(rng_check, length(c_nom)); v ./= norm(v)
             ad_deriv = dot(grad, v)
-            println("  trial $trial: loss=$(round(L_nom, sigdigits=6))  AD=$(round(ad_deriv, sigdigits=6))")
+            println("  trial $trial: loss=$(round(L_nom, sigdigits=6))  AD=$(round(ad_deriv, sigdigits=6))"); flush(stdout)
             best_err = Inf
             for ε in [1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
                 fd_deriv = (eloss(c_nom .+ ε .* v) - eloss(c_nom .- ε .* v)) / (2ε)
                 rel_err  = abs(fd_deriv - ad_deriv) / (abs(ad_deriv) + 1e-12)
                 best_err = min(best_err, rel_err)
-                println("    ε=$ε  FD=$(round(fd_deriv, sigdigits=6))  rel_err=$(round(rel_err, sigdigits=3))")
+                println("    ε=$ε  FD=$(round(fd_deriv, sigdigits=6))  rel_err=$(round(rel_err, sigdigits=3))"); flush(stdout)
             end
             @assert best_err < 1e-2  "episode_loss gradient check failed at trial $trial: best rel_err=$best_err across all ε"
         end
@@ -891,7 +891,7 @@ if _run_test("batch")
     let ε = 1e-5
         mf_check = make_model(nω, n_lat, GΔω, σ², αr)
         v = randn(MersenneTwister(99), length(c_nom)); v ./= norm(v)
-        println("batch_c2loss_grad: per-episode diagnostics (ε=$ε):")
+        println("batch_c2loss_grad: per-episode diagnostics (ε=$ε):"); flush(stdout)
         for i in eachindex(x0_list)
             eloss = c_ -> episode_loss(x0_list[i], c_, mf_check, μ0, Σ0, noise_bank[i])
             L_nom, (grad,) = Zygote.withgradient(eloss, c_nom)
@@ -899,7 +899,7 @@ if _run_test("batch")
             ad_d = dot(grad, v)
             re   = abs(fd_d - ad_d) / (abs(ad_d) + 1e-12)
             println("  episode $i: loss=$(round(L_nom, sigdigits=6))  AD=$(round(ad_d, sigdigits=6))  " *
-                    "FD=$(round(fd_d, sigdigits=6))  rel_err=$(round(re, sigdigits=3))")
+                    "FD=$(round(fd_d, sigdigits=6))  rel_err=$(round(re, sigdigits=3))"); flush(stdout)
         end
 
         # Aggregate check via batch (uses pmap)
@@ -909,8 +909,8 @@ if _run_test("batch")
         fd_deriv = (L_fwd - L_bwd) / (2ε)
         ad_deriv = dot(grad_c, v)
         rel_err  = abs(fd_deriv - ad_deriv) / (abs(ad_deriv) + 1e-12)
-        println("batch_c2loss_grad aggregate check:")
-        println("  loss=$L_nom  AD=$ad_deriv  FD=$fd_deriv  rel_err=$rel_err")
+        println("batch_c2loss_grad aggregate check:"); flush(stdout)
+        println("  loss=$L_nom  AD=$ad_deriv  FD=$fd_deriv  rel_err=$rel_err"); flush(stdout)
 
         # Also try ε=1e-4 to check if FD step size is the issue
         ε2 = 1e-4
@@ -918,12 +918,12 @@ if _run_test("batch")
         L_bwd2, _ = batch_c2loss_grad(x0_list, c_nom .- ε2 .* v, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr)
         fd_deriv2 = (L_fwd2 - L_bwd2) / (2ε2)
         rel_err2  = abs(fd_deriv2 - ad_deriv) / (abs(ad_deriv) + 1e-12)
-        println("  (ε=$ε2) FD=$fd_deriv2  rel_err=$rel_err2")
+        println("  (ε=$ε2) FD=$fd_deriv2  rel_err=$rel_err2"); flush(stdout)
 
         @assert rel_err < 1e-2 || rel_err2 < 1e-2  "batch_c2loss_grad gradient check failed: rel_err=$rel_err (ε=$ε), $rel_err2 (ε=$ε2)"
     end
 end
 
 if _TEST_ENV != ""
-    println("\n═══ Selected gradient checks complete ═══\n")
+    println("\n═══ Selected gradient checks complete ═══\n"); flush(stdout)
 end
