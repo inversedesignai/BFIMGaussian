@@ -388,11 +388,14 @@ function ChainRulesCore.rrule(::typeof(ekf_update),
     σ² = model.σ²
 
     function ekf_update_pb(Δ_raw)
-        Δμ_new_r, ΔΣ_new_r = Δ_raw
+        Δμ_new_r = ChainRulesCore.unthunk(Δ_raw[1])
+        ΔΣ_new_r = ChainRulesCore.unthunk(Δ_raw[2])
 
         dx = length(μ);  dy = length(y)
-        Δμ_new = Δμ_new_r isa ChainRulesCore.AbstractZero ? zeros(dx)     : collect(Float64, Δμ_new_r)
-        ΔΣ_new = ΔΣ_new_r isa ChainRulesCore.AbstractZero ? zeros(dx, dx) : collect(Float64, ΔΣ_new_r)
+        _zero_v(n)    = zeros(n)
+        _zero_m(r, c) = zeros(r, c)
+        Δμ_new = (Δμ_new_r === nothing || Δμ_new_r isa ChainRulesCore.AbstractZero) ? _zero_v(dx)     : collect(Float64, Δμ_new_r)
+        ΔΣ_new = (ΔΣ_new_r === nothing || ΔΣ_new_r isa ChainRulesCore.AbstractZero) ? _zero_m(dx, dx) : collect(Float64, ΔΣ_new_r)
 
         # ── μ_new = μ + K * innov ─────────────────────────────────────────────
         ΔK   = Δμ_new * innov'                           # dx × dy
