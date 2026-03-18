@@ -93,27 +93,91 @@ Base.@kwdef struct ModelFunctions{F1,F2,F3}
 end
 
 """
+    _global_init_s(c, μ, model; n_grid=8) → s_init
+
+Deterministic grid search over [-π, π]^ds to find a good initial point
+for the L-BFGS sensor-parameter optimisation.  Evaluates the regularised
+objective φ = -bfim_trace + αr‖s‖² on a uniform grid (n_grid^ds points)
+and returns the grid point with the smallest φ.
+
+For ds=2 with n_grid=8, this is 64 evaluations of bfim_trace — cheap
+compared to the FDFD solver.  For ds>2, consider replacing with a
+proper Bayesian optimisation (GP surrogate + acquisition function).
+
+This function is non-differentiable and must be called inside
+`@ignore_derivatives` so that Zygote does not trace through it.
+"""
+function _global_init_s(c, μ, model::ModelFunctions; n_grid::Int=8)
+    ds = model.ds
+    φ_range = collect(range(-π, π, length=n_grid+1))[1:end-1]  # exclude endpoint (periodic)
+    obj = s -> -bfim_trace(μ, s, c, model) + model.αr * sum(abs2, s)
+
+    if ds == 2
+        best_obj = Inf
+        best_s   = zeros(2)
+        for φ₁ in φ_range, φ₂ in φ_range
+            s_try = [φ₁, φ₂]
+            val   = obj(s_try)
+            if val < best_obj
+                best_obj = val
+                best_s   = s_try
+            end
+        end
+        return best_s
+    else
+        # General ds: random Latin hypercube (deterministic via model dims)
+        n_samples = n_grid^min(ds, 3)  # cap for high ds
+        best_obj  = Inf
+        best_s    = zeros(ds)
+        for i in 1:n_samples
+            # Deterministic quasi-random: use golden-ratio based sequence
+            s_try = [mod(i * (sqrt(5)-1)/2 * (k+1), 1.0) * 2π - π for k in 1:ds]
+            val   = obj(s_try)
+            if val < best_obj
+                best_obj = val
+                best_s   = s_try
+            end
+        end
+        return best_s
+    end
+end
+
+"""
     get_sopt(c, μ, model) → s★
 
-Compute the optimal sensor parameters `s★` that maximise the BFIM trace for
-the current belief mean `μ` and sensor design `c`.
+Compute the optimal sensor parameters `s★ ∈ [-π, π]^ds` that maximise the
+BFIM trace for the current belief mean `μ` and sensor design `c`.
 
 Solves:
     s★ = argmin_s  [ -tr(BFIM(μ, s, c)) + αr‖s‖² ]
 
-using L-BFGS with a fixed initial point: `zeros(ds)` when `model.zero_s_init`
-is true (Δn = 0, used for FDFD-based models), or `ones(ds)` otherwise.
+**Initialisation**: a deterministic grid search over [-π, π]^ds finds the
+best starting point (non-differentiable, wrapped in `@ignore_derivatives`),
+then L-BFGS refines to the local minimum.  This global initialisation
+reduces basin-jumping compared to a fixed cold start.
 
-The fixed initialisation ensures that `s★` is a deterministic, smooth function
-of `(μ, c)`, which is required for the custom IFT-based `rrule` to give
-gradients consistent with finite differences.
+**Wrapping**: the result is wrapped to [-π, π] by subtracting the nearest
+multiple of 2π.  The wrapping offset is computed inside `@ignore_derivatives`
+so the gradient passes through as identity (∂(s − const)/∂s = 1).
 
-See also [`_get_sopt`](@ref) for the version that accepts an explicit `s_init`
-(used internally and by the IFT `rrule`).
+Neither the grid initialisation nor the wrapping affects the IFT `rrule`:
+- `s_init` receives `ZeroTangent()` in the rrule (initialisation is invisible to AD)
+- The BFIM objective is 2π-periodic in s (via `cis`), so H_φ and J_c/J_μ are
+  identical at wrapped vs unwrapped points
+
+See also [`_get_sopt`](@ref) for the version that accepts an explicit `s_init`.
 """
 function get_sopt(c, μ, model::ModelFunctions)
-    s_init = model.zero_s_init ? zeros(model.ds) : fill(1.0, model.ds)
-    return _get_sopt(c, μ, model, s_init)
+    # Step 1: Global initialisation (non-differentiable)
+    s_init = @ignore_derivatives _global_init_s(c, μ, model)
+
+    # Step 2: Refine with L-BFGS (differentiable via IFT rrule on _get_sopt)
+    sopt = _get_sopt(c, μ, model, s_init)
+
+    # Step 3: Wrap to [-π, π].  The offset is a non-differentiable integer
+    # multiple of 2π, so ∂(sopt − offset)/∂sopt = I.
+    offset = @ignore_derivatives 2π .* round.(sopt ./ (2π))
+    return sopt .- offset
 end
 
 """
