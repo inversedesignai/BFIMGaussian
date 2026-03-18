@@ -402,7 +402,7 @@ end
 # ══════════════════════════════════════════════════════════════════════════════
 # Gradient / correctness tests
 # Control via env var BFIM_TEST: "all", or comma-separated subset of
-#   sim_geom, mf_f, mf_fx, lattice, sopt_heatmap, sopt_grad, episode, batch
+#   sim_geom, mf_f, mf_fx, lattice, ekf, sopt_heatmap, sopt_grad, episode, batch
 # Example:  BFIM_TEST=sopt_grad,episode julia PhEnd2End.jl
 # ══════════════════════════════════════════════════════════════════════════════
 const _TEST_ENV = get(ENV, "BFIM_TEST", "")
@@ -623,6 +623,98 @@ if _run_test("lattice")
         @assert re_ift < 1e-3  "Zygote ∂(IFT scalar)/∂c failed: rel_err=$re_ift"
 
         println("═══ All lattice tests passed ═══"); flush(stdout)
+    end
+end
+
+# ── EKF update gradient tests ─────────────────────────────────────────────────
+# Tests ekf_update in isolation and composed with get_sopt (single EKF step).
+# Pinpoints whether the gradient bug is in ekf_update or the composition.
+if _run_test("ekf")
+    let ε = 1e-5
+        mf_check = make_model(nω, n_lat, GΔω, σ², αr)
+        x0_check = x0_list[1]
+        s_check  = [0.3, -0.2]
+        noise_1  = noise_bank[1][1]
+        v_c = randn(MersenneTwister(300), length(c_nom)); v_c ./= norm(v_c)
+
+        println("═══ EKF update gradient tests ═══"); flush(stdout)
+
+        # ── 3a. ekf_update only (fixed s, no get_sopt) ───────────────────────
+        # Differentiate ‖μ_new‖² w.r.t. c through one ekf_update call.
+        println("  3a. Zygote ∂(ekf_update μ_new)/∂c  (fixed s, no get_sopt):")
+        ekf_mu_c = c_ -> begin
+            y = mf_check.f(x0_check, s_check, c_) + noise_1
+            μ_new, _ = ekf_update(μ0, Σ0, y, s_check, c_, mf_check)
+            sum(abs2, μ_new)
+        end
+        _, (grad_3a,) = Zygote.withgradient(ekf_mu_c, c_nom)
+        fd_3a = (ekf_mu_c(c_nom .+ ε .* v_c) - ekf_mu_c(c_nom .- ε .* v_c)) / (2ε)
+        ad_3a = dot(grad_3a, v_c)
+        re_3a = abs(fd_3a - ad_3a) / (abs(ad_3a) + 1e-12)
+        println("      AD=$(round(ad_3a, sigdigits=6))  FD=$(round(fd_3a, sigdigits=6))  rel_err=$(round(re_3a, sigdigits=3))")
+        @assert re_3a < 1e-3  "ekf_update μ gradient check failed: rel_err=$re_3a"
+
+        # ── 3b. ekf_update Σ_new (fixed s) ───────────────────────────────────
+        # Differentiate tr(Σ_new) w.r.t. c — tests Joseph form backward pass.
+        println("  3b. Zygote ∂(tr(Σ_new))/∂c  (fixed s):")
+        ekf_sig_c = c_ -> begin
+            y = mf_check.f(x0_check, s_check, c_) + noise_1
+            _, Σ_new = ekf_update(μ0, Σ0, y, s_check, c_, mf_check)
+            tr(Σ_new)
+        end
+        _, (grad_3b,) = Zygote.withgradient(ekf_sig_c, c_nom)
+        fd_3b = (ekf_sig_c(c_nom .+ ε .* v_c) - ekf_sig_c(c_nom .- ε .* v_c)) / (2ε)
+        ad_3b = dot(grad_3b, v_c)
+        re_3b = abs(fd_3b - ad_3b) / (abs(ad_3b) + 1e-12)
+        println("      AD=$(round(ad_3b, sigdigits=6))  FD=$(round(fd_3b, sigdigits=6))  rel_err=$(round(re_3b, sigdigits=3))")
+        @assert re_3b < 1e-3  "ekf_update Σ gradient check failed: rel_err=$re_3b"
+
+        # ── 3c. Single EKF step with get_sopt (IFT + ekf) ────────────────────
+        # Differentiate ‖μ_new − x0‖² w.r.t. c through get_sopt + ekf_update.
+        println("  3c. Zygote ∂(single EKF step with get_sopt)/∂c:")
+        single_step_c = c_ -> begin
+            sk = get_sopt(c_, μ0, mf_check)
+            yk = mf_check.f(x0_check, sk, c_) + noise_1
+            μ_new, _ = ekf_update(μ0, Σ0, yk, sk, c_, mf_check)
+            sum(abs2, μ_new - x0_check)
+        end
+        _, (grad_3c,) = Zygote.withgradient(single_step_c, c_nom)
+        fd_3c = (single_step_c(c_nom .+ ε .* v_c) - single_step_c(c_nom .- ε .* v_c)) / (2ε)
+        ad_3c = dot(grad_3c, v_c)
+        re_3c = abs(fd_3c - ad_3c) / (abs(ad_3c) + 1e-12)
+        println("      AD=$(round(ad_3c, sigdigits=6))  FD=$(round(fd_3c, sigdigits=6))  rel_err=$(round(re_3c, sigdigits=3))")
+        @assert re_3c < 1e-3  "single EKF step gradient check failed: rel_err=$re_3c"
+
+        # ── 3d. Two EKF steps with get_sopt ──────────────────────────────────
+        println("  3d. Zygote ∂(2 EKF steps with get_sopt)/∂c:")
+        noise_2 = noise_bank[1][2]
+        two_step_c = c_ -> begin
+            μ, Σ = μ0, Σ0
+            for noise_k in [noise_1, noise_2]
+                sk = get_sopt(c_, μ, mf_check)
+                yk = mf_check.f(x0_check, sk, c_) + noise_k
+                μ, Σ = ekf_update(μ, Σ, yk, sk, c_, mf_check)
+            end
+            sum(abs2, μ - x0_check)
+        end
+        _, (grad_3d,) = Zygote.withgradient(two_step_c, c_nom)
+        fd_3d = (two_step_c(c_nom .+ ε .* v_c) - two_step_c(c_nom .- ε .* v_c)) / (2ε)
+        ad_3d = dot(grad_3d, v_c)
+        re_3d = abs(fd_3d - ad_3d) / (abs(ad_3d) + 1e-12)
+        println("      AD=$(round(ad_3d, sigdigits=6))  FD=$(round(fd_3d, sigdigits=6))  rel_err=$(round(re_3d, sigdigits=3))")
+        @assert re_3d < 1e-2  "2-step EKF gradient check failed: rel_err=$re_3d"
+
+        # ── 3e. Full episode_loss (N_steps EKF steps) ─────────────────────────
+        println("  3e. Zygote ∂(episode_loss)/∂c  (N_steps=$N_steps):")
+        ep_c = c_ -> episode_loss(x0_check, c_, mf_check, μ0, Σ0, noise_bank[1])
+        _, (grad_3e,) = Zygote.withgradient(ep_c, c_nom)
+        fd_3e = (ep_c(c_nom .+ ε .* v_c) - ep_c(c_nom .- ε .* v_c)) / (2ε)
+        ad_3e = dot(grad_3e, v_c)
+        re_3e = abs(fd_3e - ad_3e) / (abs(ad_3e) + 1e-12)
+        println("      AD=$(round(ad_3e, sigdigits=6))  FD=$(round(fd_3e, sigdigits=6))  rel_err=$(round(re_3e, sigdigits=3))")
+        @assert re_3e < 1e-2  "episode_loss gradient check failed: rel_err=$re_3e"
+
+        println("═══ EKF gradient tests complete ═══"); flush(stdout)
     end
 end
 
