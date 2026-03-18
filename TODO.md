@@ -1,5 +1,24 @@
 # BFIMGaussian — To-Do List
 
+## Current status
+
+The codebase has three modules:
+- **SimGeomBroadBand.jl** — 2D FDFD physics, S-matrices, lattice scattering model
+- **BFIMGaussian.jl** — BFIM-based sensor selection + EKF + IFT rrule
+- **PosteriorCovGaussian.jl** — A-optimal (posterior covariance) sensor selection (drop-in replacement)
+- **PhEnd2End.jl** — Training script with Adam, checkpointing, gated tests
+
+### Done
+- [x] Unified `_lattice_freq_core` (shared S-matrix assembly across powers_only/jac_only/jac_and_dirderiv_s)
+- [x] Analytical `jac_and_dirderiv_s` + Zygote VJP path (avoids nested ForwardDiff in IFT pullback)
+- [x] `inv(A)*b` in lattice (Zygote can't trace complex LAPACK `zgetrs`)
+- [x] Dense `Matrix{Float64}(I,n,n)` in EKF (Zygote can't trace `Diagonal` pullback)
+- [x] Adam optimizer with checkpointing, diagnostics, uniform x0 sampling
+- [x] Gated gradient tests via `BFIM_TEST` env var
+- [x] PosteriorCovGaussian module (A-optimal criterion, Σ̄ cotangent in IFT)
+
+---
+
 ## Scaling improvements (for dy ~ 100, dx ~ 100)
 
 ### High priority
@@ -7,7 +26,7 @@
 - [ ] **Woodbury identity in `ekf_update`**
   Replace the dy×dy Kalman gain computation with the information-filter form:
   ```
-  Σ_new = (Σ⁻¹ + FᵀF/σ²)⁻¹        # dx×dx LU — O(dx³) instead of O(dy³)
+  Σ_new = (Σ⁻¹ + FᵀF/σ²)⁻¹        # dx×dx — O(dx³) instead of O(dy³)
   K      = Σ_new · Fᵀ / σ²
   ```
   This also eliminates the Joseph form (Σ_new falls out directly).
@@ -33,7 +52,7 @@
   `ekf_update`, the rrule Jacobians — become O(nnz) instead of O(dy·dx).
 
 - [ ] **Gauss-Newton Hessian approximation in the rrule**
-  `bfim_hessian_s` uses nested ForwardDiff duals: O(ds²·dy·dx).
+  `bfim_hessian_s` / `posterior_hessian_s` uses nested ForwardDiff duals: O(ds²·dy·dx).
   The exact Hessian is H = (2/σ²)[JᵀJ + Σᵢⱼ Fᵢⱼ·∂²Fᵢⱼ/∂s∂sᵀ].
   Drop the second-order term: H ≈ (2/σ²)JᵀJ where J = ∂vec(F)/∂s ∈ R^{(dy·dx)×ds}.
   Requires only first-order derivatives of F; exact when F is linear in s;
@@ -52,18 +71,21 @@
   UKF uses 2·dx+1 sigma points; EnKF uses a small ensemble.
   Consider as an alternative to EKF when model nonlinearity is significant.
 
+- [ ] **Enzyme.jl for composable AD**
+  Zygote+ForwardDiff composition is fragile (LAPACK foreigncalls, Diagonal pullback, etc.).
+  Enzyme operates at LLVM IR level and handles forward/reverse composition natively.
+  Would eliminate the need for the analytical `fxs` path and manual `inv(A)*b` workarounds.
+
+- [ ] **Port to JAX/Python**
+  JAX natively composes `grad`/`jvp`/`vjp` — no closure-capture issues, no LAPACK
+  foreigncall problems. Tradeoff: lose native sparse LU and Distributed `pmap`.
+
 ---
 
-## Code quality / module readiness (dev1.jl)
+## Physics / modelling
 
-- [ ] **Separate library code from test/script code**
-  Move `gr()`, global `model` instance, `rnrg`, and all `if test==N` blocks out of the
-  library file. Place library functions in a module; keep test blocks in a separate
-  `test/` or `scripts/` file.
-
-- [ ] **Apply the same fixes from dev1 to dev2**
-  dev2.jl still has stale issues carried over from before dev1 was cleaned:
-  - `_get_sopt_newton` should be renamed (function uses Newton(), but naming should
-    reflect purpose, not solver)
-  - `αr` is still a bare global `const` — move into `ModelFunctions` struct (as in dev1)
-  - Same module-readiness issues (gr(), global model, test blocks)
+- [ ] **Validate S-matrix unitarity** for lossless geometries (|S|² conservation)
+- [ ] **Multi-step warm-starting for `get_sopt`** — currently restarts from zeros each step;
+  warm-starting from previous s★ could speed convergence but may break IFT smoothness
+- [ ] **Larger lattice (n_lat > 2)** — test scaling of lattice model and gradient checks
+- [ ] **Broadband pulse shaping** — optimize GΔω weights jointly with ε_geom
