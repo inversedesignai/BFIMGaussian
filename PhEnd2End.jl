@@ -330,7 +330,7 @@ n_episodes         = nworkers()
 N_steps            = 3                                # EKF steps per episode
 μ0                 = zeros(dx)                                      # initial belief mean
 Σ0                 = 1e-8 *Matrix{Float64}(I, dx, dx)              # initial belief covariance (= x0_max² · I)
-σ²                 = 1e-6
+σ²                 = 1e-10
 αr                 = 1.0
 
 x0_min             = -0.0001
