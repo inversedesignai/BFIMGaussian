@@ -372,9 +372,12 @@ println("[setup] Design region: $(Ny_d)×$(Nx_d) = $(Ny_d*Nx_d) parameters"); fl
 #   "none"  — setup only, no optimisation or tests
 const _MODE = lowercase(get(ENV, "BFIM_MODE", "adam"))
 
+    # Initial geometry: same random seed as c_nom / ekf_perf test
+ε_geom_init = rand(MersenneTwister(1234), Ny_d, Nx_d)
+
 if _MODE == "adam"
     println("[optim] Mode: Adam"); flush(stdout)
-    ε_geom_opt = fill(0.5, Ny_d, Nx_d)
+    ε_geom_opt = copy(ε_geom_init)
     ε_geom_opt, losses = train_adam!(
         ε_geom_opt, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
         monitors_array, a_f_array, a_b_array,
@@ -383,7 +386,7 @@ if _MODE == "adam"
 
 elseif _MODE == "mma"
     println("[optim] Mode: MMA"); flush(stdout)
-    ε_geom_opt = fill(0.5, Ny_d, Nx_d)
+    ε_geom_opt = copy(ε_geom_init)
     ε_geom_opt, losses = train_mma!(
         ε_geom_opt, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
         monitors_array, a_f_array, a_b_array,
