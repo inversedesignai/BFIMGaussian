@@ -331,7 +331,7 @@ N_steps            = 3                                # EKF steps per episode
 μ0                 = zeros(dx)                                      # initial belief mean
 Σ0                 = 0.01 *Matrix{Float64}(I, dx, dx)              # initial belief covariance
 σ²                 = 0.01
-αr                 = 100.0
+αr                 = 1.0
 
 x0_min             = -0.01
 x0_max             =  0.01
@@ -388,7 +388,7 @@ elseif _MODE == "mma"
         ε_geom_opt, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
         monitors_array, a_f_array, a_b_array,
         x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
-        n_iters=1000000, ftol_rel=1e-8, xtol_rel=1e-8,
+        n_iters=1000000, ftol_rel=1e-16, xtol_rel=1e-16,
         save_every=10)
 
 elseif _MODE == "test"
@@ -404,7 +404,7 @@ end
 # ══════════════════════════════════════════════════════════════════════════════
 # Gradient / correctness tests
 # Control via env var BFIM_TEST: "all", or comma-separated subset of
-#   sim_geom, mf_f, mf_fx, lattice, ekf, sopt_heatmap, sopt_grad, episode, episode_warm, batch
+#   sim_geom, mf_f, mf_fx, lattice, ekf, sopt_heatmap, sopt_grad, episode, episode_warm, batch, ekf_perf
 # Example:  BFIM_TEST=sopt_grad,episode julia PhEnd2End.jl
 # ══════════════════════════════════════════════════════════════════════════════
 const _TEST_ENV = get(ENV, "BFIM_TEST", "")
@@ -982,6 +982,114 @@ if _run_test("batch")
         println("  (ε=$ε2) FD=$fd_deriv2  rel_err=$rel_err2"); flush(stdout)
 
         @assert rel_err < 1e-2 || rel_err2 < 1e-2  "batch_c2loss_grad gradient check failed: rel_err=$rel_err (ε=$ε), $rel_err2 (ε=$ε2)"
+    end
+end
+
+# ── EKF performance evaluation ────────────────────────────────────────────────
+# Runs Monte Carlo episodes to assess whether the EKF actually estimates x0
+# well for this problem, before investing in geometry optimisation.
+# Reports per-step error/covariance statistics and detects divergence.
+if _run_test("ekf_perf")
+    let n_mc = 50, N_eval = max(N_steps, 10)
+        mf_check = make_model(nω, n_lat, GΔω, σ², αr)
+        rng_perf = MersenneTwister(999)
+
+        println("═══ EKF Performance Evaluation ═══"); flush(stdout)
+        println("  n_mc=$n_mc episodes, N_eval=$N_eval steps per episode"); flush(stdout)
+        println("  σ²=$σ²  αr=$αr  x0 ∈ [$x0_min, $x0_max]  Σ0=$(Σ0[1,1])·I"); flush(stdout)
+
+        # Storage: per-step statistics across episodes
+        errs      = zeros(N_eval+1, n_mc)   # ‖μ_k − x0‖  (step 0 = prior)
+        tr_Σs     = zeros(N_eval+1, n_mc)   # tr(Σ_k)
+        mahal_sq  = zeros(N_eval+1, n_mc)   # (μ−x0)'Σ⁻¹(μ−x0) Mahalanobis distance²
+        bfim_vals = zeros(N_eval, n_mc)      # tr(BFIM) at each step
+
+        for ep in 1:n_mc
+            x0_ep = x0_min .+ (x0_max - x0_min) .* rand(rng_perf, dx)
+            noise_ep = [sqrt(σ²) .* randn(rng_perf, dy) for _ in 1:N_eval]
+
+            μ, Σ = copy(μ0), copy(Σ0)
+
+            # Step 0: prior
+            err0 = norm(μ - x0_ep)
+            errs[1, ep]     = err0
+            tr_Σs[1, ep]    = tr(Σ)
+            Σ_inv = inv(Σ)
+            d = μ - x0_ep
+            mahal_sq[1, ep] = dot(d, Σ_inv * d)
+
+            for k in 1:N_eval
+                sk = get_sopt(c_nom, μ, mf_check)
+                F  = mf_check.fx(μ, sk, c_nom)
+                bfim_vals[k, ep] = sum(abs2, F) / σ²
+
+                yk = mf_check.f(x0_ep, sk, c_nom) + noise_ep[k]
+                μ, Σ = ekf_update(μ, Σ, yk, sk, c_nom, mf_check)
+
+                errs[k+1, ep]     = norm(μ - x0_ep)
+                tr_Σs[k+1, ep]    = tr(Σ)
+                Σ_inv_k = inv(Σ + 1e-12 * I(dx))  # regularise for near-singular Σ
+                d_k = μ - x0_ep
+                mahal_sq[k+1, ep] = dot(d_k, Σ_inv_k * d_k)
+            end
+        end
+
+        # ── Report ────────────────────────────────────────────────────────────
+        println("\n  Step | ‖μ−x0‖ mean±std        | tr(Σ) mean           | Mahal² mean  | BFIM tr mean"); flush(stdout)
+        println("  -----|------------------------|----------------------|--------------|-------------"); flush(stdout)
+        for k in 0:N_eval
+            e_mean = mean(errs[k+1, :])
+            e_std  = std(errs[k+1, :])
+            t_mean = mean(tr_Σs[k+1, :])
+            m_mean = mean(mahal_sq[k+1, :])
+            if k == 0
+                println("  $(lpad(k,4)) | $(rpad(round(e_mean, sigdigits=4), 10)) ± $(lpad(round(e_std, sigdigits=3), 8)) " *
+                        "| $(rpad(round(t_mean, sigdigits=4), 20)) | $(rpad(round(m_mean, sigdigits=4), 12)) | (prior)"); flush(stdout)
+            else
+                b_mean = mean(bfim_vals[k, :])
+                println("  $(lpad(k,4)) | $(rpad(round(e_mean, sigdigits=4), 10)) ± $(lpad(round(e_std, sigdigits=3), 8)) " *
+                        "| $(rpad(round(t_mean, sigdigits=4), 20)) | $(rpad(round(m_mean, sigdigits=4), 12)) | $(round(b_mean, sigdigits=4))"); flush(stdout)
+            end
+        end
+
+        # ── Diagnostics ──────────────────────────────────────────────────────
+        final_err_mean = mean(errs[end, :])
+        prior_err_mean = mean(errs[1, :])
+        final_trΣ      = mean(tr_Σs[end, :])
+        prior_trΣ      = mean(tr_Σs[1, :])
+        final_mahal    = mean(mahal_sq[end, :])
+
+        println("\n  Summary:"); flush(stdout)
+        println("    Prior  ‖μ−x0‖ = $(round(prior_err_mean, sigdigits=4)),  tr(Σ) = $(round(prior_trΣ, sigdigits=4))"); flush(stdout)
+        println("    Final  ‖μ−x0‖ = $(round(final_err_mean, sigdigits=4)),  tr(Σ) = $(round(final_trΣ, sigdigits=4))"); flush(stdout)
+        println("    Error reduction: $(round(final_err_mean / prior_err_mean, sigdigits=3))×"); flush(stdout)
+        println("    Covariance reduction: $(round(final_trΣ / prior_trΣ, sigdigits=3))×"); flush(stdout)
+        println("    Final Mahalanobis² mean: $(round(final_mahal, sigdigits=4))  (expect ≈ $dx if calibrated)"); flush(stdout)
+
+        # Divergence check
+        diverged = final_err_mean > 2 * prior_err_mean
+        if diverged
+            println("    ⚠ WARNING: EKF appears to DIVERGE (final error > 2× prior error)"); flush(stdout)
+        end
+        cov_growing = final_trΣ > prior_trΣ
+        if cov_growing
+            println("    ⚠ WARNING: Covariance GROWING (tr(Σ) increased from prior to final)"); flush(stdout)
+        end
+
+        # Calibration check: Mahalanobis² should be ≈ dx for a well-calibrated filter
+        if final_mahal > 3 * dx
+            println("    ⚠ WARNING: EKF is OVERCONFIDENT (Mahalanobis² >> dx=$dx)"); flush(stdout)
+        elseif final_mahal < dx / 3
+            println("    ⚠ WARNING: EKF is UNDERCONFIDENT (Mahalanobis² << dx=$dx)"); flush(stdout)
+        else
+            println("    ✓ EKF calibration looks reasonable (Mahalanobis² ≈ dx=$dx)"); flush(stdout)
+        end
+
+        if !diverged && !cov_growing
+            println("    ✓ EKF converges: error and covariance decrease over steps"); flush(stdout)
+        end
+
+        println("═══ EKF Performance Evaluation Complete ═══"); flush(stdout)
     end
 end
 
