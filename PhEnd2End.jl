@@ -328,13 +328,13 @@ ds                 = 2
 
 n_episodes         = nworkers()                        
 N_steps            = 3                                # EKF steps per episode
-μ0                 = zeros(dx)                                      # initial belief mean
-Σ0                 = 1e-6 *Matrix{Float64}(I, dx, dx)              # initial belief covariance (= x0_max² · I)
-σ²                 = 1e-8
+μ0                 = fill((1e-5 + 1e-4)/2, dx)                      # initial belief mean (center of x0 range)
+Σ0                 = 7e-10 *Matrix{Float64}(I, dx, dx)             # initial belief covariance (≈ var of Uniform[x0_min, x0_max])
+σ²                 = 1e-10
 αr                 = 1.0
 
-x0_min             = -0.001
-x0_max             =  0.001
+x0_min             = 1e-5
+x0_max             = 1e-4
 rng                = MersenneTwister(42)
 x0_list            = [x0_min .+ (x0_max - x0_min) .* rand(rng, dx) for _ in 1:n_episodes]
 noise_bank         = sample_noise_bank(rng, n_episodes, N_steps, dy, σ²)
@@ -1010,8 +1010,8 @@ if _run_test("ekf_perf")
 
             μ, Σ = copy(μ0), copy(Σ0)
 
-            # Step 0: prior
-            err0 = norm(μ - x0_ep)
+            # Step 0: prior  (report relative error ‖(μ−x0)./x0‖)
+            err0 = norm((μ .- x0_ep) ./ x0_ep)
             errs[1, ep]     = err0
             tr_Σs[1, ep]    = tr(Σ)
             Σ_inv = inv(Σ)
@@ -1026,7 +1026,7 @@ if _run_test("ekf_perf")
                 yk = mf_check.f(x0_ep, sk, c_nom) + noise_ep[k]
                 μ, Σ = ekf_update(μ, Σ, yk, sk, c_nom, mf_check)
 
-                errs[k+1, ep]     = norm(μ - x0_ep)
+                errs[k+1, ep]     = norm((μ .- x0_ep) ./ x0_ep)
                 tr_Σs[k+1, ep]    = tr(Σ)
                 Σ_inv_k = inv(Σ + 1e-12 * I(dx))  # regularise for near-singular Σ
                 d_k = μ - x0_ep
@@ -1035,7 +1035,7 @@ if _run_test("ekf_perf")
         end
 
         # ── Report ────────────────────────────────────────────────────────────
-        println("\n  Step | ‖μ−x0‖ mean±std        | tr(Σ) mean           | Mahal² mean  | BFIM tr mean"); flush(stdout)
+        println("\n  Step | ‖(μ−x0)/x0‖ mean±std   | tr(Σ) mean           | Mahal² mean  | BFIM tr mean"); flush(stdout)
         println("  -----|------------------------|----------------------|--------------|-------------"); flush(stdout)
         for k in 0:N_eval
             e_mean = mean(errs[k+1, :])
@@ -1060,8 +1060,8 @@ if _run_test("ekf_perf")
         final_mahal    = mean(mahal_sq[end, :])
 
         println("\n  Summary:"); flush(stdout)
-        println("    Prior  ‖μ−x0‖ = $(round(prior_err_mean, sigdigits=4)),  tr(Σ) = $(round(prior_trΣ, sigdigits=4))"); flush(stdout)
-        println("    Final  ‖μ−x0‖ = $(round(final_err_mean, sigdigits=4)),  tr(Σ) = $(round(final_trΣ, sigdigits=4))"); flush(stdout)
+        println("    Prior  ‖(μ−x0)/x0‖ = $(round(prior_err_mean, sigdigits=4)),  tr(Σ) = $(round(prior_trΣ, sigdigits=4))"); flush(stdout)
+        println("    Final  ‖(μ−x0)/x0‖ = $(round(final_err_mean, sigdigits=4)),  tr(Σ) = $(round(final_trΣ, sigdigits=4))"); flush(stdout)
         println("    Error reduction: $(round(final_err_mean / prior_err_mean, sigdigits=3))×"); flush(stdout)
         println("    Covariance reduction: $(round(final_trΣ / prior_trΣ, sigdigits=3))×"); flush(stdout)
         println("    Final Mahalanobis² mean: $(round(final_mahal, sigdigits=4))  (expect ≈ $dx if calibrated)"); flush(stdout)

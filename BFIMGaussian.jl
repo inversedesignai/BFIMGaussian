@@ -389,7 +389,9 @@ function episode_loss(x0, c, model::ModelFunctions,
         μ, Σ = ekf_update(μ, Σ, yk, sk, c, model)
     end
 
-    return sum(abs2, μ - x0)  # squared error ‖μ_N − x₀‖²
+    # Relative squared error: Σᵢ ((μᵢ − x0ᵢ)/x0ᵢ)²
+    # Requires x0 > 0 (no zero components). Falls back to absolute error if any x0ᵢ ≈ 0.
+    return sum(abs2, (μ .- x0) ./ x0)
 end
 
 """
