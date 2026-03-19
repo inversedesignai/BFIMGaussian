@@ -997,14 +997,15 @@ if _run_test("ekf_perf")
         mf_check = make_model(nω, n_lat, GΔω, σ², αr)
         rng_perf = MersenneTwister(999)
 
-        println("═══ EKF Performance Evaluation ═══"); flush(stdout)
+        println("═══ EKF vs MLE Performance Evaluation ═══"); flush(stdout)
         println("  n_mc=$n_mc episodes, N_eval=$N_eval steps per episode"); flush(stdout)
         println("  σ²=$σ²  αr=$αr  x0 ∈ [$x0_min, $x0_max]  Σ0=$(Σ0[1,1])·I"); flush(stdout)
 
         # Storage: per-step statistics across episodes
-        errs      = zeros(N_eval+1, n_mc)   # ‖μ_k − x0‖  (step 0 = prior)
+        errs_ekf  = zeros(N_eval+1, n_mc)   # EKF relative error (step 0 = prior)
+        errs_mle  = zeros(N_eval+1, n_mc)   # MLE relative error
         tr_Σs     = zeros(N_eval+1, n_mc)   # tr(Σ_k)
-        mahal_sq  = zeros(N_eval+1, n_mc)   # (μ−x0)'Σ⁻¹(μ−x0) Mahalanobis distance²
+        mahal_sq  = zeros(N_eval+1, n_mc)   # Mahalanobis distance²
         bfim_vals = zeros(N_eval, n_mc)      # tr(BFIM) at each step
 
         for ep in 1:n_mc
@@ -1013,9 +1014,13 @@ if _run_test("ekf_perf")
 
             μ, Σ = copy(μ0), copy(Σ0)
 
-            # Step 0: prior  (report relative error ‖(μ−x0)./x0‖)
-            err0 = norm((μ .- x0_ep) ./ x0_ep)
-            errs[1, ep]     = err0
+            # Accumulators for MLE: all measurements and sensor params so far
+            ys_so_far = Vector{Float64}[]
+            ss_so_far = Vector{Float64}[]
+
+            # Step 0: prior
+            errs_ekf[1, ep] = norm((μ .- x0_ep) ./ x0_ep)
+            errs_mle[1, ep] = errs_ekf[1, ep]   # MLE = prior mean before any data
             tr_Σs[1, ep]    = tr(Σ)
             Σ_inv = inv(Σ)
             d = μ - x0_ep
@@ -1029,70 +1034,90 @@ if _run_test("ekf_perf")
                 yk = mf_check.f(x0_ep, sk, c_nom) + noise_ep[k]
                 μ, Σ = ekf_update(μ, Σ, yk, sk, c_nom, mf_check)
 
-                errs[k+1, ep]     = norm((μ .- x0_ep) ./ x0_ep)
+                errs_ekf[k+1, ep] = norm((μ .- x0_ep) ./ x0_ep)
                 tr_Σs[k+1, ep]    = tr(Σ)
-                Σ_inv_k = inv(Σ + 1e-12 * I(dx))  # regularise for near-singular Σ
+                Σ_inv_k = inv(Σ + 1e-12 * I(dx))
                 d_k = μ - x0_ep
                 mahal_sq[k+1, ep] = dot(d_k, Σ_inv_k * d_k)
+
+                # ── MLE: argmin_x Σ_j ‖y_j − f(x, s_j, c)‖² / σ² ──────────
+                push!(ys_so_far, yk)
+                push!(ss_so_far, sk)
+                local ys_k = copy(ys_so_far)
+                local ss_k = copy(ss_so_far)
+                mle_obj = x -> begin
+                    total = zero(eltype(x))
+                    for j in eachindex(ys_k)
+                        pred = mf_check.f(x, ss_k[j], c_nom)
+                        total += sum(abs2, ys_k[j] .- pred)
+                    end
+                    total / σ²
+                end
+                mle_result = optimize(mle_obj, copy(μ0), LBFGS(),
+                                      Optim.Options(g_tol=1e-12, iterations=1000),
+                                      inplace=false, autodiff=:forward)
+                x_mle = Optim.minimizer(mle_result)
+                errs_mle[k+1, ep] = norm((x_mle .- x0_ep) ./ x0_ep)
+            end
+
+            if ep % 10 == 0
+                println("  [ekf_perf] episode $ep/$n_mc done"); flush(stdout)
             end
         end
 
         # ── Report ────────────────────────────────────────────────────────────
-        println("\n  Step | ‖(μ−x0)/x0‖ mean±std   | tr(Σ) mean           | Mahal² mean  | BFIM tr mean"); flush(stdout)
-        println("  -----|------------------------|----------------------|--------------|-------------"); flush(stdout)
+        println("\n  Step | EKF rel_err mean±std   | MLE rel_err mean±std   | tr(Σ) mean           | Mahal² | BFIM tr"); flush(stdout)
+        println("  -----|------------------------|------------------------|----------------------|--------|--------"); flush(stdout)
         for k in 0:N_eval
-            e_mean = mean(errs[k+1, :])
-            e_std  = std(errs[k+1, :])
-            t_mean = mean(tr_Σs[k+1, :])
-            m_mean = mean(mahal_sq[k+1, :])
-            if k == 0
-                println("  $(lpad(k,4)) | $(rpad(round(e_mean, sigdigits=4), 10)) ± $(lpad(round(e_std, sigdigits=3), 8)) " *
-                        "| $(rpad(round(t_mean, sigdigits=4), 20)) | $(rpad(round(m_mean, sigdigits=4), 12)) | (prior)"); flush(stdout)
-            else
-                b_mean = mean(bfim_vals[k, :])
-                println("  $(lpad(k,4)) | $(rpad(round(e_mean, sigdigits=4), 10)) ± $(lpad(round(e_std, sigdigits=3), 8)) " *
-                        "| $(rpad(round(t_mean, sigdigits=4), 20)) | $(rpad(round(m_mean, sigdigits=4), 12)) | $(round(b_mean, sigdigits=4))"); flush(stdout)
-            end
+            ekf_m = mean(errs_ekf[k+1, :]);  ekf_s = std(errs_ekf[k+1, :])
+            mle_m = mean(errs_mle[k+1, :]);  mle_s = std(errs_mle[k+1, :])
+            t_m   = mean(tr_Σs[k+1, :])
+            mh_m  = mean(mahal_sq[k+1, :])
+            bfim_str = k == 0 ? "(prior)" : "$(round(mean(bfim_vals[k, :]), sigdigits=4))"
+            println("  $(lpad(k,4)) | $(rpad(round(ekf_m, sigdigits=4), 10)) ± $(lpad(round(ekf_s, sigdigits=3), 8)) " *
+                    "| $(rpad(round(mle_m, sigdigits=4), 10)) ± $(lpad(round(mle_s, sigdigits=3), 8)) " *
+                    "| $(rpad(round(t_m, sigdigits=4), 20)) " *
+                    "| $(rpad(round(mh_m, sigdigits=4), 6)) " *
+                    "| $bfim_str"); flush(stdout)
         end
 
-        # ── Diagnostics ──────────────────────────────────────────────────────
-        final_err_mean = mean(errs[end, :])
-        prior_err_mean = mean(errs[1, :])
-        final_trΣ      = mean(tr_Σs[end, :])
-        prior_trΣ      = mean(tr_Σs[1, :])
-        final_mahal    = mean(mahal_sq[end, :])
+        # ── Summary ──────────────────────────────────────────────────────────
+        prior_err = mean(errs_ekf[1, :])
+        final_ekf = mean(errs_ekf[end, :])
+        final_mle = mean(errs_mle[end, :])
+        final_trΣ = mean(tr_Σs[end, :])
+        prior_trΣ = mean(tr_Σs[1, :])
+        final_mah = mean(mahal_sq[end, :])
 
         println("\n  Summary:"); flush(stdout)
-        println("    Prior  ‖(μ−x0)/x0‖ = $(round(prior_err_mean, sigdigits=4)),  tr(Σ) = $(round(prior_trΣ, sigdigits=4))"); flush(stdout)
-        println("    Final  ‖(μ−x0)/x0‖ = $(round(final_err_mean, sigdigits=4)),  tr(Σ) = $(round(final_trΣ, sigdigits=4))"); flush(stdout)
-        println("    Error reduction: $(round(final_err_mean / prior_err_mean, sigdigits=3))×"); flush(stdout)
-        println("    Covariance reduction: $(round(final_trΣ / prior_trΣ, sigdigits=3))×"); flush(stdout)
-        println("    Final Mahalanobis² mean: $(round(final_mahal, sigdigits=4))  (expect ≈ $dx if calibrated)"); flush(stdout)
+        println("    Prior     rel_err = $(round(prior_err, sigdigits=4))"); flush(stdout)
+        println("    EKF final rel_err = $(round(final_ekf, sigdigits=4))  ($(round(final_ekf/prior_err, sigdigits=3))× prior)"); flush(stdout)
+        println("    MLE final rel_err = $(round(final_mle, sigdigits=4))  ($(round(final_mle/prior_err, sigdigits=3))× prior)"); flush(stdout)
+        println("    EKF vs MLE: EKF is $(round(final_ekf/final_mle, sigdigits=3))× MLE"); flush(stdout)
+        println("    tr(Σ) reduction: $(round(final_trΣ/prior_trΣ, sigdigits=3))×"); flush(stdout)
+        println("    Mahalanobis² = $(round(final_mah, sigdigits=4))  (expect ≈ $dx)"); flush(stdout)
 
-        # Divergence check
-        diverged = final_err_mean > 2 * prior_err_mean
+        # Diagnostics
+        diverged = final_ekf > 2 * prior_err
         if diverged
-            println("    ⚠ WARNING: EKF appears to DIVERGE (final error > 2× prior error)"); flush(stdout)
+            println("    ⚠ EKF DIVERGES"); flush(stdout)
         end
-        cov_growing = final_trΣ > prior_trΣ
-        if cov_growing
-            println("    ⚠ WARNING: Covariance GROWING (tr(Σ) increased from prior to final)"); flush(stdout)
-        end
-
-        # Calibration check: Mahalanobis² should be ≈ dx for a well-calibrated filter
-        if final_mahal > 3 * dx
-            println("    ⚠ WARNING: EKF is OVERCONFIDENT (Mahalanobis² >> dx=$dx)"); flush(stdout)
-        elseif final_mahal < dx / 3
-            println("    ⚠ WARNING: EKF is UNDERCONFIDENT (Mahalanobis² << dx=$dx)"); flush(stdout)
+        if final_mah > 3 * dx
+            println("    ⚠ EKF OVERCONFIDENT"); flush(stdout)
+        elseif final_mah < dx / 3
+            println("    ⚠ EKF UNDERCONFIDENT"); flush(stdout)
         else
-            println("    ✓ EKF calibration looks reasonable (Mahalanobis² ≈ dx=$dx)"); flush(stdout)
+            println("    ✓ EKF calibration OK"); flush(stdout)
+        end
+        if final_mle < final_ekf * 0.5
+            println("    ⚠ MLE significantly better than EKF — linearization may be poor"); flush(stdout)
+        elseif final_ekf < final_mle * 0.8
+            println("    ✓ EKF outperforms MLE (benefits from prior + sequential updates)"); flush(stdout)
+        else
+            println("    ≈ EKF and MLE comparable"); flush(stdout)
         end
 
-        if !diverged && !cov_growing
-            println("    ✓ EKF converges: error and covariance decrease over steps"); flush(stdout)
-        end
-
-        println("═══ EKF Performance Evaluation Complete ═══"); flush(stdout)
+        println("═══ EKF vs MLE Performance Evaluation Complete ═══"); flush(stdout)
     end
 end
 
