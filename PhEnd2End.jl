@@ -329,12 +329,12 @@ ds                 = 2
 n_episodes         = nworkers()                        
 N_steps            = 3                                # EKF steps per episode
 μ0                 = zeros(dx)                                      # initial belief mean
-Σ0                 = 1e-4 *Matrix{Float64}(I, dx, dx)              # initial belief covariance
+Σ0                 = 1e-8 *Matrix{Float64}(I, dx, dx)              # initial belief covariance (= x0_max² · I)
 σ²                 = 1e-6
 αr                 = 1.0
 
-x0_min             = -0.01
-x0_max             =  0.01
+x0_min             = -0.0001
+x0_max             =  0.0001
 rng                = MersenneTwister(42)
 x0_list            = [x0_min .+ (x0_max - x0_min) .* rand(rng, dx) for _ in 1:n_episodes]
 noise_bank         = sample_noise_bank(rng, n_episodes, N_steps, dy, σ²)
