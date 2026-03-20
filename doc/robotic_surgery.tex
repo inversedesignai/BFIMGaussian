@@ -1,0 +1,472 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\argmin}{\operatorname{argmin}}
+\newcommand{\argmax}{\operatorname{argmax}}
+\newcommand{\KL}{\mathrm{KL}}
+\newcommand{\Var}{\operatorname{Var}}
+
+\theoremstyle{definition}
+\newtheorem{remark}{Remark}
+
+\title{Bilevel Optimization of Robotic Surgical Instruments\\for Adaptive Intraoperative Tissue Characterization}
+\author{Z.\ Lin}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We formulate the problem of jointly designing robotic surgical instrument hardware and adaptive intraoperative probing strategies for real-time tissue characterization.  The goal is to identify tumor margins during surgery using the fewest possible measurements, minimizing time under anesthesia while maximizing diagnostic confidence.  The framework is cast as a bilevel optimization: the outer problem optimizes the instrument tip geometry and embedded sensor layout, while the inner problem adaptively selects where and how to probe based on the evolving Bayesian belief about the tissue property map.  We present a detailed mathematical model covering tissue mechanics, multi-modal sensing (palpation, fluorescence, impedance), Bayesian spatial inference, information-theoretic sensor selection, and end-to-end differentiable gradient computation.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%===============================================================================
+\section{Clinical Motivation}
+
+During tumor resection surgery, the surgeon must identify the boundary between healthy and cancerous tissue (the \emph{margin}).  Incomplete resection (positive margins) leads to recurrence; excessive resection damages healthy tissue and function.  Current practice relies on:
+\begin{itemize}[nosep]
+  \item Visual inspection (subjective, limited to surface)
+  \item Frozen section histology (10--20 minutes per sample, samples only a few locations)
+  \item Intraoperative fluorescence (requires contrast agents, binary information)
+\end{itemize}
+
+A robotic surgical system with embedded multi-modal sensors could continuously characterize tissue during the procedure, building a real-time map of tissue properties that guides the resection.  The key question: \emph{what instrument design and probing strategy extracts the most diagnostic information in the least time?}
+
+%===============================================================================
+\section{Problem Setup}
+
+\subsection{Tissue Property Field}
+
+The surgical field is discretized into an $n_x \times n_y$ grid of tissue voxels.  Each voxel $i$ has a property vector:
+\[
+  \bm{x}_i = \begin{pmatrix} E_i \\ \eta_i \\ \gamma_i \\ c_i \end{pmatrix} \in \R^{d_{\text{local}}}
+\]
+where:
+\begin{itemize}[nosep]
+  \item $E_i$: Young's modulus (stiffness, kPa) --- tumors are typically 5--20$\times$ stiffer than healthy tissue
+  \item $\eta_i$: viscosity coefficient (Pa$\cdot$s) --- characterizes tissue damping
+  \item $\gamma_i$: fluorescence quantum yield (dimensionless) --- elevated in labeled tumor tissue
+  \item $c_i$: electrical conductivity (S/m) --- differs between tissue types
+\end{itemize}
+
+The full state vector is $\bm{x} = (\bm{x}_1, \ldots, \bm{x}_{n_x n_y}) \in \R^{d_x}$ with $d_x = d_{\text{local}} \cdot n_x n_y$.
+
+\begin{remark}
+In practice, the tissue map has strong spatial correlations (tumor regions are contiguous).  We encode this through the prior covariance $\Sigma_0$, which has a Mat\'{e}rn or squared-exponential spatial kernel.
+\end{remark}
+
+\subsection{Instrument Design Variables}
+
+The robotic instrument tip has $n_s$ embedded sensors of different modalities.  The design vector $\bm{d}$ specifies:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Tip geometry}: shape of the contact surface, parameterized by $n_g$ control points of a B-spline curve $\bm{d}_{\text{geom}} \in \R^{n_g \times 2}$.
+  \item \textbf{Sensor layout}: positions and orientations of embedded sensors on the tip surface, $\bm{d}_{\text{sens}} \in \R^{n_s \times 3}$ (2D position + angle).
+  \item \textbf{Sensor specifications}: per-sensor parameters (e.g., electrode area for impedance, fiber NA for fluorescence), $\bm{d}_{\text{spec}} \in \R^{n_s \times n_p}$.
+\end{enumerate}
+
+The full design vector is $\bm{d} = (\bm{d}_{\text{geom}}, \bm{d}_{\text{sens}}, \bm{d}_{\text{spec}})$.
+
+\subsection{Sensor Control Variables (Per Measurement Step)}
+
+At each probing step $k$, the surgeon (or autonomous controller) chooses:
+\[
+  \bm{s}_k = \begin{pmatrix} p_k^x, p_k^y \\ \theta_k \\ F_k \\ \delta_k \\ \lambda_k \\ I_k \end{pmatrix} \in \R^{d_s}
+\]
+where:
+\begin{itemize}[nosep]
+  \item $(p_k^x, p_k^y)$: probe contact location on the tissue surface
+  \item $\theta_k$: probe orientation angle
+  \item $F_k$: applied contact force (for palpation)
+  \item $\delta_k$: indentation depth (for elastography)
+  \item $\lambda_k$: excitation wavelength (for fluorescence)
+  \item $I_k$: injection current (for impedance tomography)
+\end{itemize}
+
+%===============================================================================
+\section{Forward Models}
+
+Each sensing modality has a physics-based forward model $f^{(m)}(\bm{x}, \bm{s}_k, \bm{d})$ that predicts the measurement given the tissue state, sensor control, and instrument design.
+
+\subsection{Palpation / Elastography}
+
+When the instrument tip contacts the tissue at location $(p^x, p^y)$ with force $F$ and indentation $\delta$, the tissue deforms according to a contact mechanics model.
+
+\paragraph{Hertz contact model (simplified).}
+For a rigid indenter of tip radius $R$ (determined by $\bm{d}_{\text{geom}}$) pressing into a viscoelastic half-space:
+\[
+  F = \frac{4}{3} E^*(\bm{x}) \sqrt{R} \, \delta^{3/2} + \eta^*(\bm{x}) \sqrt{R \delta} \, \dot{\delta}
+\]
+where $E^*$ and $\eta^*$ are effective modulus and viscosity, computed from the tissue properties in the contact region weighted by the pressure distribution:
+\[
+  E^*(\bm{x}) = \sum_{i \in \mathcal{N}(p)} w_i(p, R, \bm{d}_{\text{geom}}) \, E_i, \qquad
+  \eta^*(\bm{x}) = \sum_{i \in \mathcal{N}(p)} w_i(p, R, \bm{d}_{\text{geom}}) \, \eta_i
+\]
+Here $\mathcal{N}(p)$ is the set of voxels in the contact footprint, and $w_i$ are geometry-dependent weight functions (the contact pressure distribution depends on the tip shape $\bm{d}_{\text{geom}}$).
+
+\paragraph{Observation model.}
+The palpation measurement is the force--displacement curve sampled at $n_{\text{fd}}$ indentation depths:
+\[
+  \bm{y}^{\text{palp}}_k = \big(F(\delta_1), F(\delta_2), \ldots, F(\delta_{n_{\text{fd}}})\big) + \bm{\varepsilon}^{\text{palp}}, \qquad \bm{\varepsilon}^{\text{palp}} \sim \mathcal{N}(\bm{0}, \sigma_F^2 I)
+\]
+
+\paragraph{FEM forward model (high fidelity).}
+For complex tip geometries, the Hertz model is replaced by a 2D/3D finite element simulation of the contact:
+\[
+  K(\bm{x}) \, \bm{u} = \bm{f}_{\text{contact}}(\bm{s}_k, \bm{d}_{\text{geom}})
+\]
+where $K(\bm{x})$ is the stiffness matrix (depends on tissue properties), $\bm{u}$ is the displacement field, and $\bm{f}_{\text{contact}}$ is the applied load vector.  The measurement is the reaction force:
+\[
+  y^{\text{FEM}}_k = \bm{n}^\top \bm{f}_{\text{reaction}}(\bm{u}) + \varepsilon_F
+\]
+
+This FEM forward model has the same mathematical structure as the FDFD model in the photonic sensor problem: a sparse linear system $K \bm{u} = \bm{f}$, with adjoint-based gradient computation $\partial y / \partial \bm{x} = -(\partial K / \partial \bm{x} \cdot \bm{u})^\top K^{-\top} \bm{n}$.
+
+\subsection{Fluorescence Imaging}
+
+An optical fiber in the instrument tip excites tissue fluorescence at wavelength $\lambda_k$ and collects the emitted light.
+
+\paragraph{Forward model.}
+The fluorescence signal from sensor $j$ at position $\bm{r}_j$ (on the tip, determined by $\bm{d}_{\text{sens}}$) is:
+\[
+  y^{\text{fluor}}_{k,j} = \int_{\Omega} \Phi_{\text{ex}}(\bm{r}, \bm{r}_j, \lambda_k) \, \gamma(\bm{r}) \, \Phi_{\text{em}}(\bm{r}, \bm{r}_j) \, d\bm{r} + \varepsilon^{\text{fluor}}_j
+\]
+where:
+\begin{itemize}[nosep]
+  \item $\Phi_{\text{ex}}(\bm{r}, \bm{r}_j, \lambda_k)$: excitation fluence at tissue point $\bm{r}$ from source at $\bm{r}_j$ with wavelength $\lambda_k$, governed by the diffusion equation
+  \item $\gamma(\bm{r}) = \gamma_i$ for $\bm{r}$ in voxel $i$: fluorescence quantum yield (part of the state $\bm{x}$)
+  \item $\Phi_{\text{em}}(\bm{r}, \bm{r}_j)$: collection efficiency of detector $j$ for emission from $\bm{r}$
+\end{itemize}
+
+\paragraph{Discretized form.}
+After discretization on the tissue grid:
+\[
+  y^{\text{fluor}}_{k,j} = \sum_{i=1}^{n_x n_y} W_{ji}(\bm{s}_k, \bm{d}) \, \gamma_i + \varepsilon^{\text{fluor}}_j
+\]
+where the weight matrix $W$ depends on the probe position, fiber geometry, and wavelength.  This is \textbf{linear} in the fluorescence state $\gamma_i$ but nonlinear in the design $\bm{d}$ (through the fiber collection efficiency and excitation pattern).
+
+\paragraph{Noise model.}
+Fluorescence detection is photon-counting:
+\[
+  \varepsilon^{\text{fluor}}_j \sim \text{Poisson}\big(\mu^{\text{fluor}}_j\big) \approx \mathcal{N}\big(0, \mu^{\text{fluor}}_j\big) \quad \text{(high-flux Gaussian approximation)}
+\]
+The noise variance is signal-dependent---brighter regions have larger absolute noise but better SNR.  For a fully Poisson treatment, the EKF is replaced by an iterated EKF or particle filter with Poisson likelihood.
+
+\subsection{Bioimpedance Spectroscopy}
+
+Electrodes on the instrument tip inject current $I_k$ at frequency $\omega_k$ and measure the resulting voltage.
+
+\paragraph{Forward model.}
+The complex impedance is governed by the quasi-static Maxwell equations:
+\[
+  \nabla \cdot \big((\sigma(\bm{r}) + i\omega_k \epsilon(\bm{r})) \nabla V(\bm{r})\big) = 0
+\]
+with boundary conditions set by the electrode geometry ($\bm{d}_{\text{sens}}$) and injection current $I_k$.  The measurement is the transfer impedance:
+\[
+  y^{\text{imp}}_k = \frac{V_{\text{meas}}}{I_k} + \varepsilon^{\text{imp}}, \qquad \varepsilon^{\text{imp}} \sim \mathcal{N}_{\mathbb{C}}(0, \sigma_Z^2)
+\]
+
+This is another PDE-based forward model, discretized as a sparse linear system---directly analogous to the FDFD model.
+
+\subsection{Combined Multi-Modal Observation}
+
+At step $k$, the full observation vector stacks all modality outputs:
+\[
+  \bm{y}_k = \begin{pmatrix} \bm{y}^{\text{palp}}_k \\ \bm{y}^{\text{fluor}}_k \\ \bm{y}^{\text{imp}}_k \end{pmatrix} \in \R^{d_y}
+\]
+with block-diagonal noise covariance $R_k = \diag(\sigma_F^2 I, \, \diag(\bm{\mu}^{\text{fluor}}), \, \sigma_Z^2 I)$.
+
+The combined forward model is:
+\[
+  \bm{y}_k = f(\bm{x}, \bm{s}_k, \bm{d}) + \bm{\varepsilon}_k, \qquad \bm{\varepsilon}_k \sim \mathcal{N}(\bm{0}, R_k)
+\]
+
+%===============================================================================
+\section{Bayesian Inference}
+
+\subsection{Prior}
+
+The prior belief encodes spatial correlations in tissue properties:
+\[
+  \bm{x} \sim \mathcal{N}(\bm{\mu}_0, \Sigma_0)
+\]
+where $\Sigma_0$ has a block structure reflecting:
+\begin{itemize}[nosep]
+  \item \textbf{Spatial correlation}: $[\Sigma_0]_{ij} = \sigma_{E}^2 \, k_{\text{Mat}}(\|\bm{r}_i - \bm{r}_j\|; \ell)$ for the stiffness field, with correlation length $\ell$ matching typical tumor size ($\sim$5--20\,mm).
+  \item \textbf{Cross-property correlation}: stiffness and fluorescence may be correlated (tumors are both stiff and fluorescent).
+  \item \textbf{Anatomical atlas}: $\bm{\mu}_0$ can incorporate pre-operative imaging (MRI/CT) as a prior mean.
+\end{itemize}
+
+\subsection{Inference Engine Options}
+
+\paragraph{Extended Kalman Filter (EKF).}
+For the Gaussian noise model with the force and impedance modalities:
+\begin{align}
+  F_k &= \frac{\partial f}{\partial \bm{x}}\bigg|_{\bm{\mu}_k, \bm{s}_k, \bm{d}} \\
+  S_k &= F_k \Sigma_k F_k^\top + R_k \\
+  K_k &= \Sigma_k F_k^\top S_k^{-1} \\
+  \bm{\mu}_{k+1} &= \bm{\mu}_k + K_k (\bm{y}_k - f(\bm{\mu}_k, \bm{s}_k, \bm{d})) \\
+  \Sigma_{k+1} &= (I - K_k F_k) \Sigma_k (I - K_k F_k)^\top + K_k R_k K_k^\top
+\end{align}
+
+\paragraph{Scalability.}
+For a $20 \times 20$ grid with 4 properties per voxel, $d_x = 1{,}600$.  The EKF requires $O(d_x^2)$ storage and $O(d_x^2 d_y)$ computation per step (dominated by $F_k \Sigma_k F_k^\top$).  For larger grids, the Ensemble Kalman Filter (EnKF) or reduced-rank approximations are needed.
+
+\paragraph{Particle Filter (for Poisson fluorescence).}
+When the fluorescence noise is Poisson (not Gaussian-approximated), a Rao-Blackwellized particle filter can be used: particles represent the nonlinear state components ($E_i, \eta_i, c_i$) while the linear component ($\gamma_i$) is tracked analytically via a conditional Kalman filter.
+
+%===============================================================================
+\section{Sensor Selection}
+
+\subsection{Information Criterion}
+
+At each step $k$, the sensor parameters $\bm{s}_k$ are chosen to maximize an information criterion:
+\[
+  \bm{s}_k^\star = \argmax_{\bm{s} \in \mathcal{S}_{\text{feasible}}} \; \mathcal{I}(b_k, \bm{s}, \bm{d}) - \alpha_t \, t(\bm{s}) - \alpha_r \|\bm{s}\|^2
+\]
+where $t(\bm{s})$ is the time cost of the measurement (longer integration = more information but more time under anesthesia) and $\alpha_t$ is the time penalty.
+
+\paragraph{Option 1: BFIM trace (fast, local).}
+\[
+  \mathcal{I}_{\text{BFIM}} = \frac{1}{\sigma^2} \left\| \frac{\partial f}{\partial \bm{x}}\bigg|_{\bm{\mu}_k, \bm{s}, \bm{d}} \right\|_F^2
+\]
+Ignores the current uncertainty $\Sigma_k$; fast to compute.
+
+\paragraph{Option 2: Posterior covariance trace (A-optimal).}
+\[
+  \mathcal{I}_{\text{A-opt}} = -\tr\left(\left(\Sigma_k^{-1} + \frac{F^\top F}{\sigma^2}\right)^{-1}\right)
+\]
+Accounts for $\Sigma_k$; focuses probing on uncertain regions.  More expensive (requires matrix inversion) but more informative.
+
+\paragraph{Option 3: Expected information gain (mutual information).}
+\[
+  \mathcal{I}_{\text{MI}} = H[\bm{y} \mid \bm{s}] - \mathbb{E}_{\bm{x}}[H[\bm{y} \mid \bm{x}, \bm{s}]]
+\]
+Globally optimal but requires computing the marginal likelihood $p(\bm{y} \mid \bm{s}) = \int p(\bm{y} \mid \bm{x}, \bm{s}) p(\bm{x}) d\bm{x}$, which is expensive for nonlinear models.
+
+\subsection{Feasibility Constraints}
+
+The sensor control $\bm{s}_k$ must satisfy physical constraints:
+\begin{itemize}[nosep]
+  \item \textbf{Workspace}: $(p_k^x, p_k^y) \in \Omega_{\text{accessible}}$ (reachable by the robotic arm)
+  \item \textbf{Force limit}: $F_k \leq F_{\max}$ (avoid tissue damage)
+  \item \textbf{Collision avoidance}: instrument must not collide with surrounding anatomy
+  \item \textbf{Time budget}: $\sum_{k=1}^N t(\bm{s}_k) \leq T_{\text{max}}$ (total procedure time limit)
+\end{itemize}
+
+These constraints are incorporated into the inner optimization via projected gradient methods or penalty terms.
+
+%===============================================================================
+\section{Bilevel Optimization}
+
+\subsection{Outer Loss}
+
+The outer objective minimizes the expected classification error at the tumor margin:
+\[
+  \mathcal{L}(\bm{d}) = \mathbb{E}_{\bm{x}_0, \bm{\varepsilon}_{1:N}} \left[ \sum_{i=1}^{n_x n_y} \ell\big(\hat{c}_i(\bm{\mu}_N, \Sigma_N), \, c_i^{\text{true}}\big) \right]
+\]
+where $\hat{c}_i$ is the posterior classification (healthy vs.\ tumor) for voxel $i$ and $\ell$ is a classification loss (cross-entropy or hinge loss).
+
+Alternative losses:
+\begin{itemize}[nosep]
+  \item \textbf{Margin uncertainty}: $\mathcal{L} = \sum_{i \in \text{margin}} [\Sigma_N]_{ii}$ (minimize uncertainty specifically at the tumor boundary)
+  \item \textbf{Relative MSE}: $\mathcal{L} = \mathbb{E}\left[\sum_i \left(\frac{\mu_{N,i} - x_{0,i}}{x_{0,i}}\right)^2\right]$ (as in the photonic sensor)
+  \item \textbf{Worst-case error}: $\mathcal{L} = \mathbb{E}\left[\max_i \left|\frac{\mu_{N,i} - x_{0,i}}{x_{0,i}}\right|\right]$ (minimax for safety)
+\end{itemize}
+
+\subsection{End-to-End Gradient}
+
+The gradient $\nabla_{\bm{d}} \mathcal{L}$ flows through:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Classification loss $\to$ posterior $(\bm{\mu}_N, \Sigma_N)$}: standard backpropagation.
+  \item \textbf{Posterior $\to$ EKF steps}: custom adjoint through the EKF update equations (as in the photonic sensor, with manual matrix adjoints).
+  \item \textbf{EKF step $\to$ forward model}: adjoint through the PDE-based forward models (FEM adjoint for elastography, diffusion adjoint for fluorescence, Laplace adjoint for impedance).
+  \item \textbf{Forward model $\to$ design $\bm{d}$}: the tip geometry affects the contact pressure distribution $w_i$, the fiber collection efficiency $W_{ji}$, and the electrode field pattern---all differentiable with respect to $\bm{d}$.
+  \item \textbf{EKF step $\to$ sensor selection $\bm{s}_k^\star$}: IFT-based differentiation through the inner argmax, exactly as in the photonic sensor framework.
+\end{enumerate}
+
+\subsection{Design Constraints}
+
+The instrument design $\bm{d}$ must satisfy:
+\begin{itemize}[nosep]
+  \item \textbf{Manufacturability}: minimum feature size, smooth surfaces (B-spline parameterization enforces this)
+  \item \textbf{Biocompatibility}: material constraints on sensor coatings
+  \item \textbf{Size limits}: tip must fit through a trocar port (typically 5--12\,mm diameter for laparoscopy)
+  \item \textbf{Sterilizability}: design must be compatible with autoclave or chemical sterilization
+\end{itemize}
+
+These are handled as box constraints or nonlinear constraints in the MMA optimizer.
+
+%===============================================================================
+\section{Computational Architecture}
+
+\subsection{Comparison with Photonic Sensor Framework}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}p{3.5cm}p{5cm}p{5cm}@{}}
+\toprule
+\textbf{Component} & \textbf{Photonic sensor} & \textbf{Robotic surgery} \\
+\midrule
+Forward model & FDFD (Helmholtz PDE) & FEM (elasticity PDE) + diffusion PDE \\
+State dimension & $d_x = 4$ (2$\times$2 lattice) & $d_x = 400$--$1{,}600$ (grid of tissue properties) \\
+Observation dim & $d_y = 8$ (port powers) & $d_y = 10$--$50$ (multi-modal) \\
+Sensor params & 2 (phases $\varphi_1, \varphi_2$) & 6+ (position, force, wavelength, current) \\
+Design params & $90{,}000$ (permittivity pixels) & $\sim$100 (tip geometry + sensor layout) \\
+Likelihood & Gaussian & Gaussian + Poisson \\
+Inference & EKF & EKF or Rao-Blackwellized PF \\
+Sensor selection & BFIM trace & A-optimal or mutual information \\
+Iteration time & $\sim$2\,min (FDFD-dominated) & $\sim$5--30\,min (FEM-dominated) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Key Differences}
+
+\begin{enumerate}[nosep]
+  \item \textbf{Larger state}: $d_x \sim 10^3$ requires EnKF or reduced-rank EKF instead of dense EKF.
+  \item \textbf{Spatial sensor selection}: the probe location $(p^x, p^y)$ is continuous and 2D, unlike the discrete phase variables in the photonic sensor.  The inner optimization is over a 6D continuous space with spatial constraints.
+  \item \textbf{Multi-modal fusion}: three forward models with different physics (elasticity, optics, electromagnetics) must be jointly differentiated.
+  \item \textbf{Heterogeneous noise}: Poisson (fluorescence) + Gaussian (force, impedance) requires careful handling in the inference step.
+  \item \textbf{Time cost}: each probe takes physical time (press, hold, release); the sensor selection must trade off information gain vs.\ time cost.
+\end{enumerate}
+
+\subsection{Algorithmic Pipeline}
+
+\begin{algorithm}[h]
+\caption{One outer optimization iteration for robotic surgical instrument design}
+\begin{algorithmic}[1]
+\STATE \textbf{Input}: current design $\bm{d}$, tissue prior $(\bm{\mu}_0, \Sigma_0)$, measurement budget $N$
+\FOR{each Monte Carlo episode $e = 1, \ldots, n_{\text{mc}}$}
+  \STATE Sample ground truth tissue map $\bm{x}_0^{(e)} \sim p(\bm{x})$
+  \STATE Initialize belief $(\bm{\mu}, \Sigma) \gets (\bm{\mu}_0, \Sigma_0)$
+  \FOR{$k = 1, \ldots, N$}
+    \STATE \textbf{Sensor selection}: $\bm{s}_k^\star \gets \argmax_{\bm{s}} \mathcal{I}(\bm{\mu}, \Sigma, \bm{s}, \bm{d}) - \alpha_t t(\bm{s})$ \hfill [IFT rrule]
+    \STATE \textbf{Simulate measurement}: $\bm{y}_k \gets f(\bm{x}_0^{(e)}, \bm{s}_k^\star, \bm{d}) + \bm{\varepsilon}_k$
+    \STATE \textbf{EKF update}: $(\bm{\mu}, \Sigma) \gets \text{EKF}(\bm{\mu}, \Sigma, \bm{y}_k, \bm{s}_k^\star, \bm{d})$ \hfill [custom rrule]
+  \ENDFOR
+  \STATE Compute episode loss $\mathcal{L}^{(e)} = \ell(\bm{\mu}, \Sigma, \bm{x}_0^{(e)})$
+  \STATE Compute $\nabla_{\bm{d}} \mathcal{L}^{(e)}$ by reverse-mode AD through steps 5--9
+\ENDFOR
+\STATE Average: $\nabla_{\bm{d}} \mathcal{L} \gets \frac{1}{n_{\text{mc}}} \sum_e \nabla_{\bm{d}} \mathcal{L}^{(e)}$
+\STATE Update design: $\bm{d} \gets \text{MMA}(\bm{d}, \nabla_{\bm{d}} \mathcal{L})$
+\end{algorithmic}
+\end{algorithm}
+
+%===============================================================================
+\section{Tissue Model Details}
+
+\subsection{Spatial Prior via Gaussian Random Fields}
+
+The prior covariance for the stiffness field uses a Mat\'{e}rn kernel:
+\[
+  k_\nu(r) = \frac{\sigma_E^2}{\Gamma(\nu) 2^{\nu-1}} \left(\frac{\sqrt{2\nu} \, r}{\ell}\right)^\nu K_\nu\left(\frac{\sqrt{2\nu} \, r}{\ell}\right)
+\]
+with correlation length $\ell \sim 5$\,mm (typical tumor size), smoothness $\nu = 5/2$, and marginal variance $\sigma_E^2$.
+
+For the tumor/healthy binary classification embedded in the continuous stiffness field:
+\begin{itemize}[nosep]
+  \item Healthy tissue: $E \sim \mathcal{N}(5\;\text{kPa}, 2^2)$
+  \item Tumor tissue: $E \sim \mathcal{N}(50\;\text{kPa}, 15^2)$
+  \item The prior $p(\bm{x})$ is a Gaussian mixture, but for the EKF we approximate with a single Gaussian centered at the healthy-tissue mean.
+\end{itemize}
+
+\subsection{Tumor Phantoms for Training}
+
+For the outer optimization, ground-truth tissue maps $\bm{x}_0$ are sampled from a generative model:
+\begin{enumerate}[nosep]
+  \item Sample tumor center, size, and shape (ellipse with random axes)
+  \item Assign elevated stiffness, fluorescence, and conductivity inside the tumor
+  \item Smooth the boundary with a sigmoid transition
+  \item Add small-scale heterogeneity (Gaussian random field perturbation)
+\end{enumerate}
+
+This generates realistic training distributions without requiring clinical data.
+
+%===============================================================================
+\section{Practical Considerations}
+
+\subsection{Real-Time Requirements}
+
+In a clinical setting, the sensor selection must run in $< 100$\,ms (the surgeon cannot wait between probes).  Options:
+\begin{itemize}[nosep]
+  \item \textbf{Amortized policy}: train a neural network $\bm{s}^\star \approx \pi_\theta(\bm{\mu}, \Sigma, \bm{d})$ offline using the bilevel framework, then deploy the network in real time.
+  \item \textbf{Precomputed lookup}: for small sensor parameter spaces, tabulate $\bm{s}^\star$ on a grid of $(\bm{\mu}, \Sigma)$ values.
+  \item \textbf{One-step greedy}: use the A-optimal criterion with a closed-form update (no iterative optimization needed for the Gaussian case).
+\end{itemize}
+
+\subsection{Sim-to-Real Transfer}
+
+The outer optimization runs in simulation (FEM + synthetic tissue phantoms).  To transfer to real surgery:
+\begin{itemize}[nosep]
+  \item \textbf{Domain randomization}: vary tissue properties, noise levels, and contact conditions during training.
+  \item \textbf{Robust design}: optimize for worst-case performance over a distribution of tissue parameters.
+  \item \textbf{Calibration measurements}: at the start of each surgery, perform a few calibration probes on known tissue (e.g., exposed healthy tissue) to estimate the actual noise level $\sigma^2$.
+\end{itemize}
+
+\subsection{Safety}
+
+The framework must guarantee:
+\begin{itemize}[nosep]
+  \item Force limits are never exceeded (hard constraint in inner optimization)
+  \item The instrument does not probe in restricted zones (blood vessels, nerves)
+  \item The classification has a guaranteed false-negative rate below a clinical threshold (e.g., $<5\%$ positive margin rate)
+\end{itemize}
+
+These can be incorporated as chance constraints in the outer optimization or as safety filters in the inner sensor selection.
+
+%===============================================================================
+\section{Expected Impact}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}p{4cm}p{4cm}p{5cm}@{}}
+\toprule
+\textbf{Metric} & \textbf{Current practice} & \textbf{With optimized instrument} \\
+\midrule
+Margin assessment & 2--5 frozen sections (10--20\,min each) & Continuous real-time map ($<1$\,s per probe) \\
+Spatial coverage & 2--5 point samples & Full field ($\sim$100 probes in 2\,min) \\
+False-negative rate & 15--30\% & Target: $<5\%$ \\
+Instrument design & Fixed, one-size-fits-all & Optimized for specific tumor type / anatomy \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%===============================================================================
+\section{Conclusion}
+
+The robotic surgical tissue characterization problem maps naturally onto the bilevel adaptive experimental design framework.  The mathematical structure---PDE-based forward models, sequential Bayesian inference, information-theoretic sensor selection, and end-to-end differentiable design optimization---is directly analogous to the photonic sensor problem.  The key extensions are multi-modal sensing (three physics models), spatial sensor selection (continuous probe placement), heterogeneous noise (Poisson + Gaussian), and clinical safety constraints.  The same computational tools---adjoint PDE sensitivities, IFT for inner optimization, custom EKF rrules, and MMA for the outer loop---apply with straightforward modifications.
+
+\begin{thebibliography}{9}
+\bibitem{report} Z.~Lin, ``Bilevel Optimization of Photonic Sensor Geometry for Bayesian State Estimation via BFIM and EKF,'' Technical Report, 2026.
+
+\bibitem{applications} Z.~Lin, ``Differentiable Adaptive Experimental Design: A General Framework,'' Technical Report, 2026.
+
+\bibitem{hertz} K.~L.~Johnson, \emph{Contact Mechanics}, Cambridge University Press, 1987.
+
+\bibitem{elastography} J.~Ophir et al., ``Elastography: a quantitative method for imaging the elasticity of biological tissues,'' \emph{Ultrasonic Imaging}, 13(2):111--134, 1991.
+
+\bibitem{fluorescence} V.~Ntziachristos, ``Fluorescence molecular imaging,'' \emph{Annual Review of Biomedical Engineering}, 8:1--33, 2006.
+
+\bibitem{eit} D.~S.~Holder (ed.), \emph{Electrical Impedance Tomography: Methods, History and Applications}, IOP Publishing, 2005.
+\end{thebibliography}
+
+\end{document}
