@@ -1,0 +1,423 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\argmin}{\operatorname{argmin}}
+\newcommand{\argmax}{\operatorname{argmax}}
+\newcommand{\KL}{\mathrm{KL}}
+
+\title{Differentiable Adaptive Experimental Design:\\A General Framework for Bilevel Optimization of\\Recursive Inference with Optimal Sensor Selection}
+\author{Z.\ Lin}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We describe a general computational framework for jointly optimizing sensor hardware and adaptive measurement strategies for recursive Bayesian inference.  The framework is formulated as a bilevel optimization: the \emph{outer} problem optimizes the physical design of the sensing system, while the \emph{inner} problem adaptively selects measurement parameters at each step to maximize information about a hidden state.  Gradients flow end-to-end through the physics simulator, the Bayesian inference engine, and the inner optimization via implicit differentiation.  We discuss the mathematical abstraction, the key computational ingredients (automatic differentiation, implicit function theorem, custom adjoint rules), and survey applications spanning photonics, medical imaging, robotics, quantum science, geophysics, environmental monitoring, and beyond.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%===============================================================================
+\section{The General Framework}
+
+\subsection{Abstract Problem Statement}
+
+Consider a hidden state $\bm{x} \in \mathcal{X}$ observed through a configurable sensor with design parameters $\bm{d} \in \mathcal{D}$ (hardware) and per-measurement control parameters $\bm{s}_k \in \mathcal{S}$ (software/actuation).  At each step $k = 1, \ldots, N$:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Sensor selection}: choose $\bm{s}_k$ based on the current belief $b_k(\bm{x})$ and the design~$\bm{d}$.
+  \item \textbf{Measurement}: observe $\bm{y}_k \sim p(\bm{y} \mid \bm{x}, \bm{s}_k, \bm{d})$.
+  \item \textbf{Inference}: update the belief $b_k \to b_{k+1}$ using $\bm{y}_k$.
+\end{enumerate}
+
+The bilevel optimization is:
+\begin{align}
+  \min_{\bm{d} \in \mathcal{D}} \quad & \mathbb{E}_{\bm{x}_0, \bm{\varepsilon}_{1:N}} \Big[ \mathcal{L}\big(b_N(\bm{x}), \bm{x}_0\big) \Big] \label{eq:outer} \\
+  \text{where at each step } k: \quad & \bm{s}_k^\star = \argmax_{\bm{s}} \; \mathcal{I}(b_k, \bm{s}, \bm{d}) \label{eq:inner}
+\end{align}
+with $\mathcal{L}$ a loss measuring estimation quality and $\mathcal{I}$ an information criterion for sensor selection.
+
+\subsection{Modular Components}
+
+The framework is defined by five interchangeable modules:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}p{3.5cm}p{4cm}p{6cm}@{}}
+\toprule
+\textbf{Module} & \textbf{Photonic sensor instance} & \textbf{General alternatives} \\
+\midrule
+Forward model $f(\bm{x}, \bm{s}, \bm{d})$ & FDFD + lattice scattering & FEM, ray tracing, MD, neural surrogate \\
+Likelihood $p(\bm{y} \mid \bm{x}, \bm{s}, \bm{d})$ & Gaussian $\mathcal{N}(f, \sigma^2 I)$ & Poisson, Bernoulli, multinomial, Student-$t$ \\
+Inference engine & Extended Kalman Filter & Particle filter, EnKF, variational inference, normalizing flows \\
+Sensor selection $\mathcal{I}$ & $\tr(\text{BFIM})$ & Mutual information, expected KL, posterior variance, expected utility \\
+Outer loss $\mathcal{L}$ & Relative MSE & Entropy, credible interval width, task-specific cost \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Computational Requirements}
+
+For end-to-end gradient computation, the framework requires:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Differentiable forward model}: the physics simulator must support reverse-mode AD or provide a custom adjoint (e.g., adjoint-based PDE sensitivities).
+  \item \textbf{Differentiable inference step}: the belief update must be differentiable with respect to the measurement and the forward model parameters.  For EKF this is straightforward; for particle filters, reparameterization or score-function estimators are needed.
+  \item \textbf{Implicit differentiation through the inner argmax}: the sensor selection $\bm{s}_k^\star$ is defined implicitly by its optimality condition.  The Implicit Function Theorem (IFT) provides exact gradients without differentiating through the inner optimizer's iterations.
+  \item \textbf{Multi-step gradient accumulation}: gradients must flow backward through $N$ sequential inference steps, accumulating contributions from each sensor selection, measurement, and update.
+\end{enumerate}
+
+\subsection{The Implicit Function Theorem for Sensor Selection}
+
+At the inner optimum $\bm{s}^\star$, the stationarity condition holds:
+\[
+  \nabla_{\bm{s}} \mathcal{I}(\bm{s}^\star, b, \bm{d}) = \bm{0}
+\]
+Implicit differentiation gives the design sensitivity:
+\[
+  \frac{\partial \bm{s}^\star}{\partial \bm{d}} = -\left[\nabla^2_{\bm{ss}} \mathcal{I}\right]^{-1} \nabla^2_{\bm{sd}} \mathcal{I}
+\]
+and the belief sensitivity $\partial \bm{s}^\star / \partial b$ analogously.  These are computed once per step using the Hessian (small, $d_s \times d_s$) and cross-Jacobians (computed by forward-mode AD or analytically).
+
+%===============================================================================
+\section{Applications in Photonics and Optics}
+
+\subsection{Photonic Refractive-Index Sensor (This Work)}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: refractive-index perturbation $\Delta n$ on a lattice of scatterers
+  \item \textbf{Sensor selection}: input phases $(\varphi_1, \varphi_2)$ controlling port excitation
+  \item \textbf{Forward model}: 2D FDFD + S-matrix Taylor expansion + lattice interconnection
+  \item \textbf{Inference}: EKF with Gaussian likelihood
+  \item \textbf{Design variable}: permittivity distribution $\bm{\varepsilon}_{\text{geom}} \in [0,1]^{N_\text{pixels}}$
+  \item \textbf{Result}: $21{,}400\times$ reduction in estimation error via MMA optimization
+\end{itemize}
+
+\subsection{Optical Coherence Tomography (OCT)}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: tissue layer thicknesses, scattering coefficients, absorption
+  \item \textbf{Sensor selection}: focus depth, beam angle, wavelength
+  \item \textbf{Forward model}: multilayer transfer matrix method (mathematically identical to S-matrix scattering)
+  \item \textbf{Inference}: EKF or unscented KF
+  \item \textbf{Design variable}: optical system design (source spectrum, lens geometry, fiber coupler)
+  \item \textbf{Why it fits}: the transfer-matrix forward model has the same structure as the photonic lattice model; the framework applies with minimal modification
+\end{itemize}
+
+\subsection{Adaptive Spectroscopy}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: chemical concentrations of multiple analytes
+  \item \textbf{Sensor selection}: which wavelengths to probe, integration time per wavelength
+  \item \textbf{Forward model}: Beer--Lambert law (linear in concentration, nonlinear in path length)
+  \item \textbf{Inference}: Bayesian linear regression (conjugate update)
+  \item \textbf{Design variable}: spectrometer grating design, detector pixel assignment
+  \item \textbf{Likelihood}: Poisson (photon counting) or Gaussian (high-flux regime)
+\end{itemize}
+
+%===============================================================================
+\section{Applications in Medical Imaging}
+
+\subsection{Adaptive MRI k-Space Sampling}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: tissue property maps (T1, T2, proton density) on a spatial grid
+  \item \textbf{Sensor selection}: which k-space line or spiral trajectory to acquire next
+  \item \textbf{Forward model}: MRI signal equation (Fourier encoding $\times$ tissue relaxation)
+  \item \textbf{Inference}: compressed sensing reconstruction or learned posterior (deep unrolling)
+  \item \textbf{Design variable}: RF pulse sequence parameters, receive coil geometry
+  \item \textbf{Why it's compelling}: each k-space acquisition takes time while the patient is in the scanner; adaptive sampling reduces scan time while maintaining diagnostic quality
+  \item \textbf{Likelihood}: Gaussian (thermal noise in receiver coil)
+\end{itemize}
+
+\subsection{Robotic Surgery: Adaptive Tissue Probing}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: tissue type map (tumor margins), stiffness, vascularity
+  \item \textbf{Sensor selection}: where to palpate, which imaging modality (ultrasound vs.\ fluorescence), probe angle
+  \item \textbf{Forward model}: tissue biomechanics + optical/acoustic propagation
+  \item \textbf{Inference}: Bayesian segmentation with spatial priors
+  \item \textbf{Design variable}: surgical instrument tip geometry, embedded sensor layout
+  \item \textbf{Likelihood}: Poisson (fluorescence photon counting) + Gaussian (force sensing)
+  \item \textbf{Why it's compelling}: every probe takes time under anesthesia; the framework minimizes measurements needed to confidently identify tumor margins
+\end{itemize}
+
+%===============================================================================
+\section{Applications in Robotics}
+
+\subsection{Active Tactile Exploration}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: object shape, stiffness, friction coefficients
+  \item \textbf{Sensor selection}: where to touch, contact force, finger orientation
+  \item \textbf{Forward model}: contact mechanics (Hertz model, FEM)
+  \item \textbf{Inference}: Gaussian process implicit surfaces + Bayesian update
+  \item \textbf{Design variable}: fingertip geometry, tactile sensor array layout, material compliance
+  \item \textbf{Why it's compelling}: a robot grasping an unknown object gets only a few touches before it must act; each touch risks dropping or damaging the object; optimizing the tactile sensor hardware AND the touch strategy jointly is exactly the bilevel problem
+\end{itemize}
+
+\subsection{Optimal Sensor Placement on Soft Robots}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: full body configuration (infinite-dimensional, projected to shape modes)
+  \item \textbf{Sensor selection}: which embedded strain sensors to activate (power budget)
+  \item \textbf{Forward model}: Cosserat rod / FEM for soft body deformation
+  \item \textbf{Inference}: EKF over shape mode coefficients
+  \item \textbf{Design variable}: where to embed strain gauges, IMUs, or curvature sensors
+  \item \textbf{Why it fits}: soft robots have infinite DOFs but limited sensing; the framework optimizes sensor placement to maximize proprioceptive information; the FEM forward model is analogous to FDFD
+\end{itemize}
+
+\subsection{Legged Locomotion: Terrain Estimation}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: terrain height map, friction coefficients, compliance under each foot
+  \item \textbf{Sensor selection}: which foot to place next (gait planning = sensing strategy)
+  \item \textbf{Forward model}: foot--terrain contact model
+  \item \textbf{Inference}: recursive Bayesian update after each footstep
+  \item \textbf{Design variable}: foot shape, sole sensor layout, leg kinematics
+  \item \textbf{Unique feature}: the action IS the measurement---each footstep simultaneously moves the robot and probes the terrain; sensor selection is coupled to control
+\end{itemize}
+
+\subsection{Visual SLAM with Active Gaze Control}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: camera pose + 3D landmark positions
+  \item \textbf{Sensor selection}: pan-tilt direction, zoom, exposure
+  \item \textbf{Forward model}: projective geometry (pinhole camera model)
+  \item \textbf{Inference}: graph-based SLAM or incremental smoothing (iSAM)
+  \item \textbf{Design variable}: camera intrinsics, stereo baseline, number of cameras
+\end{itemize}
+
+\subsection{Manipulation Under Uncertainty}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: object 6D pose, mass, center of mass, friction
+  \item \textbf{Sensor selection}: pre-grasp viewpoint, in-hand tactile exploration sequence
+  \item \textbf{Forward model}: rigid body dynamics + contact mechanics
+  \item \textbf{Inference}: particle filter (multimodal pose belief due to symmetries)
+  \item \textbf{Design variable}: gripper geometry, tactile sensor placement, camera viewpoints
+  \item \textbf{Likelihood}: multimodal---object pose has discrete symmetries
+\end{itemize}
+
+\subsection{Multi-Robot Active Perception}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: target locations, environmental map, or dynamic process (e.g., wildfire front)
+  \item \textbf{Sensor selection}: each robot chooses where to go and what to observe
+  \item \textbf{Forward model}: sensing footprint model (camera FOV, gas sensor dispersion kernel)
+  \item \textbf{Inference}: decentralized particle filter or Gaussian process fusion
+  \item \textbf{Design variable}: fleet composition, individual sensor specifications
+  \item \textbf{Why it's compelling}: $N$ robots each choosing actions adaptively; the IFT differentiates through the coordination protocol
+\end{itemize}
+
+%===============================================================================
+\section{Applications in Quantum Science}
+
+\subsection{Quantum State Tomography}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: density matrix $\rho$ (complex positive semidefinite, $d \times d$)
+  \item \textbf{Sensor selection}: measurement basis (which observable to measure)
+  \item \textbf{Forward model}: Born rule $p(\text{outcome} \mid \rho, M) = \tr(\rho \cdot M_{\text{outcome}})$
+  \item \textbf{Inference}: Bayesian update with multinomial likelihood (discrete outcomes)
+  \item \textbf{Design variable}: measurement apparatus (beam splitter angles, phase plates)
+  \item \textbf{Unique feature}: measurements are destructive (each collapses the state); the likelihood is categorical/multinomial, not Gaussian; adaptive basis selection minimizes the number of state copies needed
+\end{itemize}
+
+\subsection{Quantum Parameter Estimation}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: physical parameter (magnetic field, temperature, frequency) encoded in a quantum probe
+  \item \textbf{Sensor selection}: probe state preparation, measurement time, decoupling sequences
+  \item \textbf{Forward model}: quantum channel evolution (Lindblad master equation)
+  \item \textbf{Inference}: Bayesian update, approaching the quantum Cram\'{e}r--Rao bound
+  \item \textbf{Design variable}: probe system design (NV center geometry, superconducting circuit)
+  \item \textbf{Why it fits}: the quantum Fisher information plays the same role as the classical FIM; the framework optimizes the probe hardware to saturate the Heisenberg limit
+\end{itemize}
+
+%===============================================================================
+\section{Applications in Geophysics and Earth Science}
+
+\subsection{Seismic Survey Design}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: subsurface velocity and density model (3D grid)
+  \item \textbf{Sensor selection}: where to place the next seismic source and receivers
+  \item \textbf{Forward model}: elastic wave equation (FEM or spectral element method)
+  \item \textbf{Inference}: full-waveform inversion (MAP) or Hamiltonian Monte Carlo
+  \item \textbf{Design variable}: permanent sensor array geometry
+  \item \textbf{Likelihood}: Gaussian or Student-$t$ (to handle outliers from cultural noise)
+  \item \textbf{Why it fits}: seismic surveys cost millions of dollars per campaign; optimizing the source--receiver geometry to maximize subsurface information is a direct dollar-value problem; the wave equation forward model is analogous to FDFD
+\end{itemize}
+
+\subsection{Environmental Sensor Network}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: pollution concentration field (spatiotemporal, PDE-governed)
+  \item \textbf{Sensor selection}: which mobile sensors to activate, where to move autonomous vehicles
+  \item \textbf{Forward model}: advection--diffusion PDE
+  \item \textbf{Inference}: ensemble Kalman filter (EnKF) for high-dimensional state
+  \item \textbf{Design variable}: permanent sensor locations, mobile fleet size and type
+  \item \textbf{Unique feature}: the EnKF replaces the EKF for high-dimensional states; the outer optimization trades off fixed vs.\ mobile sensor investment
+\end{itemize}
+
+%===============================================================================
+\section{Applications in Defense and Aerospace}
+
+\subsection{Cognitive Radar}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: target position, velocity, radar cross-section
+  \item \textbf{Sensor selection}: transmitted waveform (chirp rate, frequency, polarization)
+  \item \textbf{Forward model}: radar range equation + Doppler + clutter model
+  \item \textbf{Inference}: particle filter (non-Gaussian clutter, multimodal posteriors)
+  \item \textbf{Design variable}: antenna array geometry, waveform codebook
+  \item \textbf{Likelihood}: Swerling target models (chi-squared), non-Gaussian clutter
+  \item \textbf{Why it fits}: cognitive radar adapts its waveform based on what it has learned about the target; the outer optimization designs the hardware, the inner optimization adapts the waveform per pulse
+\end{itemize}
+
+\subsection{Gravitational Wave Detector Network}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: binary merger parameters (masses, spins, distance, sky location)
+  \item \textbf{Sensor selection}: which detector combination to use, matched filter template
+  \item \textbf{Forward model}: general relativity waveform templates (computationally expensive)
+  \item \textbf{Inference}: nested sampling or normalizing flows for the posterior
+  \item \textbf{Design variable}: detector arm length, orientation, location on Earth
+  \item \textbf{Why it fits}: next-generation detector network design (Cosmic Explorer, Einstein Telescope) is a sensor placement problem; the framework optimizes network geometry to maximize parameter estimation accuracy
+\end{itemize}
+
+%===============================================================================
+\section{Applications in Chemistry and Biology}
+
+\subsection{Adaptive Drug Screening}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: dose--response curve parameters (EC50, Hill coefficient, efficacy)
+  \item \textbf{Sensor selection}: which drug concentration to test next
+  \item \textbf{Forward model}: Hill equation or pharmacokinetic model
+  \item \textbf{Inference}: Bayesian nonlinear regression
+  \item \textbf{Design variable}: assay platform design (well geometry, fluorophore selection)
+  \item \textbf{Likelihood}: Poisson (photon counting in fluorescence) or Binomial (cell viability)
+  \item \textbf{Why it fits}: each experiment costs time and reagents; adaptive Bayesian experimental design chooses the next concentration to maximally reduce uncertainty
+\end{itemize}
+
+\subsection{Cryo-EM Structure Determination}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: 3D electron density map of a protein
+  \item \textbf{Sensor selection}: tilt angle, defocus, dose per image
+  \item \textbf{Forward model}: contrast transfer function + projection
+  \item \textbf{Inference}: expectation-maximization or variational Bayes
+  \item \textbf{Design variable}: microscope optics, detector geometry
+  \item \textbf{Likelihood}: Poisson (electron counting) convolved with CTF
+\end{itemize}
+
+%===============================================================================
+\section{Applications in Energy and Industry}
+
+\subsection{Battery State Estimation}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: state of charge (SOC), state of health (SOH), internal temperature
+  \item \textbf{Sensor selection}: which cells to probe, excitation current profile
+  \item \textbf{Forward model}: equivalent circuit model or electrochemical PDE
+  \item \textbf{Inference}: EKF (industry standard) or particle filter
+  \item \textbf{Design variable}: sensor placement in battery pack, excitation waveform
+  \item \textbf{Likelihood}: Gaussian (voltage/current measurement noise)
+  \item \textbf{Why it fits}: real-time battery management needs accurate SOC/SOH with minimal sensing cost; adaptive current excitation maximizes identifiability
+\end{itemize}
+
+\subsection{Process Tomography in Chemical Plants}
+
+\begin{itemize}[nosep]
+  \item \textbf{State}: concentration, temperature, or flow field inside a reactor
+  \item \textbf{Sensor selection}: which electrode pairs to activate (electrical impedance tomography)
+  \item \textbf{Forward model}: Laplace equation for electric potential
+  \item \textbf{Inference}: regularized Gauss--Newton or EKF
+  \item \textbf{Design variable}: electrode geometry and placement around the vessel
+\end{itemize}
+
+%===============================================================================
+\section{Cross-Cutting Themes}
+
+\subsection{Non-Gaussian Likelihoods}
+
+Many applications involve non-Gaussian measurements:
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Likelihood & Applications \\
+\midrule
+Poisson & Photon counting (spectroscopy, fluorescence, cryo-EM) \\
+Bernoulli/Binomial & Cell viability assays, binary detection \\
+Multinomial/Categorical & Quantum tomography, classification \\
+Student-$t$ & Seismic data with outliers \\
+Chi-squared (Swerling) & Radar target fluctuation models \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For non-Gaussian likelihoods, the EKF must be replaced with particle filters or variational methods.  Differentiating through particle filters requires reparameterization tricks or score-function estimators; differentiating through variational inference is natural (the ELBO is already an optimization objective).
+
+\subsection{Beyond Fisher Information for Sensor Selection}
+
+The BFIM trace is one of many possible sensor selection criteria:
+\begin{center}
+\begin{tabular}{@{}p{4cm}p{9cm}@{}}
+\toprule
+Criterion $\mathcal{I}$ & Properties \\
+\midrule
+$\tr(\text{FIM})$ (A-optimal) & Fast, local (linearization-based), ignores prior \\
+$\tr(\Sigma_{\text{post}})$ & Accounts for prior uncertainty $\Sigma$ \\
+$\det(\Sigma_{\text{post}})$ (D-optimal) & Minimizes volume of confidence ellipsoid \\
+Mutual information $I(\bm{x}; \bm{y} \mid \bm{s})$ & Globally optimal, expensive to compute \\
+Expected KL divergence & Equivalent to MI for sequential design \\
+Expected task-specific utility & Application-dependent, most general \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The framework supports any differentiable $\mathcal{I}$; the IFT applies as long as the inner optimum is smooth.
+
+\subsection{Robotics-Specific Considerations}
+
+Robotics applications introduce unique challenges:
+\begin{enumerate}[nosep]
+  \item \textbf{Action--sensing coupling}: moving to sense changes the state (the robot is part of the system).  The framework needs a dynamics model in addition to the observation model.
+  \item \textbf{Real-time constraints}: the inner optimization must run in milliseconds.  This favors amortized policies (neural networks trained to mimic the optimal action) over online optimization.
+  \item \textbf{Safety constraints}: the design must be safe across all states, motivating robust or minimax variants of the outer loss.
+  \item \textbf{Sim-to-real gap}: the forward model never perfectly matches reality.  The framework should be robust to model mismatch.
+\end{enumerate}
+
+\subsection{Scalability}
+
+For large state dimensions ($d_x \gg 1$), the EKF becomes impractical ($O(d_x^3)$ per step).  Alternatives:
+\begin{itemize}[nosep]
+  \item \textbf{Ensemble Kalman Filter (EnKF)}: $O(d_x \cdot n_{\text{ens}})$, suitable for PDE-governed states.
+  \item \textbf{Amortized variational inference}: a neural network maps observations directly to posterior parameters; the network is trained end-to-end within the framework.
+  \item \textbf{Reduced-order models}: project the state onto a low-dimensional subspace before applying the framework.
+\end{itemize}
+
+%===============================================================================
+\section{Conclusion}
+
+The bilevel optimization of recursive Bayesian inference with adaptive sensor selection is a universal computational pattern that appears across science and engineering.  The key insight is that the \emph{same mathematical machinery}---differentiable forward models, implicit differentiation through inner optimization, and custom adjoint rules for inference steps---applies regardless of the physical domain, likelihood model, or inference algorithm.
+
+The photonic sensor implementation described in the companion report~\cite{report} demonstrates the framework on a concrete problem, but the abstractions (modular forward model, pluggable likelihood, interchangeable inference engine, generic IFT-based sensor selection) are designed for reuse.  The most immediate extensions are to medical imaging (adaptive MRI), robotics (tactile sensor design), and quantum science (adaptive tomography), where the mathematical structure is nearly identical but the physics and likelihood models differ.
+
+\begin{thebibliography}{1}
+\bibitem{report} Z.~Lin, ``Bilevel Optimization of Photonic Sensor Geometry for Bayesian State Estimation via BFIM and EKF,'' Technical Report, 2026.
+\end{thebibliography}
+
+\end{document}
