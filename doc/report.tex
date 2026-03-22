@@ -294,6 +294,36 @@ The optimization exhibited characteristic MMA behavior:
   \item \textbf{Gradient decay}: $|\nabla|_{\max}$ decreased from $10^{-2}$ to $10^{-6}$, indicating approach to a local minimum.
 \end{itemize}
 
+\subsection{Adam Optimizer Run}
+
+To explore stochastic optimization, we ran an Adam optimizer with 20 episodes per batch, resampling $\bm{x}_0$ and noise at every iteration.  Crucially, the inner sensor-selection regularizer was switched off ($\alpha_r = 0$), so the inner problem solves a pure BFIM trace maximization $\bm{s}^\star = \argmax_{\bm{s}} \tr(\text{BFIM})$ without the $\alpha_r \|\bm{s}\|^2$ penalty used in the MMA run ($\alpha_r = 1$).  The run completed 1246 iterations over 32.8 hours (avg.\ 95\,s/iter on 20 workers).
+
+\begin{center}
+\begin{tabular}{@{}rrrl@{}}
+\toprule
+Iteration & MA(20) Loss & Avg $|\nabla|$ & Phase \\
+\midrule
+1--50   & $1.52 \to 0.56$ & $7.5 \times 10^{-4}$ & Rapid descent \\
+51--100 & $0.56 \to 0.11$ & $5 \times 10^{-4}$   & Continued improvement \\
+101--500 & $0.11 \to 0.009$ & $10^{-4}$--$10^{-5}$ & Refinement \\
+501--1246 & $0.009 \to 0.003$ & $2.5 \times 10^{-6}$ & Plateau / slow convergence \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The global minimum loss was $1.1 \times 10^{-3}$ at iteration 1237.  Overall, the loss decreased by three orders of magnitude (from $\sim$1.5 to $\sim$0.002).  Gradient norms decayed $\sim$300$\times$ over the run, from $|\nabla|_{\text{avg}} \approx 7.5 \times 10^{-4}$ to $\approx 2.5 \times 10^{-6}$, indicating approach to a local minimum.
+
+Per-iteration losses exhibit substantial variance due to the per-step resampling of $\bm{x}_0$ and measurement noise, but the 20-iteration moving average shows smooth, monotonic convergence (Figure~\ref{fig:adam_convergence}).
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=\textwidth]{adam_moving_avg.png}
+\caption{Adam optimization convergence over 1246 iterations (20 episodes/batch, resampled every step).  \textbf{Top:} log-scale loss showing three orders of magnitude reduction.  \textbf{Bottom:} linear-scale zoom on iterations 100--1246, showing the refinement and plateau phases.  Light blue: per-iteration loss; red: 20-iteration moving average.}
+\label{fig:adam_convergence}
+\end{figure}
+
+\textbf{Comparison with MMA:} The MMA run (Section~7.2) achieved a best loss of $1.12 \times 10^{-4}$ in 316 iterations using 200 deterministic episodes per gradient and $\alpha_r = 1$.  Adam, with only 20 stochastic episodes per step and $\alpha_r = 0$, reached $1.1 \times 10^{-3}$ (MA$\approx 0.003$) after 1246 iterations---roughly $10\times$ higher loss but with $10\times$ fewer episodes per iteration.  Two differences confound a direct comparison: (i)~the stochastic resampling enables better exploration but introduces variance that slows fine convergence, and (ii)~the removal of the $L_2$ regularizer changes the inner sensor-selection landscape, potentially admitting unbounded or degenerate sensor configurations that the regularized MMA run avoids.
+
 %═══════════════════════════════════════════════════════════════════════════════
 \section{AD Implementation Challenges}
 
