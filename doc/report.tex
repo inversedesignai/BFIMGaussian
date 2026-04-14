@@ -208,11 +208,26 @@ With these parameters, the EKF is stable and well-calibrated:
 
 \subsection{Shot Noise Feasibility}
 
-For shot-noise-limited detection at $\lambda = 1550$\,nm:
+The SNR $\approx 12$ quoted above is computed from the \emph{differential} signal: the change in port power caused by the refractive-index perturbation $\Delta n$, divided by the noise standard deviation:
 \[
-  P_{\text{in}} \cdot \tau = \frac{T \cdot \hbar\omega}{\sigma^2} \approx \frac{0.05 \times 1.28 \times 10^{-19}}{10^{-10}} \approx 6.4 \times 10^{-11}\;\text{J}
+  \text{SNR} = \frac{\|F \cdot \Delta\bm{x}\|}{\sigma\,\sqrt{d_y}},
+  \qquad F = \frac{\partial f}{\partial \bm{x}}\bigg|_{\bm{\mu},\bm{s},\bm{c}}.
 \]
-At $\tau = 1\,\mu$s integration: $P_{\text{in}} \approx 64\,\mu$W per port ($\sim$1.3\,mW total).  This is easily achievable with standard telecom lasers.
+This differential signal $\|F \cdot \Delta\bm{x}\|$ is a tiny fraction of the total (DC) port power $y_0 = f(\bm{0}, \bm{s}, \bm{c})$: for $\Delta n \sim 5 \times 10^{-5}$ the fractional power change is of order $0.01$--$0.1\%$.
+
+The noise variance $\sigma^2$, on the other hand, is set by the \emph{total} detected photon flux (which is dominated by the DC port power, not the small signal perturbation).  For shot-noise-limited detection of normalized port power $y = P_{\text{out}}/P_{\text{in}}$, the variance is
+\[
+  \sigma^2 = \frac{T \cdot \hbar\omega_{\text{phys}}}{\tau \cdot P_{\text{in}}},
+\]
+where $T \sim |y_0|$ is the port transmission (total detected power as a fraction of input), $\hbar\omega_{\text{phys}}$ is the photon energy, and $\tau$ is the integration time.  Note that $P_{\text{in}} \propto T$: higher port transmission means more detected photons, which increases the shot noise on the intensity measurement, requiring more input power to maintain the same $\sigma^2$.  Solving for the required input power at $\lambda = 1550$\,nm ($\hbar\omega \approx 1.28 \times 10^{-19}$\,J):
+\[
+  P_{\text{in}} = \frac{T \cdot \hbar\omega}{\tau \cdot \sigma^2}
+  \approx \frac{0.05 \times 1.28 \times 10^{-19}}{10^{-6} \times 10^{-10}}
+  \approx 64\;\mu\text{W per port}
+\]
+using a port transmission $T \approx 0.05$ and integration time $\tau = 1\,\mu$s.  For higher port transmissions ($T \sim 0.3$), the required power increases to $\sim$384\,$\mu$W per port.  In both cases the total input power across all illuminated ports is $\sim$0.2--1\,mW, easily achievable with standard telecom lasers.
+
+\textbf{Caveats.}  (i)~Shot noise is signal-dependent: each port has a different $T$, so the true noise covariance is not exactly $\sigma^2 I$ but a diagonal matrix with port-dependent entries.  For ports with similar transmission this is a minor effect.  (ii)~The analysis assumes shot-noise-limited detection; real photoreceivers also contribute thermal noise, dark current, and amplifier noise, which would increase the required $P_{\text{in}}$.  (iii)~The values of $T$ used above are representative estimates; the actual port transmissions should be extracted from the simulation for a rigorous noise budget.
 
 %═══════════════════════════════════════════════════════════════════════════════
 \section{Gradient Verification}

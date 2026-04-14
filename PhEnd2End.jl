@@ -55,7 +55,63 @@ using Optim
 using Serialization
 using Statistics
 using BFIMGaussian          # swap to: using PosteriorCovGaussian
+using SparseArrays
 println("[startup] All packages loaded."); flush(stdout)
+
+# ── Topology optimisation filters ────────────────────────────────────────────
+# Standard density filter (conic) + threshold projection for manufacturing-
+# compatible binary geometries.  Both are Zygote-differentiable.
+
+"""
+    build_density_filter(Ny, Nx, R) → SparseMatrixCSC
+
+Build a sparse conic density filter matrix.  For each pixel (iy, ix),
+the filtered value is the weighted average over neighbours within radius R,
+with conic weight w(d) = max(0, R − d).  The matrix W satisfies
+`ρ̃ = reshape(W * vec(ρ), Ny, Nx)`.
+"""
+function build_density_filter(Ny::Int, Nx::Int, R::Float64)
+    R_int = ceil(Int, R)
+    rows = Int[]
+    cols = Int[]
+    vals = Float64[]
+
+    for ix in 1:Nx, iy in 1:Ny
+        k = (ix - 1) * Ny + iy          # column-major linear index
+        wsum = 0.0
+        local_entries = Tuple{Int, Float64}[]
+        for jx in max(1, ix - R_int):min(Nx, ix + R_int)
+            for jy in max(1, iy - R_int):min(Ny, iy + R_int)
+                d = sqrt(Float64((ix - jx)^2 + (iy - jy)^2))
+                if d <= R
+                    w = R - d
+                    l = (jx - 1) * Ny + jy
+                    push!(local_entries, (l, w))
+                    wsum += w
+                end
+            end
+        end
+        for (l, w) in local_entries
+            push!(rows, k)
+            push!(cols, l)
+            push!(vals, w / wsum)
+        end
+    end
+
+    return sparse(rows, cols, vals, Ny * Nx, Ny * Nx)
+end
+
+"""
+    project_density(ρ, β, η=0.5) → projected density ∈ [0, 1]
+
+Smooth threshold projection (tanh-based Heaviside approximation).
+At β → ∞ this becomes a hard step at ρ = η.
+"""
+function project_density(ρ, β, η=0.5)
+    t_eta  = tanh(β * η)
+    t_one  = tanh(β * (1 - η))
+    return (t_eta .+ tanh.(β .* (ρ .- η))) ./ (t_eta + t_one)
+end
 
 # Unpack the flat real coefficient vector c into arrays of complex 4×4 S-matrices.
 # Uses only indexing — fully Zygote-differentiable.
@@ -142,23 +198,32 @@ function sim_geom(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info, monitor
 
 end
 
-function end2end(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info, monitors_array, a_f_array, a_b_array,
-                 x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr)
+function end2end(ε_raw, n_geom, ε_base, ω_array, Ls, Bs, grid_info, monitors_array, a_f_array, a_b_array,
+                 x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
+                 W_filter=nothing, β_proj=nothing, η_proj=0.5)
 
-    @assert size(ε_geom) == (length(grid_info.design_iy), length(grid_info.design_ix))  "ε_geom size $(size(ε_geom)) does not match design region ($(length(grid_info.design_iy)), $(length(grid_info.design_ix)))"
+    Ny_d = length(grid_info.design_iy)
+    Nx_d = length(grid_info.design_ix)
+    @assert size(ε_raw) == (Ny_d, Nx_d)  "ε_raw size $(size(ε_raw)) does not match design region ($Ny_d, $Nx_d)"
 
     println("  [end2end] FDFD forward (sim_geom + Zygote pullback)..."); flush(stdout)
-    fdfd = ε_ -> sim_geom(ε_, n_geom, ε_base, ω_array, Ls, Bs, grid_info, monitors_array, a_f_array, a_b_array)
-    c, pb_c = Zygote.pullback(fdfd, ε_geom)
+    fdfd = ε_ -> begin
+        # Density filter: smooth with conic kernel
+        ε_filt = W_filter !== nothing ? reshape(W_filter * vec(ε_), Ny_d, Nx_d) : ε_
+        # Threshold projection: push toward binary
+        ε_proj = β_proj !== nothing ? project_density(ε_filt, β_proj, η_proj) : ε_filt
+        sim_geom(ε_proj, n_geom, ε_base, ω_array, Ls, Bs, grid_info, monitors_array, a_f_array, a_b_array)
+    end
+    c, pb_c = Zygote.pullback(fdfd, ε_raw)
 
     println("  [end2end] Episode gradients (batch_c2loss_grad, $(length(x0_list)) episodes)..."); flush(stdout)
     loss, cbar = batch_c2loss_grad(x0_list, c, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr)
 
     println("  [end2end] FDFD backward (pullback)..."); flush(stdout)
-    (grad_ε_geoms,) = pb_c(cbar)
+    (grad_ε_raw,) = pb_c(cbar)
 
     println("  [end2end] Done. loss=$loss"); flush(stdout)
-    return loss, grad_ε_geoms
+    return loss, grad_ε_raw
 
 end
 
@@ -170,9 +235,26 @@ function train_adam!(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
                      n_iters=100, lr=1e-3, β1=0.9, β2=0.999, ε_adam=1e-8,
                      resample_every=0, rng=MersenneTwister(123),
                      x0_min=-0.01, x0_max=0.01,
-                     save_every=10, save_dir=joinpath(@__DIR__, "checkpoints"))
+                     save_every=10, save_dir=joinpath(@__DIR__, "checkpoints"),
+                     filter_radius=0.0,
+                     β_proj_init=1.0, β_proj_max=256.0, β_proj_double_every=50)
 
     mkpath(save_dir)
+
+    Ny_d = size(ε_geom, 1)
+    Nx_d = size(ε_geom, 2)
+
+    # Build density filter (precomputed sparse matrix, not differentiated)
+    W_filter = nothing
+    if filter_radius > 0
+        println("  [optim] Building density filter (R=$(filter_radius), grid=$(Ny_d)×$(Nx_d))..."); flush(stdout)
+        W_filter = build_density_filter(Ny_d, Nx_d, filter_radius)
+        println("  [optim] Filter: $(nnz(W_filter)) nonzeros, avg $(round(nnz(W_filter)/size(W_filter,1), digits=1)) per row"); flush(stdout)
+    end
+
+    # Projection sharpness schedule (β continuation)
+    use_proj = filter_radius > 0
+    β_proj = use_proj ? β_proj_init : nothing
 
     m = zeros(size(ε_geom))   # first moment
     v = zeros(size(ε_geom))   # second moment
@@ -180,6 +262,12 @@ function train_adam!(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
 
     for t in 1:n_iters
         t_start = time()
+
+        # β continuation: double β_proj periodically
+        if use_proj && t > 1 && mod(t - 1, β_proj_double_every) == 0 && β_proj < β_proj_max
+            β_proj = min(2 * β_proj, β_proj_max)
+            println("  [optim] β_proj → $β_proj"); flush(stdout)
+        end
 
         # Optionally resample x0 and noise each iteration for fresh stochastic estimates
         if resample_every > 0 && t > 1 && mod(t - 1, resample_every) == 0
@@ -191,7 +279,8 @@ function train_adam!(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
 
         loss, grad = end2end(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
                              monitors_array, a_f_array, a_b_array,
-                             x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr)
+                             x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
+                             W_filter=W_filter, β_proj=β_proj)
         push!(losses, loss)
 
         # Adam update
@@ -209,17 +298,19 @@ function train_adam!(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
         step_abs = abs.(lr .* m̂ ./ (sqrt.(v̂) .+ ε_adam))
         Δloss    = t > 1 ? loss - losses[end-1] : NaN
         elapsed  = round(time() - t_start, digits=1)
+        β_str    = use_proj ? "  β_proj=$β_proj" : ""
         println("iter $t/$n_iters  $(elapsed)s  loss=$(round(loss, sigdigits=6))  Δloss=$(round(Δloss, sigdigits=3))  " *
                 "|grad| min=$(round(minimum(g_abs), sigdigits=3)) avg=$(round(mean(g_abs), sigdigits=3)) " *
                 "max=$(round(maximum(g_abs), sigdigits=3))  " *
                 "|step| avg=$(round(mean(step_abs), sigdigits=3)) max=$(round(maximum(step_abs), sigdigits=3))  " *
-                "ε range=[$(round(minimum(ε_geom), digits=4)), $(round(maximum(ε_geom), digits=4))]")
+                "ε range=[$(round(minimum(ε_geom), digits=4)), $(round(maximum(ε_geom), digits=4))]$β_str")
         flush(stdout)
 
         # Save checkpoint
         if mod(t, save_every) == 0 || t == n_iters
             path = joinpath(save_dir, "eps_geom_step_$(lpad(t, 5, '0')).jls")
-            serialize(path, (; step=t, loss, ε_geom=copy(ε_geom), losses=copy(losses)))
+            serialize(path, (; step=t, loss, ε_geom=copy(ε_geom), losses=copy(losses),
+                              β_proj=β_proj, filter_radius=filter_radius))
             println("  saved → $path"); flush(stdout)
             flush(stdout)
         end
@@ -236,12 +327,21 @@ function train_mma!(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
                     monitors_array, a_f_array, a_b_array,
                     x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
                     n_iters=200, ftol_rel=1e-8, xtol_rel=1e-8,
-                    save_every=10, save_dir=joinpath(@__DIR__, "checkpoints_mma"))
+                    save_every=10, save_dir=joinpath(@__DIR__, "checkpoints_mma"),
+                    filter_radius=0.0, β_proj=nothing, η_proj=0.5)
 
     mkpath(save_dir)
     n_params = length(ε_geom)
     losses = Float64[]
     iter_count = Ref(0)
+
+    Ny_d = size(ε_geom, 1)
+    Nx_d = size(ε_geom, 2)
+    W_filter = nothing
+    if filter_radius > 0
+        println("  [mma] Building density filter (R=$(filter_radius))..."); flush(stdout)
+        W_filter = build_density_filter(Ny_d, Nx_d, filter_radius)
+    end
 
     function nlopt_obj(x::Vector{Float64}, grad::Vector{Float64})
         t_start = time()
@@ -253,7 +353,8 @@ function train_mma!(ε_geom, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
 
         loss, g = end2end(ε_mat, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
                           monitors_array, a_f_array, a_b_array,
-                          x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr)
+                          x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
+                          W_filter=W_filter, β_proj=β_proj, η_proj=η_proj)
         push!(losses, loss)
 
         # NLopt expects gradient written into `grad` in-place
@@ -382,7 +483,8 @@ if _MODE == "adam"
         ε_geom_opt, n_geom, ε_base, ω_array, Ls, Bs, grid_info,
         monitors_array, a_f_array, a_b_array,
         x0_list, nω, n_lat, GΔω, μ0, Σ0, noise_bank, σ², αr;
-        n_iters=1000000, lr=1e-3, x0_min=x0_min, x0_max=x0_max, resample_every=1)
+        n_iters=1000000, lr=1e-3, x0_min=x0_min, x0_max=x0_max, resample_every=1,
+        filter_radius=3.0, β_proj_init=1.0, β_proj_max=256.0, β_proj_double_every=50)
 
 elseif _MODE == "mma"
     println("[optim] Mode: MMA"); flush(stdout)
