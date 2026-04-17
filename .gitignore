@@ -1,15 +1,19 @@
-*.jls
+# legacy run outputs (not tracked historically)
 checkpoints/
-checkpoints_dopt/
-checkpoints_dopt_*_archive/
-checkpoints_fi/
+opt_result1/
+opt_result2/
+c_nom.jls
 
-# ephemeral training + autotune outputs
-nohup.out
-nohup_*.out
-nohup_*.out.*
+# snapshot dirs regenerated on each autotune fire
 autotune_snapshot/
 autotune_dopt_snapshot/
+
+# cron + alert logs
 autotune_cron.log
 autotune_dopt_cron.log
 autotune_alerts.log
+
+# legacy / non-dopt nohup logs (big, local only)
+nohup.out
+nohup.out.pre-autotune.*
+nohup_fi_baseline.out

@@ -1,0 +1,703 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\argmin}{\operatorname{argmin}}
+\newcommand{\argmax}{\operatorname{argmax}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\Var}{\operatorname{Var}}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\newtheorem{remark}{Remark}
+
+\title{Posterior Cram\'er--Rao Bounds\\for Joint Sensor and Geometry Design}
+\author{Z.\ Lin}
+\date{April 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present the Posterior Cram\'er--Rao Bound (PCRB) in its most general form for sequential Bayesian estimation, following Tichavsk\'y, Muravchik \& Nehorai (1998).  We then specialize to two cases relevant to photonic sensor design: (i)~a static state observed through nonlinear measurements, and (ii)~additive Gaussian noise with known covariance.  Finally, we formulate the D-optimal joint optimization of sensor parameters and device geometry as a single-level problem over fixed design variables, and bound the potential benefit of an adaptive policy over this fixed design by an \emph{ignorance gap} that is near-zero for weakly nonlinear measurement models.  We then discuss how the adaptive EKF-based bilevel approach relates to this cleaner formulation as one particular approximate solver.
+\end{abstract}
+
+\tableofcontents
+
+%===============================================================================
+\section{General PCRB: The Tichavsk\'y Recursion}
+%===============================================================================
+
+\subsection{Setting}
+
+Consider a discrete-time state-space model:
+\begin{align}
+  \bm{x}_k &= \bm{g}_k(\bm{x}_{k-1}, \bm{w}_k), \qquad \bm{w}_k \sim p_{\bm{w}_k}, \label{eq:state} \\
+  \bm{y}_k &= \bm{h}_k(\bm{x}_k, \bm{s}_k, \bm{c}) + \bm{v}_k, \qquad \bm{v}_k \sim p_{\bm{v}_k}, \label{eq:obs}
+\end{align}
+where $\bm{x}_k \in \R^{d_x}$ is the state, $\bm{y}_k \in \R^{d_y}$ is the observation, $\bm{s}_k \in \R^{d_s}$ is the sensor parameter (controllable), $\bm{c} \in \R^{d_c}$ encodes the device geometry, $\bm{w}_k$ is process noise, and $\bm{v}_k$ is measurement noise.  The prior is $\bm{x}_0 \sim p_0$.  The sensor parameter $\bm{s}_k$ may depend on the past observations $\bm{y}_{1:k-1}$ (adaptive sensing).
+
+\subsection{Bayesian Information Matrix}
+
+Define the \emph{Bayesian Information Matrix} (BIM) at step $k$ as:
+\begin{equation}
+  \bm{J}_k \;=\; \E\!\left[-\nabla_{\bm{x}_k} \nabla_{\bm{x}_k}^\top \ln p(\bm{x}_k \mid \bm{y}_{1:k})\right],
+  \label{eq:bim}
+\end{equation}
+where the expectation is over the joint distribution $p(\bm{x}_{0:k}, \bm{y}_{1:k})$.  For any unbiased (or asymptotically unbiased) estimator $\hat{\bm{x}}_k$ of $\bm{x}_k$ given $\bm{y}_{1:k}$:
+\begin{equation}
+  \E\!\left[(\hat{\bm{x}}_k - \bm{x}_k)(\hat{\bm{x}}_k - \bm{x}_k)^\top\right] \;\succeq\; \bm{J}_k^{-1}.
+  \label{eq:pcrb}
+\end{equation}
+
+\subsection{The Recursion}
+
+\begin{theorem}[Tichavsk\'y, Muravchik \& Nehorai, 1998]
+\label{thm:pcrb}
+Under regularity conditions (twice-differentiable log-densities, finite Fisher information), the BIM satisfies the recursion:
+\begin{equation}
+  \bm{J}_{k+1} = \bm{D}_k^{22} - \bm{D}_k^{21}\left(\bm{J}_k + \bm{D}_k^{11}\right)^{-1}\bm{D}_k^{12} + \bm{H}_{k+1},
+  \label{eq:recursion}
+\end{equation}
+where the $d_x \times d_x$ matrices $\bm{D}_k^{ij}$ arise from the state transition and $\bm{H}_{k+1}$ from the measurement:
+\begin{align}
+  \bm{D}_k^{11} &= \E\!\left[-\nabla_{\bm{x}_k} \nabla_{\bm{x}_k}^\top \ln p(\bm{x}_{k+1} \mid \bm{x}_k)\right], \label{eq:D11} \\
+  \bm{D}_k^{12} &= \E\!\left[-\nabla_{\bm{x}_k} \nabla_{\bm{x}_{k+1}}^\top \ln p(\bm{x}_{k+1} \mid \bm{x}_k)\right], \label{eq:D12} \\
+  \bm{D}_k^{21} &= \left(\bm{D}_k^{12}\right)^\top, \label{eq:D21} \\
+  \bm{D}_k^{22} &= \E\!\left[-\nabla_{\bm{x}_{k+1}} \nabla_{\bm{x}_{k+1}}^\top \ln p(\bm{x}_{k+1} \mid \bm{x}_k)\right], \label{eq:D22} \\
+  \bm{H}_{k+1} &= \E\!\left[-\nabla_{\bm{x}_{k+1}} \nabla_{\bm{x}_{k+1}}^\top \ln p(\bm{y}_{k+1} \mid \bm{x}_{k+1}, \bm{s}_{k+1})\right]. \label{eq:H}
+\end{align}
+The recursion is initialized with the prior information:
+\begin{equation}
+  \bm{J}_0 = \E\!\left[-\nabla_{\bm{x}_0} \nabla_{\bm{x}_0}^\top \ln p_0(\bm{x}_0)\right] = \bm{\Sigma}_0^{-1} \quad \text{(if $p_0$ is Gaussian with covariance $\bm{\Sigma}_0$)}.
+  \label{eq:J0}
+\end{equation}
+\end{theorem}
+
+\begin{remark}
+The matrix $\bm{H}_{k+1}$ depends on the sensor parameter $\bm{s}_{k+1}$ and the geometry $\bm{c}$.  The $\bm{D}_k^{ij}$ matrices depend only on the state dynamics.  The PCRB \eqref{eq:pcrb} holds for \emph{any} adaptive policy $\bm{s}_k = \bm{s}_k(\bm{y}_{1:k-1})$---the bound is on the MSE achievable by the best estimator given the chosen policy.
+\end{remark}
+
+\begin{remark}
+The measurement information $\bm{H}_{k+1}$ is exactly the classical Fisher Information Matrix (FIM) of the observation model $p(\bm{y}_{k+1} \mid \bm{x}_{k+1}, \bm{s}_{k+1})$ with respect to $\bm{x}_{k+1}$, evaluated at the true state.  For adaptive policies, the expectation in \eqref{eq:H} is also over the (random) sensor parameter $\bm{s}_{k+1}$ induced by the policy.
+\end{remark}
+
+%===============================================================================
+\section{Specialization: Static State}
+%===============================================================================
+
+When the state is static ($\bm{x}_k = \bm{x}_0$ for all $k$, i.e., $\bm{g}_k$ is the identity and $\bm{w}_k = \bm{0}$), the transition is deterministic with:
+\begin{equation}
+  p(\bm{x}_{k+1} \mid \bm{x}_k) = \delta(\bm{x}_{k+1} - \bm{x}_k).
+\end{equation}
+
+The $\bm{D}_k^{ij}$ matrices diverge as $\bm{Q}_k \to \bm{0}$, and the Schur complement in \eqref{eq:recursion} collapses.  Formally, taking the limit of vanishing process noise $\bm{Q}_k \to \bm{0}$ with additive Gaussian dynamics $\bm{x}_{k+1} = \bm{x}_k + \bm{w}_k$, $\bm{w}_k \sim \mathcal{N}(\bm{0}, \bm{Q}_k)$, direct computation from \eqref{eq:D11}--\eqref{eq:D22} gives $\bm{D}_k^{11} = \bm{D}_k^{22} = \bm{Q}_k^{-1}$ and $\bm{D}_k^{12} = \bm{D}_k^{21} = -\bm{Q}_k^{-1}$ (note the sign, which arises from $\nabla_{\bm{x}_k}\nabla_{\bm{x}_{k+1}}^\top \ln p = +\bm{Q}_k^{-1}$ combined with the minus sign in the definition of $\bm{D}_k^{12}$).  The double negative in $\bm{D}_k^{21}(\cdot)^{-1}\bm{D}_k^{12}$ then yields:
+\begin{equation}
+  \bm{J}_{k+1} = \bm{Q}_k^{-1} - \bm{Q}_k^{-1}\left(\bm{J}_k + \bm{Q}_k^{-1}\right)^{-1}\bm{Q}_k^{-1} + \bm{H}_{k+1}.
+\end{equation}
+Applying the Woodbury identity, $\bm{Q}_k^{-1} - \bm{Q}_k^{-1}(\bm{J}_k + \bm{Q}_k^{-1})^{-1}\bm{Q}_k^{-1} = (\bm{Q}_k + \bm{J}_k^{-1})^{-1}$.  As $\bm{Q}_k \to \bm{0}$:
+\begin{equation}
+  (\bm{Q}_k + \bm{J}_k^{-1})^{-1} \;\to\; \bm{J}_k.
+\end{equation}
+
+This gives the \textbf{static-state PCRB recursion}:
+\begin{equation}
+  \boxed{\bm{J}_{k+1} = \bm{J}_k + \bm{H}_{k+1}, \qquad \bm{J}_0 = \bm{\Sigma}_0^{-1}.}
+  \label{eq:static}
+\end{equation}
+
+The Bayesian information simply accumulates: each measurement adds its FIM to the running total.  After $N$ steps:
+\begin{equation}
+  \bm{J}_N = \bm{\Sigma}_0^{-1} + \sum_{k=1}^{N} \bm{H}_k(\bm{s}_k, \bm{c}),
+  \label{eq:JN_static}
+\end{equation}
+and the PCRB is:
+\begin{equation}
+  \E\!\left[(\hat{\bm{x}} - \bm{x})(\hat{\bm{x}} - \bm{x})^\top\right] \;\succeq\; \left(\bm{\Sigma}_0^{-1} + \sum_{k=1}^{N} \bm{H}_k(\bm{s}_k, \bm{c})\right)^{-1}.
+  \label{eq:pcrb_static}
+\end{equation}
+
+\begin{remark}
+The information is additive regardless of whether $\bm{s}_k$ is fixed or adaptive.  Adaptivity affects the \emph{value} of each $\bm{H}_k$ (by choosing $\bm{s}_k$ based on the evolving posterior), but not the additive structure.
+\end{remark}
+
+%===============================================================================
+\section{Specialization: Nonlinear Gaussian Measurement}
+%===============================================================================
+
+Now suppose the observation model is:
+\begin{equation}
+  \bm{y}_k = \bm{h}(\bm{x}, \bm{s}_k, \bm{c}) + \bm{v}_k, \qquad \bm{v}_k \sim \mathcal{N}(\bm{0}, \bm{R}_k),
+  \label{eq:gauss_obs}
+\end{equation}
+where $\bm{h}: \R^{d_x} \times \R^{d_s} \times \R^{d_c} \to \R^{d_y}$ is a (possibly nonlinear) measurement function and $\bm{R}_k$ is the noise covariance (which may depend on $\bm{s}_k$ and $\bm{c}$ in general).
+
+The log-likelihood is:
+\begin{equation}
+  \ln p(\bm{y}_k \mid \bm{x}, \bm{s}_k) = -\tfrac{1}{2}(\bm{y}_k - \bm{h})^\top \bm{R}_k^{-1}(\bm{y}_k - \bm{h}) + \text{const},
+\end{equation}
+so the measurement FIM \eqref{eq:H} evaluates to:
+\begin{equation}
+  \bm{H}_k(\bm{s}_k, \bm{c}) = \E_{\bm{x}}\!\left[\bm{F}_k^\top \bm{R}_k^{-1} \bm{F}_k\right],
+  \label{eq:H_gauss}
+\end{equation}
+where $\bm{F}_k = \frac{\partial \bm{h}}{\partial \bm{x}}\big|_{\bm{x}, \bm{s}_k, \bm{c}} \in \R^{d_y \times d_x}$ is the measurement Jacobian.  The expectation is over the true state $\bm{x}$ (and, if $\bm{s}_k$ is adaptive, over the random policy).
+
+For \textbf{isotropic noise} $\bm{R}_k = \sigma^2 \bm{I}$, this simplifies to:
+\begin{equation}
+  \bm{H}_k = \frac{1}{\sigma^2}\,\E_{\bm{x}}\!\left[\bm{F}_k^\top \bm{F}_k\right].
+  \label{eq:H_iso}
+\end{equation}
+
+\begin{remark}[Nonlinearity and the expectation]
+When $\bm{h}$ is nonlinear, the Jacobian $\bm{F}_k$ depends on $\bm{x}$, so $\bm{H}_k$ involves an expectation over the state distribution.  In practice (e.g., in an EKF), this expectation is approximated by evaluating $\bm{F}_k$ at the current posterior mean $\bm{\mu}_k$.  This is exact when $\bm{h}$ is linear in $\bm{x}$ (since $\bm{F}_k$ is then independent of $\bm{x}$), and a first-order approximation otherwise.
+\end{remark}
+
+\subsection{Combined Static + Gaussian Form}
+
+Combining Sections~2 and 3, for a static state observed through nonlinear Gaussian measurements with isotropic noise:
+\begin{equation}
+  \boxed{\bm{J}_N = \bm{\Sigma}_0^{-1} + \frac{1}{\sigma^2}\sum_{k=1}^{N} \E_{\bm{x}}\!\left[\bm{F}_k(\bm{x}, \bm{s}_k, \bm{c})^\top \bm{F}_k(\bm{x}, \bm{s}_k, \bm{c})\right]}
+  \label{eq:JN_combined}
+\end{equation}
+with PCRB:
+\begin{equation}
+  \E\!\left[\|\hat{\bm{x}} - \bm{x}\|^2\right] \;\geq\; \tr\!\left(\bm{J}_N^{-1}\right).
+  \label{eq:mse_bound}
+\end{equation}
+
+This is the \emph{tightest} scalar bound on the mean squared error achievable by any estimator, given the adaptive policy $\{\bm{s}_k\}$ and device geometry $\bm{c}$.
+
+\begin{remark}[Two notions of $\bm{J}_N$]
+\label{rem:two_JN}
+Strictly speaking, the BIM $\bm{J}_N$ of \eqref{eq:bim} and \eqref{eq:JN_combined} is the \emph{expected} information, with $\mathbb{E}_{\bm{x}}[\cdot]$ \emph{inside} the sum.  In Section~\ref{sec:dopt} below we will optimize the \emph{state-dependent} information $\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c}) = \bm{\Sigma}_0^{-1} + \sigma^{-2}\sum_k \bm{F}_k(\bm{x})^\top \bm{F}_k(\bm{x})$ under the Bayesian D-optimal criterion $\mathbb{E}_{\bm{x}}[-\ln\det\bm{J}_N(\bm{x})]$, which places the expectation \emph{outside} the $\ln\det$.  The two are related by Jensen's inequality, $\mathbb{E}_{\bm{x}}[\ln\det\bm{J}_N(\bm{x})] \le \ln\det\mathbb{E}_{\bm{x}}[\bm{J}_N(\bm{x})]$, and differ in general; we use the same symbol $\bm{J}_N$ for both and distinguish them by whether an explicit $\bm{x}$ argument is shown.  The Bayesian D-optimal objective is the sharper of the two and is the criterion minimized in practice.
+\end{remark}
+
+%===============================================================================
+\section{D-Optimal Joint Design}
+\label{sec:dopt}
+%===============================================================================
+
+\subsection{The Joint Optimization Problem}
+
+For a static state with additive information \eqref{eq:JN_combined}, the PCRB depends on $\bm{c}$ and $\bm{s}_{1:N}$ only through $\bm{J}_N$.  Since information accumulates additively and the bound holds for \emph{any} choice of sensor parameters (adaptive or not), we can optimize directly over fixed design variables $(\bm{c}, \bm{s}_1, \ldots, \bm{s}_N)$ without introducing an adaptive policy:
+\begin{equation}
+  \boxed{\min_{\bm{c},\, \bm{s}_1, \ldots, \bm{s}_N} \;\E_{\bm{x}}\!\left[-\ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c})\right]}
+  \label{eq:joint_opt}
+\end{equation}
+where
+\begin{equation}
+  \bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c}) = \bm{\Sigma}_0^{-1} + \frac{1}{\sigma^2}\sum_{k=1}^{N} \bm{F}_k(\bm{x}, \bm{s}_k, \bm{c})^\top \bm{F}_k(\bm{x}, \bm{s}_k, \bm{c}).
+  \label{eq:JN_joint}
+\end{equation}
+
+This is a \textbf{single-level} optimization over $d_c + N \cdot d_s$ variables.  The objective maximizes $\E_{\bm{x}}[\ln\det\bm{J}_N(\bm{x})]$, equivalently minimizing the expected log-volume of the Cram\'er--Rao uncertainty ellipsoid ($\propto (\det\bm{J}_N)^{-1/2}$), which is the Bayesian D-optimal criterion.
+
+\begin{remark}[Fixed design is a well-posed single-level problem]
+The objective \eqref{eq:joint_opt} is well-defined purely over fixed design variables $(\bm{c}, \bm{s}_{1:N})$: each summand $\bm{F}_k(\bm{x}, \bm{s}_k, \bm{c})^\top\bm{F}_k(\bm{x}, \bm{s}_k, \bm{c})$ depends on $\bm{s}_k$ and $\bm{c}$ but not on $\bm{y}_{1:k-1}$ or on $\bm{s}_{j\neq k}$, so the outer optimization is single-level.  When $\bm{F}_k$ is independent of $\bm{x}$ (linear measurement), this fixed design is globally optimal; when $\bm{F}_k$ depends on $\bm{x}$, an adaptive policy $\bm{s}_k(\bm{y}_{1:k-1})$ can in principle do strictly better, and the maximum such improvement is bounded by the \emph{expected ignorance gap} analyzed in Section~\ref{subsec:ignorance_gap}.
+\end{remark}
+
+\begin{remark}[Nonlinear caveat]
+When $\bm{h}$ is nonlinear, $\bm{F}_k$ depends on the unknown $\bm{x}$, so the \emph{realized} information $\bm{F}_k^\top \bm{F}_k$ at a particular $\bm{x}$ depends on the true state.  The design objective \eqref{eq:joint_opt} takes the expectation over $\bm{x}$, yielding an \emph{average-case} design.  An adaptive policy could exploit intermediate posterior updates to target the remaining uncertainty more precisely, but this is a second-order effect when: (i)~the Jacobian varies weakly over the prior support, or (ii)~the prior is narrow enough that $\bm{F}_k(\bm{x}, \cdot) \approx \bm{F}_k(\bm{\mu}_0, \cdot)$ for most $\bm{x}$.
+\end{remark}
+
+\subsection{Structure and Gradient}
+
+Problem~\eqref{eq:joint_opt} is smooth in $(\bm{c}, \bm{s}_{1:N})$ when $\bm{h}$ is smooth, so gradient-based optimization applies.  Componentwise, the integrand's gradient (at a fixed $\bm{x}$) is:
+\begin{equation}
+  \frac{\partial}{\partial s_{k,i}}\!\left(-\ln\det\bm{J}_N(\bm{x})\right) = -\frac{2}{\sigma^2}\,\tr\!\left(\bm{J}_N(\bm{x})^{-1}\,\bm{F}_k^\top \frac{\partial \bm{F}_k}{\partial s_{k,i}}\right),
+  \label{eq:grad_s}
+\end{equation}
+where the chain rule uses $\frac{\partial}{\partial A}\ln\det A = A^{-\top}$ (for invertible $A$, reducing to $A^{-1}$ on the symmetric positive-definite $\bm{J}_N$).  The objective gradient is obtained by taking $\E_{\bm{x}}[\cdot]$ of \eqref{eq:grad_s}, estimated by Monte Carlo in practice.  The gradient with respect to $\bm{c}$ is analogous, with $\partial\bm{F}_k/\partial c_j$ propagated through the physics simulation.
+
+The $\bm{J}_N^{-1}$ factor couples all measurements: the gradient with respect to $\bm{s}_k$ depends on the information from \emph{all other} measurements through $\bm{J}_N$.  The classical A-optimal objective $\min\tr(\bm{J}_N^{-1})$ has the same coupling structure (its gradient is $-\tr(\bm{J}_N^{-1}(\partial\bm{J}_N/\partial s_{k,i})\bm{J}_N^{-1})$).  By contrast, the \emph{myopic BFIM-trace} criterion $\max\sum_k\tr(\bm{F}_k^\top\bm{F}_k)$ --- which maximizes $\tr(\bm{J}_N)$ rather than minimizing $\tr(\bm{J}_N^{-1})$ --- has per-step decoupled gradients (only the $k$-th summand depends on $\bm{s}_k$), and is the criterion used by the inner argmax in the BFIMGaussian codebase (see Section~\ref{subsec:ekf_relation}).
+
+\subsection{Comparison of Design Criteria}
+
+The classical alphabetic optimality criteria are scalar functions of $\bm{J}_N$:
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Criterion & Objective & Interpretation \\
+\midrule
+A-optimal & $\min \tr(\bm{J}_N^{-1})$ & Minimize average variance \\
+D-optimal & $\min -\ln\det\bm{J}_N$ & Minimize volume of confidence ellipsoid \\
+E-optimal & $\min \lambda_{\max}(\bm{J}_N^{-1})$ & Minimize worst-case variance \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+D-optimality has several advantages for sensor design:
+\begin{itemize}[nosep]
+  \item \textbf{Invariance}: $\det\bm{J}_N$ is invariant under reparametrization of $\bm{x}$ (up to the Jacobian determinant), while $\tr(\bm{J}_N^{-1})$ is not.
+  \item \textbf{Balanced information}: D-optimality penalizes singular or near-singular $\bm{J}_N$ more severely than A-optimality, encouraging measurements that inform \emph{all} directions of the state space.
+  \item \textbf{Information-theoretic meaning}: for Gaussian posteriors, $-\frac{1}{2}\ln\det(2\pi e\,\bm{J}_N^{-1})$ is the differential entropy; D-optimality minimizes the posterior entropy, equivalently maximizing the mutual information $I(\bm{x}; \bm{y}_{1:N})$.
+\end{itemize}
+
+The criteria are related by the AM-GM inequality:
+\begin{equation}
+  \frac{1}{d_x}\tr(\bm{J}_N^{-1}) \;\geq\; \left(\det \bm{J}_N^{-1}\right)^{1/d_x} = \exp\!\left(-\frac{\ln\det\bm{J}_N}{d_x}\right),
+\end{equation}
+with equality when $\bm{J}_N$ is a scalar multiple of the identity (isotropic information).  For small $d_x$ (e.g., $d_x = 4$), minimizing any one criterion tends to minimize the others.
+
+\subsection{Relationship to the Adaptive EKF Approach}
+\label{subsec:ekf_relation}
+
+The BFIMGaussian codebase implements a bilevel approximation to problem~\eqref{eq:joint_opt}:
+\begin{enumerate}[nosep]
+  \item \textbf{Sensor parameters} are not optimized jointly at design time.  Instead, at run time, a myopic policy selects $\bm{s}_k$ at each EKF step to maximize the per-step BFIM trace $\tr(\bm{F}_k^\top \bm{F}_k / \sigma^2)$ (one-step greedy \emph{information-trace} criterion; this is distinct from classical A-optimality $\min\tr(\bm{J}_N^{-1})$ -- the myopic criterion maximizes the trace of the FIM rather than minimizing the trace of its inverse).
+  \item \textbf{Geometry} $\bm{c}$ is optimized end-to-end through the EKF + myopic policy, with gradients through the inner $\argmax$ via the Implicit Function Theorem.
+  \item The \textbf{training loss} $\mathcal{L} = \E[\sum_i ((\mu_{N,i} - x_{0,i})/x_{0,i})^2]$ is a Monte Carlo estimate of the \emph{relative} MSE, which upper-bounds the correspondingly-weighted CRB $\sum_i \E_{\bm{x}}[(\bm{J}_N^{-1})_{ii}/x_{0,i}^2]$ for any unbiased estimator.
+\end{enumerate}
+
+This bilevel approach is a \emph{sufficient but not necessary} way to solve \eqref{eq:joint_opt}.  The key differences:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+& Joint D-optimal \eqref{eq:joint_opt} & Bilevel EKF (current) \\
+\midrule
+Sensor params & fixed $\bm{s}_{1:N}$, optimized at design time & adaptive $\bm{s}_k(\bm{y}_{1:k-1})$, run time \\
+Criterion & $-\ln\det\bm{J}_N$ (D-optimal) & $\E\bigl[\sum_i((\mu_{N,i}-x_{0,i})/x_{0,i})^2\bigr]$ (relative MSE) \\
+Structure & single-level, $d_c + N d_s$ variables & bilevel (IFT through inner $\argmax$) \\
+Estimator & any efficient estimator & EKF (fixed) \\
+AD complexity & $\nabla_{\bm{c}, \bm{s}_{1:N}}$ of $\ln\det$ & $\nabla_{\bm{c}}$ through EKF + IFT \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The joint D-optimal formulation is simpler: no inner optimization, no IFT, no EKF in the gradient computation.  It directly optimizes the fundamental information-theoretic quantity.  The bilevel EKF approach has the advantage of jointly tuning the geometry to the specific estimator (the EKF) that will be used at run time, including any suboptimalities of the EKF linearization.
+
+\subsection{Baselines}
+
+To isolate the contributions of geometry optimization and sensor optimization, we define three baselines:
+
+\begin{enumerate}
+  \item \textbf{Random geometry, fixed sensor} ($\bm{c}$ random, $\bm{s}_k = \bm{s}_0$ for all $k$):
+  \begin{equation}
+    \bm{J}_N^{(1)} = \bm{\Sigma}_0^{-1} + \frac{N}{\sigma^2}\,\E_{\bm{x}}\!\left[\bm{F}(\bm{x}, \bm{s}_0, \bm{c}_{\text{rand}})^\top \bm{F}(\bm{x}, \bm{s}_0, \bm{c}_{\text{rand}})\right].
+  \end{equation}
+
+  \item \textbf{Optimized geometry, fixed sensor} (FI baseline: $\bm{c}^\star$ optimized, $\bm{s}_k = \bm{s}_0$):
+  \begin{equation}
+    \bm{J}_N^{(2)} = \bm{\Sigma}_0^{-1} + \frac{N}{\sigma^2}\,\E_{\bm{x}}\!\left[\bm{F}(\bm{x}, \bm{s}_0, \bm{c}^\star)^\top \bm{F}(\bm{x}, \bm{s}_0, \bm{c}^\star)\right].
+  \end{equation}
+
+  \item \textbf{Jointly optimized geometry and sensors} (D-optimal: $\bm{c}^\star, \bm{s}_{1:N}^\star$ from \eqref{eq:joint_opt}):
+  \begin{equation}
+    \bm{J}_N^{(3)} = \bm{\Sigma}_0^{-1} + \frac{1}{\sigma^2}\sum_{k=1}^{N} \E_{\bm{x}}\!\left[\bm{F}(\bm{x}, \bm{s}_k^\star, \bm{c}^\star)^\top \bm{F}(\bm{x}, \bm{s}_k^\star, \bm{c}^\star)\right].
+  \end{equation}
+\end{enumerate}
+
+By construction, $\det\bm{J}_N^{(3)} \geq \det\bm{J}_N^{(2)} \geq \det\bm{J}_N^{(1)}$.  The gap $(1) \to (2)$ quantifies the value of geometry optimization at fixed sensors; the gap $(2) \to (3)$ quantifies the additional value of optimizing the sensor sequence.  Note that baselines (1) and (2) use a single repeated $\bm{s}_0$, so $\bm{J}_N^{(1,2)} = \bm{\Sigma}_0^{-1} + N \cdot \bm{H}(\bm{s}_0, \bm{c})$---the information scales linearly with $N$.  Baseline (3) allows distinct $\bm{s}_k$ at each step, potentially achieving better conditioning of $\bm{J}_N$ (higher determinant) even if $\tr(\bm{J}_N)$ is similar.
+
+%===============================================================================
+\section{Discussion}
+%===============================================================================
+
+\subsection{Tightness of the PCRB}
+
+For linear Gaussian models ($\bm{h}$ linear in $\bm{x}$, Gaussian prior and noise), the Kalman filter achieves the PCRB exactly: $\bm{\Sigma}_N^{\text{KF}} = \bm{J}_N^{-1}$.  The EKF is a first-order approximation; its covariance satisfies $\bm{\Sigma}_N^{\text{EKF}} \succeq \bm{J}_N^{-1}$ but may be loose when the measurement nonlinearity is strong.
+
+In practice, the optimized-geometry EKF achieves Mahalanobis$^2 \approx 0.13$ (vs.\ expected $d_x = 4$), indicating that the actual errors are well below the EKF-reported covariance.  This suggests that the nonlinear measurement function provides more information than the linearization captures---a strong argument for D-optimal design directly on $\bm{J}_N$ rather than on the EKF's approximate covariance.
+
+\subsection{The Ignorance Gap: Quantifying the Value of Adaptation}
+\label{subsec:ignorance_gap}
+
+For a static state, the D-optimal fixed design \eqref{eq:joint_opt} solves the sensor selection problem at design time.  An adaptive policy (choosing $\bm{s}_k$ at run time based on $\bm{y}_{1:k-1}$) can potentially do better by exploiting intermediate observations to learn about $\bm{x}$ and tailor subsequent measurements.  The following analysis makes this comparison precise.
+
+\subsubsection{Oracle, fixed design, and the gap}
+
+Define the \emph{oracle} value for a specific state $\bm{x}$:
+\begin{equation}
+  V_{\text{oracle}}(\bm{x}) = \max_{\bm{s}_{1:N}} \ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c}),
+  \label{eq:oracle}
+\end{equation}
+i.e., the best possible information if the true $\bm{x}$ were known at design time.  The fixed D-optimal design achieves:
+\begin{equation}
+  V_{\text{fixed}} = \max_{\bm{s}_{1:N}} \E_{\bm{x}}\!\left[\ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c})\right],
+  \label{eq:fixed}
+\end{equation}
+with optimal sensors $\bm{s}^\star_{1:N}$.
+
+The \textbf{ignorance gap} at $\bm{x}$ is:
+\begin{equation}
+  \boxed{IG(\bm{x}) = V_{\text{oracle}}(\bm{x}) - \ln\det\bm{J}_N(\bm{x}, \bm{s}^\star_{1:N}, \bm{c}) \;\geq\; 0.}
+  \label{eq:IG}
+\end{equation}
+This measures how much better the sensors \emph{could} be if tailored to the specific $\bm{x}$, relative to the best average-case design.  The gap is zero when the oracle-optimal sensors do not depend on $\bm{x}$.
+
+\subsubsection{The expected ignorance gap bounds the value of adaptation}
+
+Any adaptive policy $\pi = \{\pi_k: \bm{y}_{1:k-1} \mapsto \bm{s}_k\}$ achieves an expected information:
+\begin{equation}
+  V_{\text{adaptive}} = \E_{\bm{x}, \bm{y}}\!\left[\ln\det\bm{J}_N(\bm{x}, \pi(\bm{y}_{1:N-1}), \bm{c})\right].
+\end{equation}
+This is bounded by:
+\begin{equation}
+  V_{\text{fixed}} \;\leq\; V_{\text{adaptive}} \;\leq\; \E_{\bm{x}}\!\left[V_{\text{oracle}}(\bm{x})\right],
+  \label{eq:bounds}
+\end{equation}
+where the left inequality holds because the fixed design is a special case of a constant policy, and the right because no policy can beat the oracle.  Therefore:
+\begin{equation}
+  \boxed{0 \;\leq\; V_{\text{adaptive}} - V_{\text{fixed}} \;\leq\; \E_{\bm{x}}\!\left[IG(\bm{x})\right].}
+  \label{eq:evpi}
+\end{equation}
+
+The expected ignorance gap $\E_{\bm{x}}[IG(\bm{x})]$ is an \textbf{upper bound on the value of the optimal adaptive policy} over the best fixed design.  This is the \emph{Expected Value of Perfect Information} (EVPI) from decision theory.
+
+\begin{corollary}
+If $\E_{\bm{x}}[IG(\bm{x})] \approx 0$, then no adaptive policy can significantly improve over the D-optimal fixed design \eqref{eq:joint_opt}.
+\end{corollary}
+
+\subsubsection{Achievable fraction of the gap}
+
+An adaptive policy that achieves fraction $\alpha \in [0,1]$ of the gap gives:
+\begin{equation}
+  V_{\text{adaptive}} = V_{\text{fixed}} + \alpha \cdot \E_{\bm{x}}[IG(\bm{x})].
+\end{equation}
+The achievable $\alpha$ depends on:
+\begin{itemize}[nosep]
+  \item \textbf{SNR / posterior concentration rate}: if after $k \ll N$ steps the posterior is tightly concentrated around $\bm{x}$, the remaining $N - k$ steps can use near-oracle sensors.  High SNR $\Rightarrow$ high $\alpha$.
+  \item \textbf{Number of steps $N$}: more steps provide more budget to ``spend'' early measurements on learning $\bm{x}$ and later measurements on oracle-optimal sensing.
+  \item \textbf{Shape of $IG(\bm{x})$}: if the oracle sensors vary smoothly with $\bm{x}$, even a rough posterior estimate suffices to nearly match the oracle.
+\end{itemize}
+
+\subsubsection{Diagnostic statistics of the ignorance gap}
+
+The distribution of $IG(\bm{x})$ over the prior provides a complete picture of when adaptation matters:
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Statistic & Interpretation \\
+\midrule
+$\E_{\bm{x}}[IG(\bm{x})]$ & Upper bound on adaptation value (EVPI, in nats) \\
+$\text{std}_{\bm{x}}[IG(\bm{x})] / \E[IG]$ & Heterogeneity: if large, benefit is concentrated on certain $\bm{x}$ \\
+$\max_{\bm{x}} IG(\bm{x})$ & Worst-case suboptimality of fixed design \\
+$\Pr(IG(\bm{x}) > \epsilon)$ & Fraction of state space where adaptation matters \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{When is the ignorance gap small?}
+
+The gap $IG(\bm{x}) = 0$ for all $\bm{x}$ if and only if $\argmax_{\bm{s}_{1:N}} \ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c})$ does not depend on $\bm{x}$---i.e., the same sensor sequence is optimal regardless of the true state.  This holds exactly when $\bm{F}(\bm{x}, \bm{s}, \bm{c})$ is independent of $\bm{x}$ (linear measurement model).
+
+More generally, $IG(\bm{x})$ is small when the Jacobian's $\bm{x}$-dependence is weak relative to its $\bm{s}$-dependence.  In our photonic sensor problem, the Jacobian at the operating point is governed by the Taylor expansion of the S-matrix, $S(\bm{x}) \approx S_0 + (\partial S/\partial n)|_0 \, \Delta n_i + \tfrac12(\partial^2 S/\partial n^2)|_0\,\Delta n_i^2$, so that componentwise
+\begin{equation}
+  \frac{\partial S}{\partial (\Delta n_i)} \;=\; \frac{\partial S}{\partial n}\bigg|_0 \;+\; \frac{\partial^2 S}{\partial n^2}\bigg|_0 \cdot \Delta n_i.
+\end{equation}
+For $\Delta n \in [10^{-5}, 10^{-4}]$, the second-order correction is a $\sim\!10^{-4}$ relative perturbation to the Jacobian (dimensionless).  This predicts $IG(\bm{x}) \approx 0$ uniformly over the prior, implying that \textbf{adaptation has negligible value for this problem}.
+
+\subsubsection{Computability}
+
+The ignorance gap is directly computable from the D-optimal solution:
+\begin{enumerate}[nosep]
+  \item Take the optimized geometry $\bm{c}^\star$ and fixed sensors $\bm{s}^\star_{1:N}$ from \eqref{eq:joint_opt}.
+  \item For a Monte Carlo sample of $\bm{x}$ values from the prior:
+  \begin{enumerate}[nosep]
+    \item Evaluate $\ln\det\bm{J}_N(\bm{x}, \bm{s}^\star_{1:N}, \bm{c}^\star)$ (the fixed-design value at this $\bm{x}$).
+    \item Solve $\max_{\bm{s}_{1:N}} \ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c}^\star)$ (a small $N \cdot d_s = 6$-variable optimization).
+    \item Compute $IG(\bm{x})$ as the difference.
+  \end{enumerate}
+  \item Report $\E[IG]$, $\text{std}[IG]$, $\max[IG]$.
+\end{enumerate}
+If $\E[IG] < 1$ nat (equivalently, the oracle increases $\det\bm{J}_N$ by less than a factor of $e$, shrinking the uncertainty ellipsoid volume $\propto(\det\bm{J}_N)^{-1/2}$ by less than $\sqrt{e}$), the fixed D-optimal design is essentially as good as any adaptive policy.
+
+\subsubsection{The Bellman equation for adaptive D-optimal sensing}
+
+We now derive the optimal adaptive policy from first principles, showing how the ignorance gap decomposes the value function into an oracle ceiling minus a belief penalty that the policy minimizes.
+
+\paragraph{Setup and notation.}
+Write $\Phi(\bm{x}, \bm{s}_{1:N}) = \ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c})$ for the log-information at state $\bm{x}$ with sensor sequence $\bm{s}_{1:N}$.  An adaptive policy $\pi = \{\pi_1, \ldots, \pi_N\}$ maps the observation history to sensor actions: $\bm{s}_k = \pi_k(\bm{y}_{1:k-1})$.  Let $b_k = p(\bm{x} \mid \bm{y}_{1:k-1})$ denote the posterior belief after $k-1$ observations.
+
+\paragraph{Value-to-go.}
+Define the \emph{value-to-go} at step $k$, given belief $b_k$ and committed sensors $\bm{s}_{1:k-1}$:
+\begin{align}
+  W_k(b_k) &= \max_{\bm{s}_k} \; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right], \label{eq:bellman} \\
+  W_{N+1}(b_{N+1}) &= \E_{\bm{x} \mid b_{N+1}}\!\left[\Phi(\bm{x}, \bm{s}_{1:N})\right], \label{eq:terminal}
+\end{align}
+where $b_{k+1}$ is the Bayesian posterior update of $b_k$ given $(\bm{y}_k, \bm{s}_k)$.  This is a POMDP over the continuous belief space---intractable in general.
+
+\paragraph{Oracle value-to-go.}
+Define the \emph{oracle value-to-go}: the best remaining log-information if $\bm{x}$ were known, given sensors $\bm{s}_{1:k-1}$ already committed:
+\begin{equation}
+  V_k^\star(\bm{x}) = \max_{\bm{s}_{k:N}} \Phi(\bm{x}, \bm{s}_{1:k-1}, \bm{s}_{k:N}).
+  \label{eq:oracle_vtg}
+\end{equation}
+Let $V_{k+1}^\star(\bm{x};\bm{s}_k) = \max_{\bm{s}_{k+1:N}}\Phi(\bm{x}, \bm{s}_{1:k-1}, \bm{s}_k, \bm{s}_{k+1:N})$ denote the oracle's value-to-go after committing $\bm{s}_k$ (the prefix $\bm{s}_{1:k-1}$ is suppressed; it is fixed throughout the recursion).  Then $V_k^\star$ satisfies its own (trivial) recursion,
+\begin{equation}
+  V_k^\star(\bm{x}) = \max_{\bm{s}_k} V_{k+1}^\star(\bm{x};\bm{s}_k),
+\end{equation}
+since the oracle observes $\bm{x}$ directly and faces no uncertainty.
+
+The adaptive policy can never exceed the oracle:
+\begin{equation}
+  W_k(b_k) \;\leq\; \E_{\bm{x} \mid b_k}\!\left[V_k^\star(\bm{x})\right].
+  \label{eq:oracle_bound}
+\end{equation}
+
+\paragraph{Conditional ignorance gap.}
+Define the \emph{conditional ignorance gap} at step $k$:
+\begin{equation}
+  \boxed{\Gamma_k(b_k) = \E_{\bm{x} \mid b_k}\!\left[V_k^\star(\bm{x})\right] - W_k(b_k) \;\geq\; 0.}
+  \label{eq:cond_gap}
+\end{equation}
+This measures the information cost of not knowing $\bm{x}$ at step $k$, given the current belief.  It generalizes the (unconditional) ignorance gap: at $k=1$ with the prior, $\Gamma_1(\text{prior}) = \E_{\bm{x}}[V_{\text{oracle}}(\bm{x})] - V_{\text{optimal adaptive}}$ is the residual gap that even the optimal adaptive policy cannot close.
+
+\subsubsection{The gap dynamic program}
+
+Substituting $W_k = \E_{\bm{x}|b_k}[V_k^\star] - \Gamma_k$ into the Bellman equation \eqref{eq:bellman} yields a recursion on the conditional gap $\Gamma_k$.
+
+\paragraph{One-step Jensen gap.}
+Using $V_k^\star(\bm{x}) = \max_{\bm{s}_k} V_{k+1}^\star(\bm{x};\bm{s}_k)$, define the \emph{one-step conditional Jensen gap}:
+\begin{equation}
+  \Delta_k(b_k) = \E_{\bm{x} \mid b_k}\!\left[\max_{\bm{s}_k} V_{k+1}^\star(\bm{x};\bm{s}_k)\right] - \max_{\bm{s}_k}\, \E_{\bm{x} \mid b_k}\!\left[V_{k+1}^\star(\bm{x};\bm{s}_k)\right] \;\geq\; 0,
+  \label{eq:jensen_gap}
+\end{equation}
+where the inequality is Jensen's (max is convex).  This is the \emph{irreducible} one-step cost of not knowing $\bm{x}$: it vanishes when the oracle-optimal $\bm{s}_k$ is the same for all $\bm{x}$ in the posterior support, and it vanishes when the posterior $b_k$ is a point mass.
+
+\paragraph{Gap recursion.}
+Let $P_k(\bm{s}_k) = \E_{\bm{x}|b_k}[V_{k+1}^\star(\bm{x};\bm{s}_k)]$ denote the exploitative (certainty-equivalent) value of action $\bm{s}_k$ and $Q_k(\bm{s}_k) = \E_{\bm{y}_k|b_k,\bm{s}_k}[\Gamma_{k+1}(b_{k+1})]$ the expected future gap.  Substituting $W_k = \E_{\bm{x}|b_k}[V_k^\star] - \Gamma_k$ into \eqref{eq:bellman} and using $\E_{\bm{x}|b_k}[V_k^\star(\bm{x})] = \Delta_k(b_k) + \max_{\bm{s}_k} P_k(\bm{s}_k)$ yields:
+\begin{equation}
+  \boxed{\Gamma_k(b_k) = \Delta_k(b_k) + \underbrace{\max_{\bm{s}_k}P_k(\bm{s}_k) - \max_{\bm{s}_k}[P_k(\bm{s}_k) - Q_k(\bm{s}_k)]}_{\displaystyle \ge \min_{\bm{s}_k} Q_k(\bm{s}_k) \ge 0}.}
+  \label{eq:gap_dp}
+\end{equation}
+
+This is the \textbf{gap dynamic program}.  The total conditional gap at step $k$ decomposes into:
+\begin{itemize}[nosep]
+  \item $\Delta_k(b_k)$: the \textbf{irreducible Jensen gap} at this step---the cost of the oracle's ability to pick the best $\bm{s}_k$ for each $\bm{x}$, which no policy can avoid given belief $b_k$.
+  \item $\max P_k - \max(P_k - Q_k)$: the \textbf{future-gap term}, which the policy \emph{can} influence by choosing $\bm{s}_k$ to concentrate $b_{k+1}$ and thereby shrink $\Delta_{k+1}, \ldots, \Delta_N$.  It splits as $[P_k(\bm{s}_k^P) - P_k(\bm{s}_k^{\text{full}})] + Q_k(\bm{s}_k^{\text{full}})$, where $\bm{s}_k^P = \argmax P_k$ is the exploitative action and $\bm{s}_k^{\text{full}} = \argmax(P_k - Q_k)$ is the full Bellman optimum.  The first bracket is the \emph{exploitation regret} of deviating from the myopic action to reduce future uncertainty; the second is the residual future gap.
+\end{itemize}
+
+When the myopic and full-Bellman actions coincide ($\bm{s}_k^P = \bm{s}_k^{\text{full}}$), the exploitation regret vanishes and the recursion simplifies to $\Gamma_k = \Delta_k + Q_k(\bm{s}_k^P)$.  The weaker but cleaner bound $\Gamma_k \ge \Delta_k + \min_{\bm{s}_k} Q_k(\bm{s}_k)$ holds unconditionally and is used below to unroll the recursion.
+
+\paragraph{Boundary condition.}
+At the terminal step, $\Gamma_{N+1} = 0$ (no remaining decisions).  Unrolling the simpler lower-bound form gives:
+\begin{equation}
+  \Gamma_1(\text{prior}) \;\geq\; \sum_{k=1}^{N} \E\!\left[\Delta_k(b_k)\right] \quad \text{under the optimal policy,}
+  \label{eq:gap_sum}
+\end{equation}
+where the expectation is over the observation sequence induced by the policy.  The cumulative Jensen gap lower-bounds the total gap; equality holds when no step requires trading exploitation for exploration, which is the typical regime when the posterior concentrates fast relative to the curvature of the oracle map.
+
+\subsubsection{Interpretation: exploration--exploitation from first principles}
+
+The gap DP \eqref{eq:gap_dp} reveals the fundamental \emph{exploration--exploitation tradeoff} for adaptive sensing:
+
+\begin{enumerate}
+  \item \textbf{Exploitation} (maximize immediate value): choose $\bm{s}_k$ to maximize $P_k(\bm{s}_k) = \E_{\bm{x}|b_k}[V_{k+1}^\star(\bm{x};\bm{s}_k)]$---i.e., the best expected oracle value-to-go assuming the current belief is correct.  This is the certainty-equivalent or myopic policy.
+
+  \item \textbf{Exploration} (minimize future gap): choose $\bm{s}_k$ to minimize $Q_k(\bm{s}_k) = \E_{\bm{y}_k|b_k,\bm{s}_k}[\Gamma_{k+1}(b_{k+1})]$---i.e., concentrate the posterior $b_{k+1}$ to shrink the Jensen gaps $\Delta_{k+1}, \ldots, \Delta_N$ in all future steps.  A measurement that provides less immediate information but sharply concentrates the posterior in the direction where the oracle sensors vary most rapidly with $\bm{x}$ can be globally superior.
+\end{enumerate}
+
+The optimal $\bm{s}_k$ in \eqref{eq:gap_dp} balances these two objectives.  The balance depends on the \emph{horizon}: with many remaining steps, exploration is cheap (you have budget to ``recover'' from a less-informative measurement); with few remaining steps, exploitation dominates.
+
+\subsubsection{When the gap DP simplifies}
+
+Three regimes admit closed-form or near-closed-form solutions:
+
+\paragraph{Linear measurements ($\bm{F}$ independent of $\bm{x}$).}
+The oracle-optimal $\bm{s}_k$ does not depend on $\bm{x}$, so $\Delta_k = 0$ for all $k$ and all beliefs.  The gap DP is trivially $\Gamma_k = 0$: the fixed design is optimal, and the myopic policy coincides with the globally optimal policy.
+
+\paragraph{Fast posterior concentration (high SNR).}
+If after $k_0 \ll N$ steps the posterior is tightly concentrated ($b_k \approx \delta(\bm{x} - \hat{\bm{x}})$), then $\Delta_k \approx 0$ for $k > k_0$.  The gap is dominated by the first $k_0$ steps:
+\begin{equation}
+  \Gamma_1 \;\approx\; \sum_{k=1}^{k_0} \E[\Delta_k(b_k)].
+\end{equation}
+For the remaining $N - k_0$ steps, the certainty-equivalent policy $\bm{s}_k = \bm{s}_k^\star(\hat{\bm{x}}_{k-1})$ is near-optimal.  This is the common case in practice: a few initial measurements resolve most of the uncertainty, after which adaptation degenerates to the oracle policy evaluated at the posterior mean.
+
+\paragraph{Smooth oracle map ($\bm{s}^\star(\bm{x})$ Lipschitz).}
+If the oracle map $\bm{x} \mapsto \bm{s}^\star(\bm{x})$ is $L$-Lipschitz and the log-information $\Phi$ has bounded curvature $\kappa$ in $\bm{s}$ around the oracle, then:
+\begin{equation}
+  \Delta_k(b_k) \;\lesssim\; \kappa L^2 \, \Var_{\bm{x} \mid b_k}\!\left[\bm{x}\right],
+  \label{eq:delta_bound}
+\end{equation}
+where $\Var_{\bm{x}|b_k}[\bm{x}] = \tr(\bm{\Sigma}_{k-1})$ is the posterior variance.  Summing the per-step bound:
+\begin{equation}
+  \sum_{k=1}^{N} \E\!\left[\Delta_k(b_k)\right] \;\lesssim\; \kappa L^2 \sum_{k=1}^{N} \E\!\left[\tr(\bm{\Sigma}_{k-1})\right].
+  \label{eq:total_gap_bound}
+\end{equation}
+In the zero-exploitation-regret regime where \eqref{eq:gap_sum} is tight, this also bounds the total gap $\Gamma_1$ by the \emph{cumulative posterior variance} times the \emph{sensitivity of the oracle map}.  The bound connects the IG directly to estimator performance: a system with high Fisher information (fast variance reduction) and smooth oracle map (small $L$) has a small gap, regardless of $N$.
+
+\subsubsection{Practical policy from the gap DP}
+
+The gap DP \eqref{eq:gap_dp} suggests a practical two-phase policy:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Monitor} $\Delta_k(b_k)$ at each step.  This requires the oracle map $\bm{x} \mapsto \bm{s}^\star(\bm{x})$, which is a small ($N \cdot d_s = 6$-variable) optimization per $\bm{x}$, evaluated over samples from the current posterior.
+  \item \textbf{If $\Delta_k \ll 1$}: use the certainty-equivalent policy $\bm{s}_k = \bm{s}_k^\star(\hat{\bm{x}}_{k-1})$.  The gap is negligible; exploration has no value.
+  \item \textbf{If $\Delta_k$ is large}: choose $\bm{s}_k$ to maximize posterior concentration in the direction of steepest variation of the oracle map, i.e., along $\nabla_{\bm{x}} \bm{s}^\star(\bm{x}) \big|_{\hat{\bm{x}}}$.  This targets the component of $\bm{x}$ that most affects the optimal sensor choice.
+\end{enumerate}
+
+The crossover from exploration to exploitation occurs when the posterior width in the direction of $\nabla_{\bm{x}} \bm{s}^\star$ drops below the scale at which $\bm{s}^\star$ varies appreciably---after which the certainty-equivalent policy is indistinguishable from the oracle.
+
+\subsubsection{Joint optimization of geometry and adaptive policy}
+
+The full joint problem optimizes the device geometry $\bm{c}$ together with the adaptive policy:
+\begin{equation}
+  \max_{\bm{c}} \; W_1(\text{prior};\, \bm{c}),
+  \label{eq:joint_bellman}
+\end{equation}
+where $W_1(\text{prior};\, \bm{c})$ is the Bellman optimal value \eqref{eq:bellman} for geometry $\bm{c}$.  The geometry affects everything: the Jacobians $\bm{F}_k(\bm{x}, \bm{s}, \bm{c})$, the oracle map $\bm{s}^\star(\bm{x};\, \bm{c})$, and all gap terms $\Delta_k$.
+
+\paragraph{The envelope theorem.}
+At the optimal policy $\pi^\star$ for a given $\bm{c}$, the \emph{envelope theorem} (Danskin's theorem) gives:
+\begin{equation}
+  \frac{dW_1}{d\bm{c}} = \frac{\partial}{\partial \bm{c}} \E\!\left[\Phi\!\left(\bm{x},\, \pi^\star(\bm{y};\, \bm{c}),\, \bm{c}\right)\right]\bigg|_{\pi^\star \text{ fixed}}.
+  \label{eq:envelope}
+\end{equation}
+The first-order effect of changing the policy vanishes at the optimum.  We can differentiate as if the policy were frozen---only the direct effect of $\bm{c}$ on measurement quality matters, evaluated at whatever sensors the optimal policy happens to choose.
+
+This enables a \textbf{policy iteration} scheme:
+\begin{enumerate}[nosep]
+  \item \textbf{Policy step}: for current $\bm{c}$, solve or approximate the gap DP \eqref{eq:gap_dp} to obtain $\pi^\star(\bm{c})$.
+  \item \textbf{Geometry step}: take a gradient step on $\bm{c}$ using $\partial\Phi/\partial\bm{c}$ evaluated at the policy's sensor choices---the same FDFD adjoint computation used in the fixed-design optimization.
+  \item Repeat until convergence.
+\end{enumerate}
+
+\paragraph{Reduction by regime.}
+The ignorance gap determines how much of this machinery is needed:
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Regime & Joint problem reduces to & Solver \\
+\midrule
+$\E[IG] \approx 0$ & Fixed D-optimal: $\max_{\bm{c}, \bm{s}_{1:N}} \E[\Phi]$ & Single-level Adam \\
+$\E[IG]$ moderate & CE policy iteration & Oracle map + EKF + FDFD adjoint \\
+$\E[IG]$ large & Full gap DP + policy iteration & Parameterized policy + DP \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Connection to the existing bilevel approach.}
+The BFIMGaussian bilevel formulation (optimizing $\bm{c}$ end-to-end through a myopic EKF policy) is an instance of the joint problem \eqref{eq:joint_bellman} with the policy restricted to the class ``myopic BFIM-trace maximization + EKF state update.''  The Implicit Function Theorem (IFT) rrule used to differentiate through $\bm{s}_k^\star(\bm{\mu}_{k-1}, \bm{c})$ is precisely the envelope theorem \eqref{eq:envelope} applied to the inner sensor-selection argmax.  The gap analysis shows that this approach is near-optimal whenever $\E[IG]$ is small---which is the expected regime for weakly nonlinear measurement models.
+
+\subsection{Examples: When Is the Ignorance Gap Large?}
+
+The photonic sensor problem has near-zero ignorance gap because the Jacobian $\bm{F}$ depends only weakly on $\bm{x}$ (second-order Taylor correction $\sim\!10^{-4}$).  To build intuition for the gap DP and the exploration--exploitation tradeoff, we describe several problem classes where $IG(\bm{x})$ is large and has non-trivial structure.
+
+\subsubsection{Directional sensors with unknown source location}
+
+\paragraph{Setup.}
+An array of $N$ directional sensors (e.g., radar beams or directional antennas) must localize a point source at unknown position $\bm{x} = (x_1, x_2) \in \R^2$.  Each sensor $k$ is characterized by a pointing direction $\bm{s}_k = \theta_k \in [0, 2\pi)$, and the measurement is:
+\begin{equation}
+  y_k = A \cdot g(\theta_k - \phi(\bm{x})) + v_k, \qquad v_k \sim \mathcal{N}(0, \sigma^2),
+\end{equation}
+where $\phi(\bm{x}) = \arctan(x_2/x_1)$ is the bearing to the source and $g(\cdot)$ is a beam pattern (e.g., $g(\alpha) = \exp(-\alpha^2 / 2w^2)$ with beamwidth $w$).
+
+\paragraph{Why IG is large.}
+The Jacobian $\bm{F}_k = \partial y_k / \partial \bm{x}$ is proportional to $g'(\theta_k - \phi(\bm{x}))\,\nabla_{\bm{x}}\phi(\bm{x})$.  For a Gaussian beam, $|g'(\alpha)|$ peaks at $|\alpha|\approx w$, so the oracle pointing satisfies $\theta_k^\star(\bm{x}) \approx \phi(\bm{x}) \pm w$---the classical monopulse offset.  In either case the oracle sensors track $\phi(\bm{x})$, which varies over $[0, 2\pi)$ across the prior, so they depend strongly on $\bm{x}$.  The fixed design must spread beams to cover all possible bearings, wasting most measurements on empty directions.
+
+\paragraph{IG distribution.}
+$IG(\bm{x})$ is large and approximately uniform: every source direction is equally ``surprised'' by the fixed design's compromise.  The gap scales as $\sim N \ln(2\pi / w)$---linear in $N$ and logarithmic in the ratio of the prior bearing range to the beamwidth.  For narrow beams ($w \ll 2\pi$), adaptation is essential.
+
+\paragraph{Optimal policy.}
+The gap DP prescribes: use the first $\sim\!1$--$2$ measurements with pointings spread across $[0, 2\pi)$ to localize $\phi(\bm{x})$ (coarse angular scan, exploration), then point remaining beams at $\hat\phi \pm w$ (monopulse-style targeted pointing, exploitation).  The crossover is set by the posterior angular uncertainty dropping below the beamwidth $w$.
+
+\subsubsection{Multi-modal measurement function}
+
+\paragraph{Setup.}
+The measurement function $\bm{h}(\bm{x}, s, \bm{c})$ has multiple operating modes indexed by $s$, each of which is informative about different components of $\bm{x}$.  For example, in spectroscopy, $s$ selects the excitation wavelength, and different analytes (components of $\bm{x}$) absorb at different wavelengths.
+
+\paragraph{Concrete model.}
+Let $d_x = 4$, $s \in \{1, \ldots, M\}$ be a discrete mode, and:
+\begin{equation}
+  \bm{F}(\bm{x}, s) = \bm{F}_0(s) + \diag(\bm{x}) \cdot \bm{F}_1(s),
+\end{equation}
+where $\bm{F}_0(s)$ is a mode-dependent baseline and $\bm{F}_1(s)$ encodes the $\bm{x}$-dependent sensitivity.  If different modes are informative about different subsets of $\bm{x}$ components (e.g., mode 1 is sensitive to $x_1, x_2$; mode 2 to $x_3, x_4$), then the oracle selects modes based on which components have the largest remaining uncertainty---which depends on $\bm{x}$ through the $\diag(\bm{x}) \cdot \bm{F}_1$ term.
+
+\paragraph{IG distribution.}
+$IG(\bm{x})$ is large when $\bm{x}$ has components that are much larger than others: the oracle focuses on the dominant components (where $\diag(\bm{x}) \cdot \bm{F}_1$ is large), while the fixed design must hedge across all modes.  The distribution of $IG$ mirrors the distribution of the dynamic range $\max_i x_i / \min_i x_i$---broad when the prior allows disparate component magnitudes.
+
+\subsubsection{Threshold nonlinearity (phase transitions)}
+
+\paragraph{Setup.}
+The measurement sensitivity has a threshold: below a critical state value $x_c$, the measurement is uninformative; above $x_c$, it is highly informative.  This arises in, e.g., fluorescence (below a quenching threshold), material fracture (pre- vs.\ post-yield), or chemical detection (below the limit of detection).
+
+\paragraph{Model.}
+\begin{equation}
+  F(x, s) = s \cdot \sigma_\beta(x - x_c), \qquad \sigma_\beta(z) = \frac{1}{1 + e^{-\beta z}},
+\end{equation}
+where $s > 0$ is a gain parameter and $\sigma_\beta$ is a sigmoid with steepness $\beta$.  The oracle sets $s$ large when $x > x_c$ (amplify the signal) and small when $x < x_c$ (save measurement budget for other objectives or reduce noise amplification).
+
+\paragraph{IG distribution.}
+$IG(x)$ is concentrated near $x \approx x_c$: states far from the threshold have unambiguous optimal sensors (gain saturates), so the fixed design performs well.  States near the threshold face the largest oracle advantage, because the optimal $s$ switches rapidly with $x$.  The IG distribution is sharply peaked at $x_c$ with $\max IG \sim \ln(\beta)$.  Adaptation is most valuable when the prior straddles the threshold: $\Pr(x \approx x_c)$ is large.
+
+\subsubsection{High-dimensional state with structured sparsity}
+
+\paragraph{Setup.}
+The state $\bm{x} \in \R^{d_x}$ is high-dimensional but sparse: only $K \ll d_x$ components are nonzero (we use $K$ for the sparsity level to avoid collision with the step index $k$), with the support (which components are active) unknown.  The sensor $\bm{s}$ selects a measurement direction (e.g., a row of a sensing matrix in compressed sensing).
+
+\paragraph{Why IG is large.}
+The oracle knows the support and directs all measurements at the active components.  The fixed design must spread measurements across all $d_x$ directions to cover all possible supports.  The IG scales as $\sim N \ln(d_x / K)$---the log of the ratio of ambient dimension to sparsity, times the number of measurements.  This is precisely the regime where compressed sensing and adaptive sensing theory diverge.
+
+\paragraph{IG distribution.}
+$IG(\bm{x})$ depends on the support pattern: supports that are well-aligned with the fixed design's measurement directions have small $IG$; ``adversarial'' supports (e.g., not aligned with any standard basis direction when the fixed design uses random projections) have large $IG$.  The distribution is discrete, indexed by $\binom{d_x}{K}$ possible supports.
+
+\paragraph{Optimal policy.}
+The gap DP prescribes a two-phase strategy: (1)~\emph{support identification} using broad measurements (e.g., random projections), then (2)~\emph{targeted estimation} using measurements concentrated on the identified support.  This is the adaptive compressed sensing strategy of Haupt et al.\ (2011), here derived from the gap DP as the solution that minimizes $\sum \E[\Delta_k]$.
+
+\subsubsection{Summary: taxonomy of ignorance gap regimes}
+
+\begin{center}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Problem & $\E[IG]$ & IG distribution & Adaptation benefit \\
+\midrule
+Weakly nonlinear $\bm{F}$ (our problem) & $\approx 0$ & Point mass at 0 & Negligible \\
+Directional sensors & $\sim N\ln(2\pi/w)$ & Approximately uniform & Large, uniform \\
+Multi-modal spectroscopy & Moderate & Skewed (dynamic range) & Selective \\
+Threshold nonlinearity & $\sim \ln\beta \cdot \Pr(x \approx x_c)$ & Peaked at $x_c$ & Near threshold only \\
+Sparse high-dimensional & $\sim N\ln(d_x/K)$ & Discrete (support-dependent) & Large, support-dependent \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The common thread: $IG(\bm{x})$ is large when the optimal sensor \emph{depends strongly on $\bm{x}$}, which happens when (i)~the measurement has directional or modal selectivity, (ii)~the sensitivity has a threshold or switch, or (iii)~the state has structure (sparsity) that the sensor can exploit once revealed.
+
+\subsection{Why D-Optimality?}
+
+The joint problem \eqref{eq:joint_opt} extends classical D-optimal experimental design to:
+\begin{itemize}[nosep]
+  \item physical design variables ($\bm{c}$, device geometry) jointly with experimental controls ($\bm{s}_{1:N}$, sensor parameters),
+  \item nonlinear measurement models where $\bm{F}_k$ depends on the unknown $\bm{x}$,
+  \item multiple sequential measurements with potentially distinct sensor settings.
+\end{itemize}
+
+D-optimality is preferred over A-optimality ($\min\tr\bm{J}_N^{-1}$) for three reasons:
+\begin{enumerate}[nosep]
+  \item \textbf{Reparametrization invariance}: $\det\bm{J}_N$ transforms covariantly under reparametrization of $\bm{x}$, while $\tr(\bm{J}_N^{-1})$ does not.
+  \item \textbf{Balanced information}: D-optimality penalizes near-singular $\bm{J}_N$ more severely, encouraging the sensor sequence $\bm{s}_{1:N}$ to provide information in all state-space directions rather than repeating the most informative single measurement.
+  \item \textbf{Information-theoretic meaning}: $-\ln\det\bm{J}_N$ is (up to constants) the negative mutual information $-I(\bm{x}; \bm{y}_{1:N})$ for Gaussian models.  D-optimal design maximizes the total information extracted about $\bm{x}$.
+\end{enumerate}
+
+%===============================================================================
+\section*{References}
+%===============================================================================
+
+\begin{enumerate}[label={[\arabic*]}]
+  \item P.~Tichavsk\'y, C.~H.~Muravchik, and A.~Nehorai, ``Posterior Cram\'er--Rao bounds for discrete-time nonlinear filtering,'' \emph{IEEE Trans.\ Signal Processing}, vol.~46, no.~5, pp.~1386--1396, 1998.
+
+  \item H.~L.~Van Trees, \emph{Detection, Estimation, and Modulation Theory, Part I}.  New York: Wiley, 1968.
+
+  \item K.~Chaloner and I.~Verdinelli, ``Bayesian experimental design: A review,'' \emph{Statistical Science}, vol.~10, no.~3, pp.~273--304, 1995.
+
+  \item M.~L.~Hernandez, ``Optimal sensor management for target tracking applications,'' Ph.D.\ thesis, University of Cambridge, 2004.
+
+  \item S.~P.~Boyd and L.~Vandenberghe, \emph{Convex Optimization}.  Cambridge University Press, 2004.  (Chapter 7: statistical estimation and A-optimality.)
+
+  \item J.~Haupt, R.~Castro, and R.~Nowak, ``Distilled sensing: Adaptive sampling for sparse detection and estimation,'' \emph{IEEE Trans.\ Information Theory}, vol.~57, no.~9, pp.~6222--6235, 2011.
+\end{enumerate}
+
+\end{document}
