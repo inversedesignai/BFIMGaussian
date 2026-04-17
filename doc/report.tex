@@ -25,7 +25,7 @@
 \maketitle
 
 \begin{abstract}
-We present an end-to-end differentiable framework for optimizing the geometry of a 2D photonic device to maximize Bayesian estimation accuracy.  A cross-waveguide structure with a designable permittivity region serves as a refractive-index sensor: broadband port-power measurements are processed by an Extended Kalman Filter (EKF) to estimate an unknown perturbation field~$\Delta n$.  The sensor parameters (input phases) are adaptively chosen at each measurement step by maximizing the Bayesian Fisher Information Matrix (BFIM) trace.  The device geometry is optimized via gradient-based methods (MMA) to minimize the expected squared relative estimation error, with gradients computed through a custom automatic differentiation chain combining Zygote reverse-mode AD, an Implicit Function Theorem (IFT) rule for the inner sensor-selection argmin, and adjoint-based FDFD sensitivities.  We document the mathematical formulation, the computational pipeline, the identification of the correct physical operating regime, and optimization results showing a $21{,}400\times$ reduction in estimation error over 316 MMA iterations.  A subsequent run incorporating a density filter and $\beta$-continuation projection produces a manufacturable near-binary geometry (92.4\% binary) with comparable estimation accuracy (MA loss $5.15 \times 10^{-4}$), managed by an automated $\beta$-tuning agent.
+We present an end-to-end differentiable framework for optimizing the geometry of a 2D photonic device to maximize Bayesian estimation accuracy.  A cross-waveguide structure with a designable permittivity region serves as a refractive-index sensor: broadband port-power measurements are processed by an Extended Kalman Filter (EKF) to estimate an unknown perturbation field~$\Delta n$.  The sensor parameters (input phases) are adaptively chosen at each measurement step by maximizing the Bayesian Fisher Information Matrix (BFIM) trace.  The device geometry is optimized via gradient-based methods (MMA) to minimize the expected squared relative estimation error, with gradients computed through a custom automatic differentiation chain combining Zygote reverse-mode AD, an Implicit Function Theorem (IFT) rule for the inner sensor-selection argmin, and adjoint-based FDFD sensitivities.  We document the mathematical formulation, the computational pipeline, the identification of the correct physical operating regime, and optimization results showing a $21{,}400\times$ reduction in estimation error over 316 MMA iterations.  A subsequent run incorporating a density filter and $\beta$-continuation projection produces a manufacturable near-binary geometry (92.4\% binary) with comparable estimation accuracy (MA loss $5.15 \times 10^{-4}$), managed by an automated $\beta$-tuning agent.  Monte Carlo evaluation confirms a $123\times$ improvement in EKF estimation error over an unoptimized geometry ($0.97\%$ vs.\ $120\%$ relative error after 10 steps).
 \end{abstract}
 
 \tableofcontents
@@ -379,6 +379,51 @@ Iteration & $\beta$ & MA(20) Loss & Binary \% & Event \\
 
 \textbf{Significance:} This is the first run producing a manufacturable geometry---one that respects minimum feature sizes imposed by the density filter during optimization, rather than relying on post-hoc filtering that destroys performance.  The $\beta$-continuation approach successfully drives the projected design toward near-binary while maintaining low estimation error.
 
+\subsection{EKF Performance: Optimized vs.\ Random Geometry}
+
+To quantify the effect of geometry optimization on estimation accuracy, we ran 200 Monte Carlo EKF episodes (10 steps each) using the optimized geometry from Section~7.4 and compared against a random (unoptimized) geometry processed through the same density filter and projection pipeline.  Both evaluations use identical parameters ($\sigma^2 = 10^{-10}$, $\Delta n \in [10^{-5}, 10^{-4}]$, $\Sigma_0 = 7 \times 10^{-10} \cdot I$) and adaptive BFIM-based sensor selection at each step.  MLE estimates (L-BFGS on the cumulative likelihood) are computed alongside the EKF for comparison.
+
+\begin{center}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Metric & Optimized & Random & Ratio \\
+\midrule
+EKF final rel.\ error (10 steps) & 0.0097 (0.97\%) & 1.198 (120\%) & $123\times$ \\
+Episode loss (3 steps, mean) & $1.48 \times 10^{-4}$ & 2.724 & $18{,}400\times$ \\
+BFIM trace (step 1) & $2.50 \times 10^{13}$ & $4.01 \times 10^{10}$ & $622\times$ \\
+$\tr(\Sigma)$ final & $1.35 \times 10^{-13}$ & $1.41 \times 10^{-9}$ & $10{,}400\times$ \\
+$\tr(\Sigma)$ reduction from prior & $48{,}400\times$ & $2\times$ & \\
+EKF vs.\ MLE (final) & $1.01\times$ MLE & $0.055\times$ MLE & \\
+Mahalanobis$^2$ (final, expect $\approx 4$) & 0.13 & 3.82 & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Per-step error reduction:}
+
+\begin{center}
+\begin{tabular}{@{}rrrr@{}}
+\toprule
+Step & Optimized rel.\ err & Random rel.\ err & Improvement \\
+\midrule
+0 (prior) & 1.84 & 1.84 & $1\times$ \\
+1 & 0.034 & 1.25 & $37\times$ \\
+3 & 0.018 & 1.22 & $66\times$ \\
+5 & 0.014 & 1.21 & $86\times$ \\
+10 & 0.0097 & 1.20 & $123\times$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Key findings:}
+\begin{itemize}[nosep]
+  \item The optimized geometry provides $622\times$ more Fisher information per measurement, enabling the EKF to reduce relative error from 184\% to 3.4\% in a single step---essentially solving the estimation problem with one broadband measurement.
+  \item The random geometry barely improves over 10 steps (184\% $\to$ 120\%, only 35\% reduction), confirming that geometry optimization---not just adaptive sensor selection---is the dominant factor in estimation performance.
+  \item EKF and MLE achieve nearly identical accuracy on the optimized geometry ($1.01\times$), indicating that the Taylor-model linearization is excellent in this regime.  On the random geometry, MLE diverges ($21.9\times$ prior error) while the EKF's prior regularization prevents catastrophic failure.
+  \item The optimized EKF is underconfident (Mahalanobis$^2 = 0.13 \ll d_x = 4$): actual errors are much smaller than the posterior covariance predicts.  The random geometry EKF is well-calibrated (Mahalanobis$^2 \approx 3.8$), consistent with a filter that extracts minimal information.
+  \item The $18{,}400\times$ improvement in episode loss (the training objective) validates that the bilevel optimization framework successfully translates geometry changes into estimation accuracy gains.
+\end{itemize}
+
 %═══════════════════════════════════════════════════════════════════════════════
 \section{AD Implementation Challenges}
 
@@ -434,5 +479,7 @@ Distributed computing via \texttt{pmap}: episodes are parallelized across 200 wo
 We demonstrated a fully differentiable pipeline for photonic sensor geometry optimization, achieving a $21{,}400\times$ reduction in estimation error (from 155\% to 1.06\% RMS relative error) over 316 MMA iterations.  The framework combines FDFD simulation, lattice scattering models, BFIM-based adaptive sensing, and EKF state estimation, with gradients computed through custom AD rules that handle LAPACK incompatibilities, multi-step gradient accumulation, and inner-optimization differentiation via the IFT.  Careful identification of the physical operating regime---Taylor model accuracy, SNR requirements, and EKF stability---was essential for obtaining meaningful optimization results.
 
 A density-filtered Adam run with automated $\beta$ continuation ($16 \to 256$, managed by a cron-driven tuning agent over 583 iterations) demonstrated that manufacturable near-binary geometries (92.4\% binary at filter radius $R = 5$) can be obtained with comparable estimation accuracy (MA loss $5.15 \times 10^{-4}$).  Post-doubling spikes became progressively milder as the geometry pre-committed, with the final $\beta = 256$ transition producing no spike at all.  This confirms that standard TO $\beta$ continuation transfers to the bilevel BFIM--EKF setting without wrong-basin traps or gradient pathologies, despite the nested inner optimization and stochastic episode sampling.
+
+Monte Carlo evaluation (200 episodes, 10 EKF steps) showed that the optimized geometry provides $622\times$ more Fisher information per measurement than a random geometry and achieves sub-percent relative estimation error ($0.97\%$) after 10 steps---a $123\times$ improvement over the random baseline ($120\%$).  The optimized EKF matches MLE accuracy ($1.01\times$), confirming excellent Taylor-model fidelity, while the random geometry's MLE diverges entirely.  These results demonstrate that geometry optimization is the dominant factor in estimation performance, and that the bilevel framework successfully translates design-region changes into orders-of-magnitude estimation accuracy gains.
 
 \end{document}

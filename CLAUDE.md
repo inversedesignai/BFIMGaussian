@@ -159,6 +159,7 @@ The Taylor model is only reliable for Dn <= 1e-4. SNR ~ 12 at Dn = 5e-5 (midpoin
 - Post-doubling spikes got progressively milder: 159× (β=32), 230× (β=64), 30× (β=128), none (β=256).
 - Geometry pristine throughout: thin-interface gray, no wrong-basin blobs, iso_total_pct at run-min 0.004%.
 - First run with density filter during optimization; validates manufacturable geometry approach.
+- Monte Carlo EKF evaluation (200 episodes, 10 steps): optimized achieves 0.97% rel error vs 120% for random geometry (123x improvement). BFIM trace 622x higher. Episode loss 18,400x better.
 
 ### Key observations
 - Deterministic (fixed episodes) converges smoothly; stochastic (resampled) has high variance but explores more
