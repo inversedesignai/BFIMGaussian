@@ -1,2 +1,15 @@
 *.jls
 checkpoints/
+checkpoints_dopt/
+checkpoints_dopt_*_archive/
+checkpoints_fi/
+
+# ephemeral training + autotune outputs
+nohup.out
+nohup_*.out
+nohup_*.out.*
+autotune_snapshot/
+autotune_dopt_snapshot/
+autotune_cron.log
+autotune_dopt_cron.log
+autotune_alerts.log
