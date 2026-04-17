@@ -150,11 +150,23 @@ The Taylor model is only reliable for Dn <= 1e-4. SNR ~ 12 at Dn = 5e-5 (midpoin
 - Crashed with Julia builtins.c `jl_f__apply_iterate` error at iter 4759.
 - Uses relative squared error loss, positive Dn in [1e-5, 1e-4].
 
+### Autotune run (Adam + density filter + β continuation, 20 workers)
+- **Adam** with density filter (R=5), tanh projection, β continuation (16→32→64→128→256).
+- 583 iters, 20 episodes/batch, resample_every=1, alpha_r=0.0, lr=1e-3.
+- Automated β tuning via cron-driven Claude agent (40 fires over ~10 hours, 2026-04-16).
+- β schedule: 16→32 (iter 241), 32→64 (iter 316), 64→128 (iter 412), 128→256 (iter 493). Stop at iter 583.
+- Final MA20 loss: 5.15e-4, loss_min: 1.63e-4. Binary: 92.4% (structural ceiling at β=256 + R=5).
+- Post-doubling spikes got progressively milder: 159× (β=32), 230× (β=64), 30× (β=128), none (β=256).
+- Geometry pristine throughout: thin-interface gray, no wrong-basin blobs, iso_total_pct at run-min 0.004%.
+- First run with density filter during optimization; validates manufacturable geometry approach.
+
 ### Key observations
 - Deterministic (fixed episodes) converges smoothly; stochastic (resampled) has high variance but explores more
 - MMA with alpha_r=1 achieves best results (1.12e-4); Adam with alpha_r=0 plateaus higher
 - eps_geom saturates to binary {0, 1} bounds early in optimization
 - Gradients are very small (avg ~1e-6) at convergence; steps ~1e-5
+- With density filter + β continuation, projected binary reaches 92.4% at β=256 with R=5; 98% target is structurally unreachable at this filter radius
+- Post-doubling spike severity decreases as geometry pre-commits at higher β; β=256 transition was spike-free
 
 ## File Overview
 
