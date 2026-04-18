@@ -477,19 +477,20 @@ is \emph{not} equivalent to the joint optimization of \eqref{eq:joint_bellman}. 
 \item The $\bm{c}$ that maximizes $V_{\text{adaptive}}$ generally differs from the $\bm{c}$ that maximizes $V_{\text{fixed}}$: the optimal geometry for an adaptive operator is not the optimal geometry for a pre-committed one.
 \end{enumerate}
 
-\paragraph{Radar case study, narrow vs.\ wide beam (see Section~\ref{sec:examples}).}
-For the $K = 16$, $N = 4$ benchmark at $p_{\mathrm{D}} = 0.9$, $p_{\mathrm{FA}} = 0.05$, two top-hat beam-width choices---one cell per lobe (narrow) and $K/2$ cells per lobe (wide)---give:
+\paragraph{Radar case study, within-Gaussian-family comparison (see Section~\ref{sec:examples}).}
+For the $K = 16$, $N = 4$ benchmark at $p_{\mathrm{D}} = 0.9$, $p_{\mathrm{FA}} = 0.05$, restricting attention to a single beam family---the Gaussian beam $G_w(\alpha) = \exp(-\alpha^2/(2w^2))$---and comparing the two extremes against the in-family optimum $w^\star = 0.60$~rad gives:
 \begin{center}
-\begin{tabular}{@{}lccc@{}}
+\begin{tabular}{@{}lcccc@{}}
 \toprule
-geometry $\bm{c}$ & $\E[IG]$ (EVPI) & $V_{\text{adaptive}} - V_{\text{fixed}}$ (realized) & saturation \\
+geometry $\bm{c}$ & $\E[IG]$ (EVPI) & $V_{\text{adaptive}}$ & realized & saturation \\
 \midrule
-narrow ($m = 1$) & $2.08$ nats & $0.12$ nats & $5.8\%$ \\
-wide ($m = K/2$) & $0.51$ nats & $0.29$ nats & $56.4\%$ \\
+Gaussian $w = 0.05$ (small-$w$ extreme)   & $2.08$ nats & $0.62$ nats           & $0.12$ nats          & $5.8\%$           \\
+Gaussian $w = \pi$\phantom{.05} (large-$w$ extreme) & $0.09$ nats & $0.12$ nats           & $0.002$ nats         & $2.4\%$           \\
+Gaussian $w = 0.60$ (in-family $w^\star$) & $0.64$ nats & $\mathbf{0.87}$ nats  & $0.11$ nats          & $\mathbf{17.0\%}$ \\
 \bottomrule
 \end{tabular}
 \end{center}
-The narrow geometry has the \emph{larger} $\E[IG]$, yet its \emph{realized} adaptive advantage is less than half the wide geometry's.  Routing the geometry choice through EVPI alone would have directed us to the narrow design; the joint DP reveals the opposite.  The full continuous sweep of Gaussian beamwidths---reported in the companion numerics document---shows interior optima for both $V_{\text{adaptive}}$ and $V_{\text{fixed}}$, at \emph{different} values of the beamwidth (0.60 and 0.70 radians respectively), and a realized-gain maximum at yet a third value (0.25 radians).  None of these optima would be recovered by EVPI-only or fixed-only geometry selection.
+The small-$w$ extreme has the \emph{largest} $\E[IG]$ (by a factor of $\sim\!3$ over $w^\star$), yet only the second-largest $V_{\text{adaptive}}$ and a saturation of just $5.8\%$.  The large-$w$ extreme has both the smallest $\E[IG]$ and the smallest $V_{\text{adaptive}}$.  The in-family optimum $w = 0.60$ \emph{dominates} both extremes on $V_{\text{adaptive}}$ (the quantity we actually want to maximize), despite having neither the largest $\E[IG]$ nor the largest realized gain.  Routing the geometry choice through EVPI alone would have directed us to the small-$w$ design; the joint DP picks $w = 0.60$.  The continuous Gaussian sweep---reported in the companion numerics document---shows interior optima for both $V_{\text{adaptive}}$ and $V_{\text{fixed}}$, at \emph{different} values of the beamwidth ($0.60$ and $0.70$ radians respectively), and a realized-gain maximum at yet a third value ($0.25$ radians).  None of these optima would be recovered by EVPI-only or fixed-only geometry selection.
 
 \paragraph{Practical prescription.}
 \begin{enumerate}[nosep, leftmargin=2em]

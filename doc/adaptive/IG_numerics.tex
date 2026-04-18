@@ -664,23 +664,84 @@ Consequently:
 
 \begin{center}
 \fbox{\parbox{0.93\textwidth}{
-\textbf{Necessary-but-not-sufficient claim:} $\E[IG](\bm{c})$ is an upper bound on $V_{\text{adaptive}}(\bm{c}) - V_{\text{fixed}}(\bm{c})$, but is typically a \emph{loose} bound, and choosing $\bm{c}$ to maximize $\E[IG]$ does \emph{not} maximize the realized adaptive advantage.  The two-regime comparison makes this stark:
+\textbf{Necessary-but-not-sufficient claim:} $\E[IG](\bm{c})$ is an upper bound on $V_{\text{adaptive}}(\bm{c}) - V_{\text{fixed}}(\bm{c})$, but is typically a \emph{loose} bound, and choosing $\bm{c}$ to maximize $\E[IG]$ does \emph{not} maximize either $V_{\text{adaptive}}$ or the realized adaptive advantage.  Restricting attention to a single beam family (here, the Gaussian family) and comparing the two extremes against the interior optimum makes this stark:
 \begin{center}
-\begin{tabular}{@{}lrrr@{}}
+\begin{tabular}{@{}lrrrrr@{}}
 \toprule
-$\bm{c}$ & $\E[IG]$ & $V_{\text{adaptive}} - V_{\text{fixed}}$ & saturation \\
+$\bm{c}$ & $\E[IG]$ & $V_{\text{adaptive}}$ & $V_{\text{fixed}}$ & realized & sat. \\
 \midrule
-narrow top-hat ($m = 1$) & $\mathbf{2.081}$ & $0.121$ & $5.8\%$ \\
-wide top-hat ($m = K/2$) & $0.513$ & $\mathbf{0.289}$ & $\mathbf{56.4\%}$ \\
-Gaussian $w = 0.6$       & $0.635$ & $0.108$ & $17.0\%$ \\
+Gaussian $w = 0.05$ (small-$w$ extreme)   & $\mathbf{2.081}$ & $0.619$          & $0.499$          & $\mathbf{0.121}$ & $5.8\%$           \\
+Gaussian $w = \pi$\phantom{.05} (large-$w$ extreme) & $0.090$          & $0.124$          & $0.122$          & $0.002$          & $2.4\%$           \\
+Gaussian $w = 0.60$ (in-family optimum)   & $0.635$          & $\mathbf{0.865}$ & $\mathbf{0.758}$ & $0.108$          & $\mathbf{17.0\%}$ \\
 \bottomrule
 \end{tabular}
 \end{center}
-The narrow design has the largest EVPI but the smallest realized gain; the wide top-hat has smaller EVPI but more than $2\times$ the realized gain; and the Gaussian $w^\star$ maximum has the highest \emph{absolute} $V_{\text{adaptive}}$ but middling saturation.  Three different $\bm{c}$ values are optimal under three different criteria, and no substitute for the joint DP will find the right $\bm{c}^\star$.
+Note the \emph{non-monotone} relationship between $\E[IG]$ and the other columns.  The small-$w$ extreme has the largest $\E[IG]$ (by a factor of $\sim\!3$ over the in-family optimum and $\sim\!23$ over the large-$w$ extreme), yet only the second-largest $V_{\text{adaptive}}$ and an EVPI saturation of only $5.8\%$.  The large-$w$ extreme has both the smallest $\E[IG]$ and the smallest $V_{\text{adaptive}}$.  The interior $w = 0.60$ \emph{dominates} both extremes on $V_{\text{adaptive}}$ (the quantity we actually want to maximize) and on $V_{\text{fixed}}$, despite having neither the largest $\E[IG]$ nor the largest realized gain.  Saturation alone is also misleading: $w = 0.60$ has the highest saturation, but $w = 0.05$ has higher realized gain ($0.121 > 0.108$) by virtue of its much larger EVPI ceiling.
+
+Conclusion: no single column---$\E[IG]$, realized gain, or saturation---picks out the in-family optimum.  Only $V_{\text{adaptive}}$ does, and only by direct evaluation.  EVPI is a go/no-go gate; the joint DP, swept over an admissible family of $\bm{c}$, picks the optimum.
 }}
 \end{center}
 
-Use EVPI as the go/no-go gate.  Use the joint DP to find the actual $(\bm{c}^\star, \pi^\star)$.
+Use EVPI as the go/no-go gate.  Use the joint DP, over the full admissible family of $\bm{c}$, to find the actual $(\bm{c}^\star, \pi^\star)$.
+
+\paragraph{Cross-family note.}
+Restricting to one family is a fair within-family test of the joint-DP claim.  Across families, the comparison is also informative but not what is being claimed here: the top-hat family achieves higher $V_{\text{adaptive}}$ than any Gaussian (see the within-top-hat-family sweep in Section~\ref{subsec:tophat_sweep} below), because its sharper in-beam vs.\ out-of-beam likelihood contrast gives it strictly higher per-measurement information.  Which family is physically realizable (Gaussian, top-hat, Dolph--Chebyshev, phased-array-synthesized, etc.) is itself part of the geometry design.
+
+\subsection{Within-top-hat-family sweep}
+\label{subsec:tophat_sweep}
+
+For completeness, we repeat the joint sweep within the \emph{top-hat} beam family, parametrized by the integer main-lobe width $m \in \{1, 2, \ldots, K\}$ (cells per lobe).  The coverage is a contiguous arc of $m$ cells centered on the pointed cell; per-cell likelihood is $p_{\mathrm{D}}$ inside the lobe and $p_{\mathrm{FA}}$ outside.  Runtime is $\sim\!23$~s for the full $m \in \{1,\ldots,16\}$ sweep on the reference laptop (same symmetry reductions as the Gaussian sweep).
+
+\begin{table}[h]
+\centering
+\caption{Within-top-hat-family joint sweep over integer $m$.  In-family optimum for $V_{\text{adaptive}}$ at $m^\star = 9$; in-family optimum for $V_{\text{fixed}}$ at $m = 7$.  Odd/even adjacent $m$ values produce identical coverage for the symmetric placements and hence identical numbers.}
+\label{tab:tophat_sweep}
+\small
+\begin{tabular}{@{}rrrrrrr@{}}
+\toprule
+$m$ & $V_{\text{oracle}}$ & $V_{\text{adaptive}}$ & $V_{\text{fixed}}$ & $\E[IG]$ & realized & sat.\ \% \\
+\midrule
+ 1 & $2.580$ & $0.619$          & $0.499$          & $\mathbf{2.081}$ & $0.121$ & $5.8\%$           \\
+ 2 & $2.580$ & $0.619$          & $0.499$          & $2.081$          & $0.121$ & $5.8\%$           \\
+ 3 & $2.293$ & $1.401$          & $1.103$          & $1.190$          & $0.299$ & $25.1\%$          \\
+ 4 & $2.293$ & $1.401$          & $1.103$          & $1.190$          & $0.299$ & $25.1\%$          \\
+ 5 & $2.081$ & $1.631$          & $1.343$          & $0.737$          & $0.287$ & $38.9\%$          \\
+ 6 & $2.081$ & $1.631$          & $1.343$          & $0.737$          & $0.287$ & $38.9\%$          \\
+ 7 & $1.924$ & $1.700$          & $\mathbf{1.411}$ & $0.513$          & $0.289$ & $56.4\%$          \\
+ 8 & $1.924$ & $1.700$          & $\mathbf{1.411}$ & $0.513$          & $0.289$ & $56.4\%$          \\
+ 9 & $1.879$ & $\mathbf{1.704}$ & $1.401$          & $0.478$          & $0.303$ & $\mathbf{63.5\%}$ \\
+10 & $1.879$ & $\mathbf{1.704}$ & $1.401$          & $0.478$          & $0.303$ & $\mathbf{63.5\%}$ \\
+11 & $2.074$ & $1.632$          & $1.320$          & $0.754$          & $0.312$ & $41.4\%$          \\
+12 & $2.074$ & $1.632$          & $1.320$          & $0.754$          & $0.312$ & $41.4\%$          \\
+13 & $2.312$ & $1.389$          & $1.041$          & $1.271$          & $\mathbf{0.347}$ & $27.3\%$ \\
+14 & $2.312$ & $1.389$          & $1.041$          & $1.271$          & $\mathbf{0.347}$ & $27.3\%$ \\
+15 & $2.514$ & $0.611$          & $0.442$          & $2.071$          & $0.169$ & $8.1\%$           \\
+16 & $2.514$ & $0.611$          & $0.442$          & $2.071$          & $0.169$ & $8.1\%$           \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The same qualitative story as the Gaussian family holds, now with \emph{four different} interior optima across four different columns: $V_{\text{adaptive}}$ peaks at $m^\star = 9$, $V_{\text{fixed}}$ peaks at $m = 7$, realized gain peaks at $m = 13$, and $\E[IG]$ is monotonically U-shaped (minimized at the middle and largest at the extremes $m = 1$ and $m = 16$, i.e., point-like and fully-isotropic lobes).
+
+\begin{center}
+\fbox{\parbox{0.93\textwidth}{
+\textbf{Within-top-hat-family three-way comparison:}
+\begin{center}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+$\bm{c}$ & $\E[IG]$ & $V_{\text{adaptive}}$ & $V_{\text{fixed}}$ & realized & sat. \\
+\midrule
+top-hat $m = 1$ (narrow extreme)          & $\mathbf{2.081}$ & $0.619$          & $0.499$          & $0.121$          & $5.8\%$           \\
+top-hat $m = 16$ (isotropic extreme)      & $2.071$          & $0.611$          & $0.442$          & $0.169$          & $8.1\%$           \\
+top-hat $m = 9$ (in-family optimum)       & $0.478$          & $\mathbf{1.704}$ & $\mathbf{1.401}$ & $\mathbf{0.303}$ & $\mathbf{63.5\%}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The in-family optimum $m^\star = 9$ dominates both extremes on \emph{every} actionable column---$V_{\text{adaptive}}$, $V_{\text{fixed}}$, realized gain, and saturation.  The only column on which it is \emph{not} best is $\E[IG]$, where both extremes beat it by a factor of four.  An EVPI-only geometry selection would reject $m^\star = 9$ in favor of either $m = 1$ or $m = 16$, both of which are almost three times worse on $V_{\text{adaptive}}$.
+}}
+\end{center}
+
+The top-hat-family $V_{\text{adaptive}}^\star = 1.704$ nats slightly exceeds the Gaussian-family $V_{\text{adaptive}}^\star = 0.865$ nats, confirming (numerically) that the top-hat family is Pareto-superior at this $K, N, p_{\mathrm{D}}, p_{\mathrm{FA}}$ for the in-family optimum.  In an actual design setting, the realizable family is constrained by the antenna hardware; the point of the numerics is that \emph{given} a family, the joint DP recovers its optimum and EVPI does not.
 
 %====================================================================
 \section{Related work and originality check}
