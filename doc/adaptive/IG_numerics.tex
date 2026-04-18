@@ -560,6 +560,95 @@ At the joint $(\bm{c}, \pi)$ optimum (wide beam, adaptive policy), finite-noise 
 This is the \emph{actual} dividend of adopting the full adaptive framework at this problem size---measurable, positive, but about half of what the idealized closed-form suggested.  The ignorance-gap go/no-go gate ($\E[IG] > 1$ nat in the narrow regime) would have recommended proceeding with the DP; post-solve, we see the realized gain was much smaller but still present.
 
 %====================================================================
+\section{Joint geometry--policy optimization (Gaussian beam)}
+\label{sec:joint}
+%====================================================================
+
+The top-hat beam of \S3 is discrete in $m$, so gradient-based outer optimization of the geometry is not directly meaningful.  We now replace the beam model with a continuously parametrized Gaussian and sweep $w$ over a grid to map the joint $(\bm{c}, \pi)$ landscape.
+
+\subsection{Gaussian-beam likelihood}
+
+Parametrize the geometry by a single continuous scalar $w > 0$ (beamwidth):
+\begin{equation}
+  G_w(\alpha) = \exp\!\bigl(-\alpha^2 / (2 w^2)\bigr),
+  \qquad
+  p(y_k = 1 \mid z, a; w)
+  = p_{\mathrm{FA}} + (p_{\mathrm{D}} - p_{\mathrm{FA}})\, G_w\bigl(\theta_a - \varphi(z)\bigr),
+\end{equation}
+with $\alpha$ wrapped to $[-\pi, \pi]$.  All downstream quantities---$\Phi(x, s, w)$, $V_{\text{oracle}}(w)$, $V_{\text{fixed}}(w)$, $V_{\text{adaptive}}(w)$---are smooth in $w$.  We sweep $w$ on a grid and at each value compute all three values exactly by the same algorithms as \S5--7 (symmetry-reduced enumeration for oracle/fixed, backward induction for the DP).
+
+\subsection{Sweep results}
+
+The total sweep (19~grid points, $w \in [0.05, \pi]$) completed in 122~seconds on a single Julia thread.
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}rrrrrrr@{}}
+\toprule
+$w$ (rad) & $V_{\text{oracle}}$ & $V_{\text{adaptive}}$ & $V_{\text{fixed}}$ & $\E[IG]$ & realized gain & sat.\ \% \\
+\midrule
+0.05 & 2.5796 & 0.6192 & 0.4987 & 2.0810 & 0.1205 & 5.8 \\
+0.10 & 2.5795 & 0.6191 & 0.4986 & 2.0809 & 0.1206 & 5.8 \\
+0.15 & 2.5666 & 0.6176 & 0.4924 & 2.0742 & 0.1252 & 6.0 \\
+0.20 & 2.4792 & 0.6411 & 0.4931 & 1.9861 & 0.1480 & 7.5 \\
+0.25 & 2.3035 & 0.6875 & 0.5346 & 1.7689 & 0.1529 & 8.6 \\
+0.30 & 2.1210 & 0.7335 & 0.5889 & 1.5320 & 0.1445 & 9.4 \\
+0.35 & 1.9500 & 0.7704 & 0.6358 & 1.3142 & 0.1347 & 10.2 \\
+0.40 & 1.8023 & 0.8059 & 0.6729 & 1.1294 & 0.1330 & 11.8 \\
+0.50 & 1.5714 & 0.8522 & 0.7301 & 0.8414 & 0.1222 & 14.5 \\
+\textbf{0.60} & \textbf{1.3922} & \textbf{0.8647} & 0.7571 & 0.6351 & 0.1077 & 17.0 \\
+0.70 & 1.2426 & 0.8532 & \textbf{0.7576} & 0.4850 & 0.0956 & 19.7 \\
+0.80 & 1.1192 & 0.8264 & 0.7480 & 0.3712 & 0.0784 & 21.1 \\
+1.00 & 0.9118 & 0.7470 & 0.6968 & 0.2150 & 0.0502 & 23.4 \\
+1.25 & 0.7041 & 0.6305 & 0.6016 & 0.1025 & 0.0290 & 28.3 \\
+1.50 & 0.5819 & 0.5159 & 0.4983 & 0.0836 & 0.0176 & 21.1 \\
+1.75 & 0.5284 & 0.4146 & 0.4034 & 0.1250 & 0.0112 & 9.0 \\
+2.00 & 0.4698 & 0.3310 & 0.3234 & 0.1464 & 0.0076 & 5.2 \\
+2.50 & 0.3415 & 0.2119 & 0.2079 & 0.1336 & 0.0041 & 3.0 \\
+$\pi$ & 0.2117 & 0.1237 & 0.1215 & 0.0902 & 0.0022 & 2.4 \\
+\bottomrule
+\end{tabular}
+\caption{Full sweep of the Gaussian-beam geometry parameter.  Joint optima in bold: $V_{\text{adaptive}}^\star = 0.865$ nats at $w = 0.60$, $V_{\text{fixed}}^\star = 0.758$ nats at $w = 0.70$.  The rightmost column is the EVPI saturation fraction.}
+\label{tab:joint_sweep}
+\end{table}
+
+\subsection{Observations}
+
+\paragraph{Optimum beam width.}
+$V_{\text{adaptive}}$ peaks at $w^\star \approx 0.60$~rad.  In HPBW units (FWHM of the Gaussian, $= 2 w \sqrt{2 \ln 2} \approx 2.355\,w$), this corresponds to $\text{HPBW}^\star \approx 1.41$~rad $\approx 3.6$~cells.  This is neither the narrow-beam limit (HPBW $\ll 2\pi/K$) nor the wide-beam limit (HPBW $\sim \pi$).  The joint optimum lies in an intermediate regime where each measurement resolves a small neighborhood of cells well enough that four measurements can collectively localize the target.
+
+\paragraph{Why V\textsubscript{oracle} decreases monotonically in $w$.}  The oracle knows $x$ and points the beam directly at it.  Narrower beams give larger $p(y=1 \mid z = x) - p(y=1 \mid z = x')$ gap, hence more information per measurement.  No finite-noise ceiling binds: as $w \to 0$, $V_{\text{oracle}} \to V_{\text{oracle}}^{\text{narrow}} = 2.58$~nats (recovering the Section~5 value for the $m = 1$ top-hat).
+
+\paragraph{Why V\textsubscript{adaptive} and V\textsubscript{fixed} have interior maxima.}  At very narrow $w$, per-measurement information is high but \emph{only for cells near the pointing}.  With $N = 4$ pointings across $K = 16$ cells, fixed and adaptive both miss most of the prior mass most of the time.  At very wide $w$, per-measurement information degrades and the best binary partition is weakly diagnostic.  The interior optimum $w^\star \approx 0.6$ balances the two.
+
+\paragraph{Where the EVPI saturation is highest.}  Saturation peaks at $w \approx 1.25$ rad (28.3\%), far from the V$_{\text{adaptive}}$ optimum.  At large $w$ the EVPI itself is small (around 0.1~nats) and adaptation captures a relatively large fraction of a small gap.  At the V$_{\text{adaptive}}$ optimum ($w = 0.6$), saturation is only 17\%---adaptation captures a small fraction of a moderately-sized EVPI, but the \emph{absolute} realized gain at $w = 0.6$ (0.108 nats) is closer to the maximum of the realized-gain curve (0.153 at $w = 0.25$) than the saturation percentage alone would suggest.
+
+\paragraph{Joint optima for adaptive vs.\ fixed differ slightly.}  $V_{\text{fixed}}$ peaks at $w = 0.70$, $V_{\text{adaptive}}$ at $w = 0.60$.  The adaptive optimum prefers a slightly narrower beam because it can exploit the higher per-measurement information by routing each measurement based on earlier outcomes; the fixed design, committed to a non-adaptive schedule, benefits from a slightly wider beam that is more forgiving of pointing choices made in advance.  The difference is small ($\Delta w = 0.1$, or about 14\% relative) but consistent.
+
+\subsection{Envelope-theorem sanity check at the optimum}
+
+Around $w^\star = 0.6$, nearby values give
+\[
+  V_{\text{adaptive}}(0.5) = 0.8522, \quad
+  V_{\text{adaptive}}(0.6) = 0.8647, \quad
+  V_{\text{adaptive}}(0.7) = 0.8532.
+\]
+Central finite difference at $w = 0.6$:
+\[
+  \frac{V_{\text{adaptive}}(0.7) - V_{\text{adaptive}}(0.5)}{2 \cdot 0.1}
+  = \frac{0.8532 - 0.8522}{0.2} = 0.005 \text{ nats/rad}.
+\]
+Essentially zero, consistent with $w = 0.6$ being a (coarse-grid) interior maximum.  A finer grid or an analytic envelope-theorem gradient evaluation would refine this.
+
+\subsection{Representative optimal sensor sequences at $w^\star$}
+
+The symmetry-reduced fixed-design search at $w = 0.6$ returns
+\[
+  s^\star_{\text{fixed}} = [1, 5, 9, 13],
+\]
+four pointings equally spaced around the ring (quarter-rotations of each other).  Any $D_K$-orbit representative is equivalent.  This differs from the top-hat narrow-beam result $s^\star = [1, 7, 9, 13]$ in that the Gaussian-beam likelihood favors maximally-separated pointings (no two within a beamwidth of each other), whereas the top-hat was indifferent to separation as long as all four cells were distinct.
+
+%====================================================================
 \section{Related work and originality check}
 \label{sec:related}
 %====================================================================
