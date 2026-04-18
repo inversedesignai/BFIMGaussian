@@ -1,0 +1,307 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{array}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\Phizero}{\Phi_0}
+
+\title{The Frequency-Tunable Superconducting-Qubit Flux Sensor:\\
+       Measurement Model with Complete \texorpdfstring{$(\bm{c},\bm{s})$}{(c,s)} Delineation}
+\author{Based on Danilin, Nugent \& Weides (arXiv:2211.08344v4, 2024)\\
+        augmented with standard superconducting-qubit sensor literature}
+\date{April 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We abstract the measurement model of Danilin, Nugent \& Weides (2024) into the joint-design language of \textsc{AdaptiveDesign}: an unknown state $\bm{x}$ (the external magnetic flux threading a SQUID loop), a tunable sensor control $\bm{s}$ (delay time, repetitions, flux set-point, drive frequency, probe-state architecture), and a fixed device geometry $\bm{c}$ (transmon and flux-bias-line geometry, Josephson-junction parameters, readout-chain parameters, environmental noise amplitudes).  The Ramsey-fringe likelihood $P_{|1\rangle}(\Phi,\tau;\,\bm{c})$ is a concrete, physically grounded forward model.  The paper performs a reduced one-dimensional bi-level optimization over $f_q^{\max}$ with a prescribed Kitaev phase-estimation inner rule; a full joint-$(\bm{c},\bm{s})$ framework would promote the full circuit geometry to the outer loop while preserving the same inner structure.  We tabulate all parameters unambiguously to enable downstream use.
+\end{abstract}
+
+%===============================================================================
+\section{Physical setup and target}
+%===============================================================================
+
+A frequency-tunable x-mon transmon qubit (or an $N$-qubit register prepared in an entangled state) is used as a magnetic-flux sensor.  The unknown target is the external flux threading the SQUID loop
+\begin{equation}
+  \bm{x} \;=\; \Phi_\text{ext} \;\in\; [0,\,0.5]\,\Phizero,
+\end{equation}
+restricted to the first half-period of the flux-tunable qubit spectrum.  The flux $\Phi_\text{ext}$ enters the qubit Hamiltonian through the split-junction SQUID loop, modulating the Josephson energy and hence the qubit $|0\rangle\!\to\!|1\rangle$ transition frequency
+\begin{equation}
+  f_q(f_q^{\max},\Phi) \;=\; \left(f_q^{\max} + \frac{E_C}{h}\right)\sqrt{\bigl|\cos(\pi\Phi/\Phizero)\bigr|} \;-\; \frac{E_C}{h},
+  \label{eq:fq}
+\end{equation}
+where $f_q^{\max}$ is the maximal transition frequency (set by $E_J$), $E_C$ is the charging energy, and $\Phizero = h/2e$ is the superconducting flux quantum.
+
+%===============================================================================
+\section{Ramsey-fringe forward model (the likelihood)}
+%===============================================================================
+
+The sensing primitive is a Ramsey pulse sequence:
+\begin{enumerate}[nosep,leftmargin=2em]
+  \item prepare $|0\rangle$;
+  \item apply $\pi/2$ pulse at drive frequency $\omega_d$ to produce $(|0\rangle + |1\rangle)/\sqrt{2}$;
+  \item free evolution for delay time $\tau$ accumulates a flux-dependent phase $\phi(\Phi) = \Delta\omega(\Phi)\cdot\tau$, where $\Delta\omega(\Phi) = \omega_q(\Phi) - \omega_d$;
+  \item apply a second $\pi/2$ pulse;
+  \item projectively readout qubit population in $|1\rangle$.
+\end{enumerate}
+
+Including decoherence and thermal occupation, the expected $|1\rangle$-population is
+\begin{equation}
+  \boxed{\;
+  P_{|1\rangle}(\Phi,\tau;\,\bm{c}) \;=\; \frac{1}{2} \;+\; \frac{1}{2}\,\underbrace{\frac{e^{h f_q / k_B T}-1}{e^{h f_q / k_B T}+1}}_{\text{thermal factor}}\;\underbrace{e^{-A\tau - B^2\tau^2}}_{\text{decoherence envelope}}\;\cos\!\bigl(\Delta\omega(\Phi)\,\tau\bigr)\;}
+  \label{eq:ramsey}
+\end{equation}
+with decoherence coefficients
+\begin{align}
+  A &\;=\; \tfrac{1}{2}\bigl(\Gamma_1^{\mathrm{cav}}+\Gamma_1^{\mathrm{ind}}+\Gamma_1^{\mathrm{cap}}\bigr) \;+\; \pi^2 A_\Phi^2\,\bigl|\partial^2\omega_q/\partial\Phi^2\bigr|,\\[2pt]
+  B &\;=\; \sqrt{A_\Phi^2\,\bigl|\partial\omega_q/\partial\Phi\bigr|^2 \;+\; A_{I_c}^2\,\bigl|\partial\omega_q/\partial I_c\bigr|^2}.
+  \label{eq:AB}
+\end{align}
+All five relaxation/dephasing rates $\Gamma_1^{\mathrm{cav}}, \Gamma_1^{\mathrm{ind}}, \Gamma_1^{\mathrm{cap}}, \Gamma_\phi^{\mathrm{flux}}, \Gamma_\phi^{\mathrm{curr}}$ depend on the device design parameters $\bm{c}$ (circuit geometry, junction parameters) and on the operating flux $\Phi$ through the expressions given in the paper (Eqs.~2--10).
+
+\paragraph{Entangled $N$-qubit GHZ probe.}
+Preparing a GHZ state $(|00\cdots0\rangle + |11\cdots1\rangle)/\sqrt{2}$ and projecting to the first qubit at the end yields (Eq.~22 of the source)
+\begin{equation}
+  P_{|10\cdots 0\rangle}^{(N)}(\Phi,\tau) \;=\; \tfrac{1}{2} + \tfrac{1}{2}\bigl(\text{thermal}_N\bigr)\,e^{-N(A\tau + B^2\tau^2)}\,\cos(N\Delta\omega\,\tau),
+  \label{eq:ghz}
+\end{equation}
+yielding an $N$-fold speed-up in phase accumulation at the cost of an $N$-fold acceleration of the decoherence envelope (under uncorrelated noise; correlated-noise scaling can be faster).
+
+\paragraph{Single-shot statistics.}
+Each Ramsey run produces a binary outcome $y\in\{0,1\}$ distributed Bernoulli with mean $P_{|1\rangle}$.  With $K$ repetitions at fixed $(\Phi,\tau)$ the empirical mean $\hat P = K^{-1}\sum_k y_k$ has sampling-noise width $\sigma_P = 1/(2\sqrt{K})$ from the central limit theorem; standard dispersive single-shot readout introduces an additional state-assignment error $\varepsilon$ (the source uses $\varepsilon = 0.01\%$ together with Gaussian discrimination widths $\sigma_0 = \sigma_1 = 1.0$).
+
+%===============================================================================
+\section{Fixed parameters \texorpdfstring{$\bm{c}$}{c}: device, hardware, environment}
+\label{sec:c_params}
+%===============================================================================
+
+These are set at fabrication or by the experimental environment and do \emph{not} change during a sensing run.  They are the ``geometry'' that a joint-design framework would optimize over.  Values in parentheses are those used in the source paper.
+
+\subsection{Transmon circuit geometry (Appendix A, Fig.~A1 of the source)}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Symbol & Value & Meaning \\
+\midrule
+$w$ & $24\,\mu$m & x-mon arm width \\
+$L$ & $130\,\mu$m & x-mon arm length \\
+$s$ & $24\,\mu$m & x-mon electrode to ground-plane gap \\
+$a,\,b,\,h$ & $90,\,45,\,6\,\mu$m & resonator coupler geometry \\
+$x_a$ & $24\,\mu$m & flux-bias-line arm length \\
+--- & $5,\,2,\,2\,\mu$m & flux-bias-line widths (parts A, B, C) \\
+SQUID loop area & $125 + 241.5\,\mu$m$^2$ & two-rectangle flux-collection loop \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Derived / computed circuit parameters}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Symbol & Value & Derivation \\
+\midrule
+$C_{qg}$ & $76\,$fF & x-mon to ground plane (Maxwell FEM in COMSOL) \\
+$C_{qr}$ & $2\,$fF & x-mon to resonator coupler \\
+$C_c$ & $0.2\,$fF & x-mon to xy-control line \\
+$\beta$ & $0.03$ & voltage divider (xy coupling strength) \\
+$E_C/h$ & $0.254\,$GHz & charging energy, from $C_{qg}+C_{qr}+C_c$ \\
+$M$ & $2.08\,$pH & mutual inductance flux-bias $\leftrightarrow$ SQUID loop (Biot--Savart) \\
+$M'$ & $0.22\,$pH & parasitic mutual to total x-mon circuit \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Josephson and junction parameters}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Symbol & Value & Meaning \\
+\midrule
+$f_q^{\max}$ & \textbf{design variable, $2$--$20\,$GHz} & maximal $0$--$1$ transition frequency (set by $E_J$) \\
+$E_J$ & implicit via $f_q^{\max}$ & Josephson energy of the junctions \\
+$L_J(f_q^{\max},\Phi)$ & Eq.~5 of source & Josephson inductance \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Readout chain}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Symbol & Value & Meaning \\
+\midrule
+$\kappa$ & $0.5\,$MHz & resonator total decay rate \\
+$\Delta = \omega_q - \omega_r$ & $2\pi\times 2\,$GHz & qubit--resonator detuning (held constant) \\
+$Z_0$ & $50\,\Omega$ & resonator and control-line characteristic impedance \\
+$g_{01}(f_q^{\max},\Phi)$ & Eq.~3 of source & qubit--resonator coupling \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Environmental noise model}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Symbol & Value & Role / spectrum \\
+\midrule
+$A_\Phi$ & $10^{-6}\,\Phizero$ & flux-noise $1/f$ PSD amplitude: $S_\Phi(\omega) = 2\pi A_\Phi^2/\omega$ \\
+$A_{I_c}$ & $10^{-6}\,I_c$ & critical-current $1/f$ PSD amplitude \\
+$T$ & $20,\,40,\,60\,$mK & sensor temperature (dilution-refrigerator mixing chamber) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Readout / shot-noise model}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Symbol & Value & Meaning \\
+\midrule
+$\sigma_0,\,\sigma_1$ & $1.0$ each & Gaussian widths for $|0\rangle/|1\rangle$ readout histograms \\
+$\varepsilon$ & $0.01\%$ & state-assignment error probability \\
+$\tau_{\min}$ & (hardware-set) & minimum delay between control pulses; limits dynamic range via $\Phi_{\max} = \pi/(\tau_{\min}|d\omega_q/d\Phi|)$ (Eq.~20) \\
+$T_r$ & (hardware-set) & one state-prep + measurement + reset cycle time \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Items not explicit in the paper but needed for a full model}
+
+The following are standard in the broader superconducting-qubit literature and would need to be carried in any complete forward model:
+\begin{itemize}[nosep,leftmargin=2em]
+  \item TLS (two-level-system) bath coupling in the dielectric, setting the residual $T_1$ floor captured in the paper's $\Gamma_1^{\mathrm{cap}}$.
+  \item Quasi-particle tunneling rate (paper dismisses as Hz-scale; comprehensive models still carry it).
+  \item Asymmetric single-shot readout fidelity $F_r = 1 - \varepsilon_{01} - \varepsilon_{10}$ (usually state-specific in practice).
+  \item Residual thermal occupation of the readout resonator (Bose factor $\bar n_{\mathrm{th}}$), adding a Purcell-enhanced thermal contribution to $A$.
+  \item $1/f$ charge noise---paper correctly dismisses in the deep-transmon regime $E_J/E_C \gg 50$.
+\end{itemize}
+
+%===============================================================================
+\section{Tunable parameters \texorpdfstring{$\bm{s}$}{s}: per-shot and per-protocol controls}
+\label{sec:s_params}
+%===============================================================================
+
+These are the quantities the Kitaev PEA (or any adaptive policy) varies from shot to shot, or from step to step.
+
+\subsection{Per-step tunables (adaptive variables)}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Symbol & Range & Role \\
+\midrule
+$\tau_k$ & $[\tau_{\min},\,\sim T_2]$ & \textbf{principal adaptive variable}; Kitaev PEA doubles $\tau_k = 2^{k-1}\tau_{\min}$ \\
+$n_k$ & integer $\geq 1$ & number of Ramsey repetitions at step $k$; termination when posterior confidence exceeds $1-\varepsilon$ \\
+$\Phi_\text{ext}$ & $[0,\,\Phizero/2]$ & operating-point offset; in the paper held at $\Phi^*$ for the whole run, but in principle retunable per step \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Per-protocol tunables (chosen once per sensing run)}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Symbol & Range & Role \\
+\midrule
+$\Phi^*$ & in $[0,\,\Phizero/2]$ & optimal sensing flux maximizing $\partial P_{|1\rangle}/\partial\Phi$ (Eqs.~12,~15,~18). Paper finds $\Phi^*/\Phizero = 0.442$ for $f_q^{\max}=9\,$GHz, $T=40\,$mK. \\
+$\omega_d$ & $\sim \omega_q(\Phi^*)$ & microwave drive frequency for $\pi/2$ pulses; determines $\Delta\omega$ \\
+$N$ & $1,\,2,\,3$ (demonstrated) & number of probe qubits (entangled or unentangled) \\
+probe state & $|+\rangle,\,|\Phi^+\rangle,\,\text{GHZ}_N$ & initial coherent superposition for phase accumulation \\
+PEA variant & Kitaev / Fourier & phase-estimation algorithm (paper uses Kitaev) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Per-pulse tunables (not explicit in the paper but present in practice)}
+
+A more general adaptive design would include:
+\begin{itemize}[nosep,leftmargin=2em]
+  \item $\pi/2$ pulse amplitude and duration (gate fidelity, leakage to $|2\rangle$);
+  \item pulse shape (DRAG-corrected Gaussian vs.\ square) --- affects leakage, $Z$-errors;
+  \item readout pulse amplitude and duration --- trades measurement back-action for fidelity;
+  \item active reset vs.\ passive thermalization between shots, affecting $T_r$;
+  \item for multi-qubit: $CP_{ij}$ conditional-phase gate parameters (pulse timing, flux-pulse amplitude).
+\end{itemize}
+These become relevant $\bm{s}$ parameters once one optimizes beyond the idealized phase-accumulation picture used in the source.
+
+%===============================================================================
+\section{What the paper optimizes, and what a joint-design framework would add}
+%===============================================================================
+
+\subsection{What the paper explicitly optimizes}
+
+The source performs a bi-level optimization in the spirit of path (2a)/(2b) of the relaxation hierarchy (\textsc{AdaptiveDesign}, \S10):
+\begin{itemize}[nosep,leftmargin=2em]
+  \item \textbf{Outer (design):}  scan over $f_q^{\max} \in [2,\,20]\,$GHz, a \emph{one}-dimensional slice of $\bm{c}$.  For each value, find the optimal sensing flux $\Phi^*(f_q^{\max})$ analytically by maximizing single-shot sensitivity $S(f_q^{\max},\Phi) = \max_\tau |\partial P_{|1\rangle}/\partial\Phi|$ (Eqs.~16,~18).
+  \item \textbf{Inner (policy):}  Kitaev PEA prescribes $\tau_k$ and $n_k$ from the current belief at run time.  The delay-time schedule $\{\tau_k\}$ is the adaptive variable; the termination and majority-voting rules at each step are shot-level adaptive.
+\end{itemize}
+
+This is a clean instance of a prescribed-inner-rule bi-level loop (path (2b), myopic/information-theoretic with a multi-step algorithm template) rather than a full Bellman-optimal policy over the Ramsey likelihood.
+
+\subsection{What the paper does \emph{not} vary (but a full joint framework could)}
+
+\begin{itemize}[nosep,leftmargin=2em]
+  \item \textbf{Circuit geometry} ($w$, $L$, $s$, coupler geometry, flux-bias-line widths, SQUID-loop shape).  These control $M,\,M',\,C_{qg},\,C_{qr},\,C_c,\,\beta$, and hence every $\Gamma$ rate; they enter the likelihood through the $A,B$ envelope of Eq.~\eqref{eq:ramsey}.
+  \item \textbf{Operating temperature $T$} --- varied for comparison at $20,\,40,\,60$\,mK but not treated as a design variable (though constrained by the mixing-chamber budget).
+  \item \textbf{Qubit--resonator detuning $\Delta$} --- fixed at $2\pi\times 2\,$GHz.  Purcell decay $\Gamma_1^{\mathrm{cav}} \propto 1/\Delta^2$, so larger $\Delta$ improves coherence at the cost of slower readout.
+  \item \textbf{Resonator design} ($\kappa,\,Q_e,\,Q_i$) --- fixed.
+  \item \textbf{Multi-qubit placement and mutual couplings} --- the number $N$ is varied, but the geometric layout of the $N$ qubits and their couplings is not.
+  \item \textbf{Flux-bias-line / SQUID-loop geometry}, which simultaneously controls the inductive Purcell channel $\Gamma_1^{\mathrm{ind}}$ and the sensor's dynamic range $\Phi_{\max}$ (Eq.~20).
+  \item \textbf{Probe-state preparation sequence} --- hand-designed ($|\Phi^+\rangle$ Bell / GHZ via $CP_{10}$) rather than optimized.
+\end{itemize}
+
+\subsection{A complete joint-\texorpdfstring{$(\bm{c},\bm{s})$}{(c,s)} formulation}
+
+In the notation of \textsc{AdaptiveDesign}:
+\begin{align}
+  \bm{x} &\;=\; \Phi_\text{ext},\\
+  \bm{s}_k &\;=\; \bigl(\tau_k,\;n_k,\;\Phi^*,\;\omega_d,\;N,\;\text{probe state}\bigr),\\
+  \bm{c} &\;=\; \bigl(f_q^{\max},\;\text{circuit geometry},\;\text{coupler/resonator design},\;T,\;\Delta\bigr),
+\end{align}
+with per-shot likelihood
+\begin{equation}
+  p(y_k\mid\bm{x},\bm{s}_k,\bm{c}) \;=\; P_{|1\rangle}\bigl(\Phi_\text{ext},\tau_k;\,\bm{c}\bigr)^{y_k}\,\bigl(1-P_{|1\rangle}\bigr)^{1-y_k},
+\end{equation}
+for $P_{|1\rangle}$ given by Eq.~\eqref{eq:ramsey} (or Eq.~\eqref{eq:ghz} in the GHZ case) and with the $K$-shot empirical mean $\hat P$ carrying Gaussian sampling noise $\sigma_P = 1/(2\sqrt{K})$ modulated by the $\varepsilon$ readout-error model.
+
+A full joint DP would
+\begin{itemize}[nosep,leftmargin=2em]
+  \item optimize the circuit geometry $\bm{c}$ at the outer level, with envelope-theorem gradients propagating through the FEM capacitance extraction (COMSOL, or a differentiable surrogate) and the Biot--Savart inductance integral;
+  \item optimize the per-step controls $(\tau_k,\,n_k,\,\Phi_{\text{ext},k})$ at the inner level; and
+  \item optionally treat the probe-state structure ($N$, entangler choice) as a discrete design layer.
+\end{itemize}
+The paper solves a reduced problem: one-dimensional outer scan over $f_q^{\max}$; prescribed Kitaev PEA on $\tau$; fixed geometry; fixed entangler structure within each comparison.
+
+%===============================================================================
+\section{Position in the relaxation hierarchy}
+%===============================================================================
+
+Within the tractability hierarchy of \textsc{AdaptiveDesign} \S10.4, the Danilin--Nugent--Weides pipeline sits between rows (2a) and (2b):
+\begin{itemize}[nosep,leftmargin=2em]
+  \item \textbf{Inner rule.}  Kitaev PEA --- a binary-search-like reduction of the flux interval with doubling $\tau$.  Non-myopic (the algorithm has a fixed multi-step template) but \emph{not} Bellman-optimal: the PEA schedule is fixed in advance once $\tau_{\min}$ and $N_{\mathrm{step}}$ are set; only the majority-voting termination is adaptive at the shot level.
+  \item \textbf{Outer loop.}  Grid scan over $f_q^{\max}$; $\Phi^*$ found analytically via Eq.~16 of the source.
+  \item \textbf{Gradient structure.}  Not explicitly formulated in the source; implicit via $\max$-over-$\tau$ and $\max$-over-$\Phi$ at each $f_q^{\max}$.  A joint framework would propagate $\partial S/\partial(\text{circuit geometry})$ through the full FEM + Biot--Savart chain, treating $\bm{c}$ as a $\sim\!10$-dimensional geometric vector.
+\end{itemize}
+
+This makes the paper a clean \emph{one-dimensional worked example} of the bi-level path.  The Ramsey likelihood \eqref{eq:ramsey} and the GHZ likelihood \eqref{eq:ghz} are tractable, physically grounded forward models.  The system slots directly into the joint-$(\bm{c},\bm{s})$ framework as an inner-rule choice (path (2b)) with the x-mon circuit geometry promoted from ``fixed at fabrication'' to ``design variable in $\R^{d_c}$.''
+
+\end{document}
