@@ -1,0 +1,581 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{listings}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+
+\title{Numerical Computation of the Ignorance Gap\\for the Radar Beam-Search Case Study}
+\author{Z.\ Lin}
+\date{April 2026}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{green!60!black},
+  showstringspaces=false,
+  breaklines=true,
+  breakatwhitespace=true,
+  columns=flexible,
+  frame=single,
+  framesep=4pt,
+  framerule=0.3pt,
+  rulecolor=\color{gray!40},
+  numbers=none,
+  keywords={function,end,for,if,else,elseif,while,do,in,const,return,using,begin,import,export,struct,let,mutable,abstract,type,where,isa,true,false},
+  tabsize=4,
+  literate={★}{{\ensuremath{\star}}}1
+           {π}{{\ensuremath{\pi}}}1
+           {φ}{{\ensuremath{\varphi}}}1
+           {Φ}{{\ensuremath{\Phi}}}1
+           {Σ}{{\ensuremath{\Sigma}}}1
+           {λ}{{\ensuremath{\lambda}}}1
+           {μ}{{\ensuremath{\mu}}}1
+           {∈}{{\ensuremath{\in}}}1
+           {≤}{{\ensuremath{\le}}}1
+           {≥}{{\ensuremath{\ge}}}1
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We numerically compute the ignorance-gap distribution $IG(x)$ for the finite-POMDP radar beam-search case study of \texttt{AdaptiveDesign.tex} \S9, on a single-thread laptop, using exact enumeration and no Monte~Carlo approximation.  The computation produces closed-form nats values for (a) the oracle value $V_{\text{oracle}}(x)$ for every cell, (b) the fixed-design optimum $V_{\text{fixed}}$ with explicit optimal sensor sequence $s^\star$, (c) the per-cell fixed-design value $\Phi(x, s^\star, c)$, and (d) the per-cell ignorance gap $IG(x)$ in both the narrow-beam and wide-beam regimes.  The document also clarifies one conceptual subtlety: the terminal reward used in the discrete-state numerical problem is the mutual information $I(z; y_{1:N})$, not a literal Fisher-information log-determinant, and the two agree only in the continuous-state Gaussian-posterior limit.
+\end{abstract}
+
+\tableofcontents
+
+%====================================================================
+\section{Purpose and scope}
+%====================================================================
+
+The companion document \texttt{AdaptiveDesign.tex} develops the ignorance gap
+\[
+  IG(\bm{x}) = V_{\text{oracle}}(\bm{x}) - V_{\text{fixed}}(\bm{x}; s^\star)
+\]
+as an EVPI upper bound on the value of any adaptive policy.  Section~9 of that document analyzes the radar beam-search problem in two regimes---narrow beam and wide beam---and derives closed-form predictions for $\E[IG]$ in the idealized $(p_{\mathrm{D}}, p_{\mathrm{FA}}) \to (1, 0)$ limit.
+
+This note replaces the idealized estimates with \emph{exact finite-noise numerics} by enumerating all finite POMDP quantities directly.  The problem size ($K = 16$ states, $M = 16$ actions, $|\mathcal{Y}| = 2$ observations, horizon $N = 4$) is small enough that no approximation, sampling, or solver beyond exhaustive enumeration is needed.  The intent is to (i)~verify the qualitative predictions, (ii)~quantify the finite-noise correction, (iii)~expose the full distribution of $IG(x)$, and (iv)~surface one conceptual subtlety that had been glossed in the main document.
+
+%====================================================================
+\section{Discrete-state reformulation of the terminal reward}
+%====================================================================
+
+The main document defines the terminal reward as
+\[
+  \Phi(z, \theta_{1:N}, c) \;=\; \ln K - H(z \mid y_{1:N})
+\]
+and notes that this equals $\ln\det \bm{J}_N$ ``up to an additive constant under the categorical's softmax parametrization.''  That equivalence is loose in the discrete-state setting: there is no continuous parameter $x$ to differentiate, so Fisher information as a Hessian is ill-defined.  The honest discrete analogue is the \emph{mutual information}
+\begin{equation}
+  \Phi(z, s, c) \;=\; I(z;\, y_{1:N} \mid s, c)
+  \;=\; \ln K - \E_{y \mid z, s, c}[H(z \mid y_{1:N}, s, c)],
+  \label{eq:Phi_mi}
+\end{equation}
+which is well-defined for any finite $z$-alphabet, matches the ``information-gain'' reading of $\Phi$, and coincides with $\ln\det \bm{J}_N$ only in the continuous-state Gaussian-posterior limit (where a softmax-logit Gaussian approximation of the posterior becomes exact).
+
+For the numerical work we use $\Phi$ as defined in \eqref{eq:Phi_mi} throughout.  No Hessian or log-determinant is ever computed; everything reduces to probabilities and entropies on a finite alphabet.
+
+%====================================================================
+\section{Problem parameters and beam model}
+%====================================================================
+
+\paragraph{State.}  $K = 16$ cells equally spaced on a ring: $\varphi(z) = 2\pi(z - 1)/K$ for $z \in \{1, \ldots, K\}$.  Prior $p_0(z) = 1/K$.
+
+\paragraph{Actions.}  $M = 16$ pointings: $\theta_a = \varphi(a)$ for $a \in \{1, \ldots, K\}$.  The action at step $k$ is an index $s_k \in \{1, \ldots, K\}$ denoting the cell the beam is centered on.
+
+\paragraph{Observations.}  Binary $y_k \in \{0, 1\}$ (detection / miss) with Bernoulli likelihood
+\begin{equation}
+  p(y_k = 1 \mid z, s_k) = \begin{cases} p_{\mathrm{D}} & \text{if $z$ lies in the beam centered at cell $s_k$,} \\ p_{\mathrm{FA}} & \text{otherwise.} \end{cases}
+  \label{eq:likelihood}
+\end{equation}
+
+\paragraph{Beam model (top-hat).}  The geometry $c$ is summarized by a single integer $m$ = number of cells covered by the main lobe.  Let $d(a, z) = \min(\mathrm{mod}(z-a, K),\, \mathrm{mod}(a-z, K))$ be the angular distance (in cells) between pointing $a$ and cell $z$.  Then
+\begin{equation}
+  z \text{ is in beam centered at } a
+  \;\iff\; d(a, z) \le \lfloor (m-1)/2 \rfloor.
+\end{equation}
+Two regimes are reported:
+\begin{itemize}[nosep]
+  \item \textbf{Narrow-beam:} $m = 1$.  Beam at cell $a$ covers only cell $a$.
+  \item \textbf{Wide-beam:} $m = K/2 = 8$.  The even-$m$ convention in our code yields a beam covering 7 cells (the target cell plus 3 on each side).  This is an order-one rounding of $K/2$; qualitative behavior matches the wide-beam regime of the main document.
+\end{itemize}
+
+\paragraph{Probabilities.}  $p_{\mathrm{D}} = 0.9$, $p_{\mathrm{FA}} = 0.05$.  These are finite; the $(p_{\mathrm{D}}, p_{\mathrm{FA}}) \to (1, 0)$ closed-form predictions of the main document are upper-bound limits.
+
+%====================================================================
+\section{Posterior and entropy formulas}
+%====================================================================
+
+Given a sensor sequence $s_{1:N}$ and observations $y_{1:N}$, the posterior on $z$ is
+\begin{equation}
+  b(z \mid y_{1:N}, s_{1:N}) \;=\; \frac{p_0(z) \prod_{k=1}^N p(y_k \mid z, s_k)}{\sum_{z'} p_0(z') \prod_{k=1}^N p(y_k \mid z', s_k)}.
+  \label{eq:posterior}
+\end{equation}
+Its Shannon entropy (nats) is
+\begin{equation}
+  H(z \mid y_{1:N}, s_{1:N}) = -\sum_{z=1}^K b(z \mid y_{1:N}, s_{1:N}) \ln b(z \mid y_{1:N}, s_{1:N}).
+  \label{eq:entropy}
+\end{equation}
+The state-conditional value of $\Phi$ is the observation-averaged information gain:
+\begin{equation}
+  \Phi(x, s_{1:N}, c) = \sum_{y_{1:N} \in \{0,1\}^N} p(y_{1:N} \mid x, s_{1:N}) \,\bigl[\ln K - H(z \mid y_{1:N}, s_{1:N})\bigr]
+  \label{eq:Phi_def}
+\end{equation}
+with
+\begin{equation}
+  p(y_{1:N} \mid x, s_{1:N}) = \prod_{k=1}^N p(y_k \mid x, s_k).
+\end{equation}
+
+The sum in \eqref{eq:Phi_def} is over $2^N = 16$ terms (a direct enumeration); the posterior in \eqref{eq:posterior} sums over $K = 16$ terms.  Per $(x, s_{1:N})$ evaluation: $16 \times (K \cdot N + K) \approx 16 \times 80 = 1280$ elementary operations.
+
+%====================================================================
+\section{Oracle value $V_{\text{oracle}}(x)$}
+%====================================================================
+
+\subsection{Definition}
+\[
+  V_{\text{oracle}}(x) = \max_{s_{1:N}} \Phi(x, s_{1:N}, c).
+\]
+
+\subsection{Algorithm}
+For each of the $K = 16$ values of $x$, enumerate all $K^N = 65{,}536$ sensor sequences and retain the maximum.  Cost: $16 \times 65{,}536 \times 1280 \approx 1.3 \times 10^9$ elementary operations.  Julia single-threaded runtime: a few seconds.
+
+\subsection{Symmetry prediction}
+The problem has a dihedral $D_K$ symmetry (ring cyclic rotations plus one reflection) under the uniform prior and reflection-symmetric beam.  Consequently $V_{\text{oracle}}(x)$ is \emph{exactly} constant across $x$: if $s^\star$ is oracle-optimal for $x = z_0$, then $\sigma \cdot s^\star$ is oracle-optimal for $\sigma \cdot z_0$ with the same value.
+
+\subsection{Numerical result}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}rll@{}}
+\toprule
+$x$ & $V_{\text{oracle}}(x)$ & $s^\star(x)$ \\
+\midrule
+1, \ldots, 16 & 2.579634 & narrow: $[x, x, x, x]$ \\
+1, \ldots, 16 & 1.923462 & wide:  (see text)        \\
+\bottomrule
+\end{tabular}
+\caption{Numerical $V_{\text{oracle}}(x)$ in nats, for both regimes.  Constant to 15~decimal places over $x$---the residual variation is machine $\epsilon$.}
+\label{tab:Voracle}
+\end{table}
+
+\paragraph{Narrow regime.}  Oracle strategy is trivially $s^\star(x) = (x, x, x, x)$: point at the known target every step.  Per-step on-target Bernoulli is $p_{\mathrm{D}} = 0.9$ (vs.\ $p_{\mathrm{FA}} = 0.05$ for every other cell).
+
+\paragraph{Wide regime.}  Oracle strategy is non-trivial: for $x = 1$, numerical $s^\star = [3, 14, 14, 4]$.  Each of these pointings places cell 1 inside its 7-cell beam, so every measurement is on-target from cell 1's perspective; but the three distinct pointings exclude complementary non-1 cells.  Specifically,
+\[
+  \begin{aligned}
+    \text{beam at 3 excludes}  &\; \{7, 8, 9, 10, 11, 12, 13\}, \\
+    \text{beam at 14 excludes} &\; \{2, 3, 4, 5, 6, 7, 8, 9, 10\}, \\
+    \text{beam at 4 excludes}  &\; \{8, 9, 10, 11, 12, 13, 14, 15, 16\}.
+  \end{aligned}
+\]
+The union covers all cells except cell 1, so three \emph{distinct} detections together triangulate the target.  The oracle exploits the geometric overlap structure---a capability that narrow-beam oracle (single-cell beams) cannot use.
+
+\subsection{Why $V_{\text{oracle}}^{\text{narrow}} > V_{\text{oracle}}^{\text{wide}}$}
+Narrow beams separate a single cell from all others at $p_{\mathrm{D}}/p_{\mathrm{FA}} = 18{:}1$ per measurement.  Wide beams separate $m = 7$ cells from the $K - m = 9$ remaining at the same per-shot ratio, but the oracle can no longer isolate a single cell with one measurement because seven cells share the ``in-beam'' label.  Narrow per-step information is higher; oracle is stronger.  Specifically $V_{\text{oracle}}^{\text{narrow}} = 2.580$ nats vs.\ $V_{\text{oracle}}^{\text{wide}} = 1.923$ nats, both bounded above by the prior entropy $\ln K = 2.773$ nats.
+
+%====================================================================
+\section{Fixed-design value $V_{\text{fixed}}$}
+%====================================================================
+
+\subsection{Definition}
+\[
+  V_{\text{fixed}} = \max_{s_{1:N}} \frac{1}{K} \sum_{x=1}^K \Phi(x, s_{1:N}, c),
+  \qquad s^\star = \argmax_{s_{1:N}} \frac{1}{K}\sum_{x=1}^K \Phi(x, s_{1:N}, c).
+\]
+
+\subsection{Algorithm}
+Enumerate all $K^N = 65{,}536$ sensor sequences; for each, average $\Phi$ over the uniform prior and track the maximum.  Total per-sequence cost includes the inner $K = 16$ state loop: $65{,}536 \times 16 \times 1280 \approx 1.3 \times 10^9$ operations.  Julia runtime: a few seconds.
+
+\subsection{Numerical result}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}llr@{}}
+\toprule
+regime & $s^\star$ & $V_{\text{fixed}}$ (nats) \\
+\midrule
+narrow & $[1, 13, 9, 7]$  (any 4 distinct cells, up to $D_K$ orbit) & $0.498683$ \\
+wide   & $[1, 3, 13, 15]$ (4 spread pointings)                     & $1.410526$ \\
+\bottomrule
+\end{tabular}
+\caption{Fixed-design optimum, exhaustive enumeration.}
+\label{tab:Vfixed}
+\end{table}
+
+\subsection{Per-cell breakdown of $\Phi(x, s^\star, c)$}
+
+Unlike $V_{\text{oracle}}(x)$, the fixed-design conditional value $\Phi(x, s^\star, c)$ is \emph{not} constant over $x$ because a deterministic $s^\star$ breaks the ring symmetry.  Table~\ref{tab:Phi_per_x} shows the per-cell breakdown for both regimes.
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}rrr@{}}
+\toprule
+$x$ & $\Phi(x, s^\star)$ narrow & $\Phi(x, s^\star)$ wide \\
+\midrule
+1   & 0.976697 & 1.540807 \\
+2   & 0.339346 & 1.540807 \\
+3   & 0.339346 & 1.431264 \\
+4   & 0.339346 & 1.431264 \\
+5   & 0.339346 & 1.354544 \\
+6   & 0.339346 & 1.354544 \\
+7   & 0.976697 & 1.164713 \\
+8   & 0.339346 & 1.164713 \\
+9   & 0.976697 & 1.164713 \\
+10  & 0.339346 & 1.354544 \\
+11  & 0.339346 & 1.354544 \\
+12  & 0.339346 & 1.431264 \\
+13  & 0.976697 & 1.431264 \\
+14  & 0.339346 & 1.540807 \\
+15  & 0.339346 & 1.540807 \\
+16  & 0.339346 & 1.767821 \\
+\midrule
+avg & $0.498683$ & $1.410526$ \\
+\bottomrule
+\end{tabular}
+\caption{Conditional fixed-design value $\Phi(x, s^\star, c)$ for each $x$.  Narrow: 2~distinct values (probed / unprobed).  Wide: 5~distinct values (the cell's position relative to $s^\star = [1, 3, 13, 15]$).  Averages match $V_{\text{fixed}}$ exactly.}
+\label{tab:Phi_per_x}
+\end{table}
+
+\paragraph{Narrow regime interpretation.}  With $s^\star = [1, 13, 9, 7]$, the four probed cells each see one on-target beam (which gives a detection with probability $p_{\mathrm{D}} = 0.9$), leading to high information about whether $z$ equals that cell.  The 12 unprobed cells see four off-target beams and the information content is much lower.
+\begin{align*}
+  \Phi(\text{probed})   &= 0.976697 \text{ nats} \\
+  \Phi(\text{unprobed}) &= 0.339346 \text{ nats}
+\end{align*}
+The prior-weighted average is $V_{\text{fixed}} = (4/16)(0.977) + (12/16)(0.339) = 0.499$ nats.
+
+\paragraph{Wide regime interpretation.}  With $s^\star = [1, 3, 13, 15]$ (four spread pointings) and $m = 7$-cell beams, different cells see different numbers of on-target beams:
+\begin{itemize}[nosep]
+  \item Cell 16 lies in \emph{all four} beams (closest to all four pointings by ring wraparound) and receives the highest $\Phi = 1.768$.
+  \item Cells 1, 2, 14, 15 lie in three beams and have $\Phi = 1.541$.
+  \item Cells 3, 4, 12, 13 lie in two beams and have $\Phi = 1.431$.
+  \item Cells 5, 6, 10, 11 lie in one beam and have $\Phi = 1.355$.
+  \item Cells 7, 8, 9 (the ``back'' of the ring, between pointings 3 and 13) lie in \emph{zero} beams: $\Phi = 1.165$.
+\end{itemize}
+The five-level structure directly reflects the in-beam count, independent of cell identity.
+
+%====================================================================
+\section{Ignorance gap $IG(x)$}
+%====================================================================
+
+\subsection{Definition and computation}
+\[
+  IG(x) = V_{\text{oracle}}(x) - \Phi(x, s^\star, c).
+\]
+Since $V_{\text{oracle}}(x)$ is constant over $x$ (exact symmetry) and $\Phi(x, s^\star, c)$ has been tabulated per $x$, this is a direct subtraction.
+
+\subsection{Narrow regime}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}rrrr@{}}
+\toprule
+$x$ & $V_{\text{oracle}}$ & $\Phi(x, s^\star)$ & $IG(x)$ \\
+\midrule
+1     & 2.579634 & 0.976697 & 1.602937 \\
+2     & 2.579634 & 0.339346 & 2.240288 \\
+3     & 2.579634 & 0.339346 & 2.240288 \\
+4     & 2.579634 & 0.339346 & 2.240288 \\
+5     & 2.579634 & 0.339346 & 2.240288 \\
+6     & 2.579634 & 0.339346 & 2.240288 \\
+7     & 2.579634 & 0.976697 & 1.602937 \\
+8     & 2.579634 & 0.339346 & 2.240288 \\
+9     & 2.579634 & 0.976697 & 1.602937 \\
+10    & 2.579634 & 0.339346 & 2.240288 \\
+11    & 2.579634 & 0.339346 & 2.240288 \\
+12    & 2.579634 & 0.339346 & 2.240288 \\
+13    & 2.579634 & 0.976697 & 1.602937 \\
+14    & 2.579634 & 0.339346 & 2.240288 \\
+15    & 2.579634 & 0.339346 & 2.240288 \\
+16    & 2.579634 & 0.339346 & 2.240288 \\
+\midrule
+\multicolumn{3}{l}{mean} & $\E[IG] = 2.080950$ \\
+\multicolumn{3}{l}{std} & $0.285032$ \\
+\multicolumn{3}{l}{distinct values} & 2 \\
+\bottomrule
+\end{tabular}
+\caption{Narrow-regime $IG(x)$ table.  The 4~probed cells (1, 7, 9, 13) have $IG = 1.603$; the 12~unprobed cells have $IG = 2.240$.}
+\label{tab:IG_narrow}
+\end{table}
+
+The two-value distribution in the narrow regime is a direct consequence of the 4-vs-12 partition created by $s^\star$.  Cells inside $s^\star$ have lower IG because the fixed design does give them one on-target probe, reducing the gap to the oracle.  Cells outside $s^\star$ are treated identically (all-off-target beams) and hence have identical IG.
+
+\subsection{Wide regime}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}rrrr@{}}
+\toprule
+$x$ & $V_{\text{oracle}}$ & $\Phi(x, s^\star)$ & $IG(x)$ \\
+\midrule
+1     & 1.923462 & 1.540807 & 0.382655 \\
+2     & 1.923462 & 1.540807 & 0.382655 \\
+3     & 1.923462 & 1.431264 & 0.492197 \\
+4     & 1.923462 & 1.431264 & 0.492197 \\
+5     & 1.923462 & 1.354544 & 0.568918 \\
+6     & 1.923462 & 1.354544 & 0.568918 \\
+7     & 1.923462 & 1.164713 & 0.758748 \\
+8     & 1.923462 & 1.164713 & 0.758748 \\
+9     & 1.923462 & 1.164713 & 0.758748 \\
+10    & 1.923462 & 1.354544 & 0.568918 \\
+11    & 1.923462 & 1.354544 & 0.568918 \\
+12    & 1.923462 & 1.431264 & 0.492197 \\
+13    & 1.923462 & 1.431264 & 0.492197 \\
+14    & 1.923462 & 1.540807 & 0.382655 \\
+15    & 1.923462 & 1.540807 & 0.382655 \\
+16    & 1.923462 & 1.767821 & 0.155641 \\
+\midrule
+\multicolumn{3}{l}{mean} & $\E[IG] = 0.512935$ \\
+\multicolumn{3}{l}{std} & $0.161468$ \\
+\multicolumn{3}{l}{distinct values} & 5 \\
+\bottomrule
+\end{tabular}
+\caption{Wide-regime $IG(x)$ table.  Five distinct values, indexed by how many of the four $s^\star$ beams cover cell $x$.}
+\label{tab:IG_wide}
+\end{table}
+
+Across the wide regime the gap varies by a factor of nearly $5\times$ (from $0.156$ to $0.759$), with cell 16 the most-covered and cells 7--9 the ``shadow'' of the spread pointings $[1, 3, 13, 15]$.
+
+%====================================================================
+\section{Why $IG(x)$ is not constant across $x$}
+%====================================================================
+
+At first glance the non-constancy is surprising: the prior is uniform, the ring is $D_K$-symmetric, the beam pattern is rotation-equivariant---so shouldn't every cell look equivalent?
+
+The resolution is that the oracle and the fixed design treat the symmetry group differently.
+
+\paragraph{Oracle.}  By definition, $V_{\text{oracle}}(x) = \max_{s} \Phi(x, s, c)$.  For each $x$, the oracle \emph{re-optimizes} and picks the best sensor sequence for that particular $x$.  Under the group action $\sigma \in D_K$, the optimal sensor sequence for $\sigma \cdot x$ is $\sigma \cdot s^\star(x)$, and $\Phi(\sigma \cdot x, \sigma \cdot s^\star(x), \sigma \cdot c) = \Phi(x, s^\star(x), c)$ by equivariance.  Hence $V_{\text{oracle}}(x)$ is truly constant over $x$.
+
+\paragraph{Fixed design.}  The best fixed sensor sequence $s^\star_{\text{fixed}}$ is chosen once and used for every $x$.  For a single deterministic $s^\star$, the value $\Phi(x, s^\star, c)$ under the group action becomes $\Phi(\sigma \cdot x, s^\star, c)$, which does \emph{not} equal $\Phi(x, s^\star, c)$ unless $s^\star$ is $\sigma$-invariant.  No single $s^\star$ is invariant under the full $D_K$ orbit, so $\Phi(x, s^\star, c)$ must vary across the orbit---and by size of its stabilizer, it takes on a number of distinct values equal to $K$ divided by the orbit length of $s^\star$.
+
+\paragraph{Consequence.}  The deterministic fixed-design value decomposes the $K$ cells according to their position relative to $s^\star$:
+\begin{itemize}[nosep]
+  \item Narrow regime: 4~cells in $s^\star$, 12~outside.  Two-valued $IG$.
+  \item Wide regime: 5~classes depending on how many $s^\star$-beams cover each cell (0, 1, 2, 3, or 4 beams).  Five-valued $IG$.
+\end{itemize}
+The prior-expected IG is
+\[
+  \E[IG] = V_{\text{oracle}} - V_{\text{fixed}} = V_{\text{oracle}} - \E_x[\Phi(x, s^\star, c)],
+\]
+which is a single scalar, but the orbit-dependent distribution of $\Phi(x, s^\star, c)$ around that mean gives the per-cell spread of $IG(x)$.
+
+\paragraph{Orbit averaging would restore constancy.}  A \emph{randomized} fixed design that applies $s^\star$ with uniform probability over its $D_K$ orbit would give $\E_{\sigma}[\Phi(x, \sigma \cdot s^\star, c)]$ constant in $x$ by symmetry.  The deterministic design sacrifices this for the best single-realization value.  In a sense, the variability of $IG(x)$ is the price of deterministic commitment.
+
+%====================================================================
+\section{Comparison with the closed-form predictions}
+%====================================================================
+
+\subsection{Ideal-limit predictions}
+The main document's \S9 derives, under $(p_{\mathrm{D}}, p_{\mathrm{FA}}) \to (1, 0)$:
+\begin{align}
+  V_{\text{oracle}} &\approx \ln K = 2.773 \text{ nats,} \\
+  V_{\text{fixed}}^{\text{narrow}} &\approx \ln K - \frac{K-N}{K}\ln(K-N) = 0.909 \text{ nats,} \\
+  V_{\text{fixed}}^{\text{wide}}   &\approx \ln(2N) = 2.079 \text{ nats,} \\
+  \E[IG]^{\text{narrow}} &\approx \frac{K-N}{K}\ln(K-N) = 1.864 \text{ nats,} \\
+  \E[IG]^{\text{wide}}   &\approx \ln\!\bigl(K/(2N)\bigr) = 0.693 \text{ nats.}
+\end{align}
+
+\subsection{Ideal vs.\ finite-noise}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+quantity & ideal $(p_{\mathrm{D}}\!\to\!1, p_{\mathrm{FA}}\!\to\!0)$ & finite $p_{\mathrm{D}}\!=\!0.9, p_{\mathrm{FA}}\!=\!0.05$ & ratio \\
+\midrule
+$V_{\text{oracle}}^{\text{narrow}}$ & 2.773 & 2.580 & 0.93 \\
+$V_{\text{fixed}}^{\text{narrow}}$  & 0.909 & 0.499 & 0.55 \\
+$\E[IG]^{\text{narrow}}$            & 1.864 & 2.081 & 1.12 \\
+\midrule
+$V_{\text{oracle}}^{\text{wide}}$   & 2.773 & 1.923 & 0.69 \\
+$V_{\text{fixed}}^{\text{wide}}$    & 2.079 & 1.411 & 0.68 \\
+$\E[IG]^{\text{wide}}$              & 0.693 & 0.513 & 0.74 \\
+\bottomrule
+\end{tabular}
+\caption{Idealized closed-form predictions vs.\ exact finite-noise numerics.}
+\label{tab:ideal_vs_num}
+\end{table}
+
+\subsection{Interpretation}
+\begin{itemize}
+  \item \emph{Narrow regime.}  $\E[IG]$ is \emph{larger} at finite noise than predicted (2.081 vs.\ 1.864).  The reason: both $V_{\text{oracle}}$ and $V_{\text{fixed}}$ shrink as noise increases, but $V_{\text{fixed}}$ shrinks more aggressively (factor 0.55) than $V_{\text{oracle}}$ (factor 0.93).  The oracle can always point at the target and extract information efficiently even at finite noise; the fixed design wastes most of its budget on cells that aren't the target, and each off-target beam gives a weak Bernoulli($p_{\mathrm{FA}}$) whose information content degrades with increasing $p_{\mathrm{FA}}$.  The gap \emph{widens} as noise grows.
+  \item \emph{Wide regime.}  All three quantities shrink by roughly the same factor ($\approx 0.7$).  The gap is dominated by the coverage structure, which degrades oracle and fixed-design roughly symmetrically as noise increases.
+\end{itemize}
+The qualitative structure predicted by the main document---$\E[IG]^{\text{narrow}} > \E[IG]^{\text{wide}}$---holds unambiguously: $2.08 > 0.51$.  The numerical margin is even larger than the ideal-limit prediction.
+
+%====================================================================
+\section{Summary of IG statistics}
+%====================================================================
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}lrr@{}}
+\toprule
+statistic & narrow & wide \\
+\midrule
+$\E[IG]$         & 2.080950 & 0.512935 \\
+$\mathrm{std}[IG]$ & 0.285032 & 0.161468 \\
+$\min[IG]$       & 1.602937 & 0.155641 \\
+$\max[IG]$       & 2.240288 & 0.758748 \\
+$\max/\min$      & 1.40     & 4.87     \\
+distinct values  & 2        & 5        \\
+CV $=\mathrm{std}/\E$ & 0.14 & 0.31 \\
+\bottomrule
+\end{tabular}
+\caption{Distributional statistics of $IG(x)$.}
+\label{tab:IG_stats}
+\end{table}
+
+The coefficient of variation $\mathrm{std}/\E[IG]$ is larger for the wide regime (0.31 vs.\ 0.14), consistent with the richer 5-level structure: even though $\E[IG]$ is smaller, its distribution across cells is \emph{more} heterogeneous in relative terms.  If one were to deploy an adaptive policy, the cells with the highest $IG(x)$ (indices 7, 8, 9 in the wide regime) would be the ones where adaptation could in principle help the most.
+
+%====================================================================
+\section{Computational cost summary}
+%====================================================================
+
+All reported quantities come from exact enumeration, no sampling.  Per-regime:
+\begin{itemize}[nosep]
+  \item $V_{\text{oracle}}$: $K \cdot K^N \cdot 2^N \cdot (KN + K)$ elementary operations $= 16 \cdot 65{,}536 \cdot 16 \cdot 80 \approx 1.3 \times 10^9$.
+  \item $V_{\text{fixed}}$: identical count.
+\end{itemize}
+Total for both regimes: $\approx 5 \times 10^9$ elementary operations.  Julia 1.12 single-threaded completes both in well under a minute on a standard laptop.  RAM footprint: under 20~MB (the largest array is one posterior vector of length $K = 16$ per outcome, recomputed on the fly).
+
+%====================================================================
+\section{Conceptual reading of the results}
+%====================================================================
+
+\subsection{The oracle is symmetric; the deterministic fixed design is not}
+The equality $V_{\text{oracle}}(x) = \mathrm{const}$ is an exact symmetry fact.  The non-constancy of $IG(x)$ comes entirely from $\Phi(x, s^\star, c)$, the per-$x$ fixed-design value, which depends on the $x$-orbit position relative to a single chosen $s^\star$.  The narrow regime has a simple binary decomposition (probed vs.\ unprobed); the wide regime has a richer 5-level structure determined by cell-to-beam overlap count.  Both are fully predicted by the orbit structure.
+
+\subsection{Finite noise widens the narrow-regime gap}
+The ideal-limit prediction $\E[IG]^{\text{narrow}} \approx 1.86$ nats becomes $2.08$ nats at finite noise because $V_{\text{fixed}}$ shrinks faster than $V_{\text{oracle}}$.  This is a second-order effect not visible in the idealized analysis, but structurally expected: the fixed design's off-target beams have $p_{\mathrm{FA}}$-dominated likelihoods that degrade sharply as $p_{\mathrm{FA}}$ grows from 0.
+
+\subsection{$\E[IG]$ as a diagnostic, not a promise}
+In the narrow regime, $\E[IG] = 2.08$ nats is substantial (EVPI upper bound of $\sim 2.5\times$ uncertainty-volume reduction), but as the main document argues, adaptation cannot realize any of this in a narrow-beam setting: with single-cell beams, adaptive and fixed designs both visit $N$ cells in $N$ steps, in the same expected order under the uniform prior.  Section~9 of \texttt{AdaptiveDesign.tex} predicts $V_{\text{adaptive}}^{\text{narrow}} = V_{\text{fixed}}^{\text{narrow}} = 0.499$ nats.  Verifying this---and verifying the tight-EVPI result $V_{\text{adaptive}}^{\text{wide}} - V_{\text{fixed}}^{\text{wide}} = \E[IG]^{\text{wide}} = 0.51$ nats---requires the full finite-horizon Bellman DP, which is the next computational step.
+
+%====================================================================
+\section{Related work and originality check}
+\label{sec:related}
+%====================================================================
+
+Before deploying this case study in a paper, we surveyed the adjacent literatures to check whether the specific problem formulation---finite-POMDP ring target search with envelope-theorem-based antenna-geometry co-design and an EVPI pre-solver gate---has been published elsewhere.  The summary below is based on a targeted web search across cognitive-radar, sensor-management, adaptive-compressed-sensing, sequential Bayesian DoE, end-to-end-optics-co-design, programmable-metasurface, sequential-hypothesis-testing, and information-directed-sampling literatures.
+
+\subsection{Closest prior work in each community}
+
+\begin{description}[leftmargin=2em, style=nextline]
+\item[Cognitive radar.]
+The closest published work is Bouhou et al., \emph{POMDP-Driven Cognitive Massive MIMO Radar} (arXiv:2410.17967, IEEE~Trans.~Radar~Syst.\ 2025) and its follow-up \emph{Joint Multi-Target Detection-Tracking via POMCP} (arXiv:2507.17506).  These formulate cognitive MIMO radar as a POMDP but solve it approximately with Monte-Carlo tree planning (POMCP), adapt transmit-waveform and power, and \emph{fix} the antenna aperture.  Haykin's cognitive radar, Bell--Rangaswamy--Stinco, and Greco--Stinco--Gini's 2018 SPM survey all treat the aperture as given.  No work in this community co-optimizes physical antenna element positions/excitations with an exactly-solved POMDP policy.
+
+\item[Sensor management.]
+The Hero--Cochran--Kreucher Foundations~\&~Trends survey (2011) and the Hero--Casta\~n\'on--Cochran--Kastella 2008 Springer volume cover POMDP sensor scheduling extensively (Kreucher--Kastella--Hero active sensing 2005; Casta\~n\'on non-myopic classification).  In every case the design variable is the scheduling policy over a fixed-menu sensor set; the physical hardware is never a co-design variable.
+
+\item[Adaptive compressed sensing.]
+Haupt--Castro--Nowak \emph{Distilled Sensing} (IEEE~Trans.~Inf.~Theory 2011) and Malloy--Nowak adapt \emph{which rows} of an abstract sensing matrix to apply, without parameterizing the sensing matrix by physical array geometry and without POMDP DP.
+
+\item[Sequential Bayesian DoE.]
+Huan--Marzouk (arXiv:1604.08320, 2016) and Shen--Huan (arXiv:2110.15335, 2023) formulate sOED as a DP with continuous design spaces, solved approximately via ADP/policy-gradient RL.  Alexanderian's 2021 \emph{Acta Numerica} survey confirms the absence of exact Sondik-alpha-vector POMDP plus envelope-theorem physical-apparatus co-design in this community.  The idea of EVPI / Expected Value of Sample Information \emph{as a go/no-go gate} appears in clinical-trial VOI analysis (Flight--Julious--Brennan--Todd 2022) but not in radar/photonic sensor design.
+
+\item[End-to-end optics co-design.]
+Sitzmann et al.\ (SIGGRAPH 2018), Chang--Wetzstein 2019, Metzler--Heide--Wetzstein, Tseng--Majumdar, Kellman--Bostan--Waller (arXiv:1808.03571) jointly optimize static hardware with a \emph{fixed, non-adaptive} reconstruction network or illumination sequence.  No POMDP, no belief-state DP, no envelope-theorem policy/geometry split.
+
+\item[Programmable metasurfaces / RIS.]
+Compressive metasurface-aperture imaging (Yurduseven, Imani, Hunt, Smith) co-designs masks with reconstruction non-adaptively.  RIS beamforming with deep RL uses Gaussian MIMO state models and abstract phase-shift layouts; hardware geometry is fixed.
+
+\item[Sequential hypothesis testing.]
+Chernoff (1959) and Naghshvar--Javidi \emph{Active Sequential Hypothesis Testing} (Annals of Statistics 2013, arXiv:1203.4626) treat $K$-ary testing with adaptive experiment selection from a \emph{fixed finite menu of actions}.  The abstract structure matches our ring-search problem, but these papers do not parameterize the experiment's Fisher/Kullback matrix by continuous antenna geometry and do not identify closed forms like $\E[IG]_{\text{narrow}} = \frac{K-N}{K}\ln(K-N)$ or $\E[IG]_{\text{wide}} = \ln\bigl(K/(2N)\bigr)$.
+
+\item[Information-directed sampling.]
+Russo--Van Roy (JMLR 2018, arXiv:1403.5556) and recent work C-IDS on contextual POMDPs (arXiv:2602.03939) embed POMDPs in bilevel optimization, with abstract context variables and approximate policies---the closest \emph{conceptual} match to our outer-context / inner-POMDP split---but not the envelope-theorem identity on the exact optimal value, and not the specific physical-geometry application.
+\end{description}
+
+\subsection{What appears novel in the present framework}
+
+Individually well-established components: exact finite-POMDP DP via Sondik alpha-vectors (1971); adaptive radar beam scheduling with POMDPs; sequential Bayesian DoE as DP; envelope/Danskin theorem for bilevel optimization (Milgrom--Segal 2002); EVPI as a decision-theoretic quantity (classical Howard--Raiffa--Schlaifer); end-to-end differentiable hardware co-design (Wetzstein/Waller).
+
+Combinations not found in the searched literature:
+\begin{enumerate}[nosep,leftmargin=2em]
+  \item Treating antenna element positions and complex excitations as the outer design variable that \emph{parameterizes the observation model of an exactly-solved finite POMDP}, with policy iteration alternating Sondik-exact Bellman and geometry gradient steps.
+  \item Using the envelope/Danskin identity on the optimal POMDP value so the geometry gradient reduces to the explicit partial at the fixed policy, avoiding implicit differentiation through the DP.
+  \item EVPI / ignorance gap as a pre-solver go/no-go gate with closed-form expectations $\E[IG]^{\text{narrow}}$ and $\E[IG]^{\text{wide}}$ under $D_K$-symmetric priors.
+  \item Orbit-symmetry ($D_K$ dihedral) decomposition of the per-cell $IG(x)$ distribution for the ring search, yielding the two-value (narrow) and five-value (wide) histograms we observe numerically.
+\end{enumerate}
+
+\subsection{Caveat}
+
+Web-search coverage of paywalled radar venues (IET, IEEE~AES, NATO~STO) and thesis repositories is uneven, and classified cognitive-radar literature is not searchable.  If a direct prior art exists it is likely in an obscure venue or a very recent unindexed preprint.  We found no direct match across the surveyed communities, and the specific closed-form EVPI predictions and orbit-dependent per-cell $IG(x)$ distributions appear not to have been reported previously.
+
+%====================================================================
+\appendix
+
+\section{Julia implementation}
+\label{app:code}
+The following self-contained script produces all numerical values in this document.  It is placed alongside this \texttt{.tex} file as \texttt{compute\_ig.jl}.
+
+\begin{lstlisting}
+const K = 16;  const N = 4
+const p_D = 0.9;  const p_FA = 0.05
+φ(z) = 2*pi * (z - 1) / K
+
+function make_beam_coverage(m::Int)
+    coverage = [falses(K) for _ in 1:K]
+    half = div(m, 2)
+    for a in 1:K, z in 1:K
+        d = minimum((mod(z - a, K), mod(a - z, K)))
+        coverage[a][z] = (m == 1 ? d == 0 :
+                          (d <= half - 1) || (m % 2 == 1 && d == half))
+    end
+    coverage
+end
+
+p_detect(z, a, cov) = cov[a][z] ? p_D : p_FA
+
+function posterior_entropy(s, y, cov)
+    logb = zeros(K)
+    for z in 1:K, k in 1:N
+        pk = p_detect(z, s[k], cov)
+        logb[z] += log(y[k] == 1 ? pk : 1 - pk)
+    end
+    m = maximum(logb);  b = exp.(logb .- m);  b ./= sum(b)
+    -sum(b[z] > 0 ? b[z] * log(b[z]) : 0.0 for z in 1:K)
+end
+
+py_given_xs(y, x, s, cov) = prod(y[k] == 1 ? p_detect(x, s[k], cov) :
+                                              1 - p_detect(x, s[k], cov) for k in 1:N)
+
+function Φ_value(x, s, cov)
+    lnK = log(K);  val = 0.0
+    for bits in 0:(2^N - 1)
+        y = [((bits >> (k-1)) & 1) for k in 1:N]
+        pyx = py_given_xs(y, x, s, cov)
+        if pyx > 0
+            val += pyx * (lnK - posterior_entropy(s, y, cov))
+        end
+    end
+    val
+end
+\end{lstlisting}
+
+The main loops (oracle and fixed enumerations) are straightforward four-nested loops over the pointings; see \texttt{compute\_ig.jl} for the full listing.
+
+\section{Sanity check: $\E[IG]$ as a scalar}
+As a consistency test,
+\[
+  \E[IG]^{\text{narrow}} = V_{\text{oracle}}^{\text{narrow}} - V_{\text{fixed}}^{\text{narrow}}
+  = 2.579634 - 0.498683 = 2.080951
+\]
+matches the independently-computed $\E_x[IG(x)] = 2.080950$ to five decimal places (the sixth is floating-point), confirming the arithmetic.  Similarly in the wide regime:
+\[
+  1.923462 - 1.410526 = 0.512936 \;\approx\; 0.512935.
+\]
+
+\end{document}
