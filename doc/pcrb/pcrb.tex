@@ -29,7 +29,7 @@
 \maketitle
 
 \begin{abstract}
-We present the Posterior Cram\'er--Rao Bound (PCRB) in its most general form for sequential Bayesian estimation, following Tichavsk\'y, Muravchik \& Nehorai (1998).  We then specialize to two cases relevant to photonic sensor design: (i)~a static state observed through nonlinear measurements, and (ii)~additive Gaussian noise with known covariance.  Finally, we formulate the D-optimal joint optimization of sensor parameters and device geometry as a single-level problem over fixed design variables, and bound the potential benefit of an adaptive policy over this fixed design by an \emph{ignorance gap} that is near-zero for weakly nonlinear measurement models.  We then discuss how the adaptive EKF-based bilevel approach relates to this cleaner formulation as one particular approximate solver.
+We present the Posterior Cram\'er--Rao Bound (PCRB) in its most general form for sequential Bayesian estimation, following Tichavsk\'y, Muravchik \& Nehorai (1998).  We then specialize to two cases: (i)~a static state observed through nonlinear measurements, and (ii)~additive Gaussian noise with known covariance.  Finally, we formulate the D-optimal joint optimization of sensor parameters and device geometry as a single-level problem over fixed design variables, and bound the potential benefit of an adaptive policy over this fixed design by an \emph{ignorance gap} that is near-zero for weakly nonlinear measurement models.  The adaptive case is developed as a dynamic program in the value function, with the gap-function reformulation and its exploration--exploitation decomposition relegated to an appendix.
 \end{abstract}
 
 \tableofcontents
@@ -220,7 +220,7 @@ Problem~\eqref{eq:joint_opt} is smooth in $(\bm{c}, \bm{s}_{1:N})$ when $\bm{h}$
 \end{equation}
 where the chain rule uses $\frac{\partial}{\partial A}\ln\det A = A^{-\top}$ (for invertible $A$, reducing to $A^{-1}$ on the symmetric positive-definite $\bm{J}_N$).  The objective gradient is obtained by taking $\E_{\bm{x}}[\cdot]$ of \eqref{eq:grad_s}, estimated by Monte Carlo in practice.  The gradient with respect to $\bm{c}$ is analogous, with $\partial\bm{F}_k/\partial c_j$ propagated through the physics simulation.
 
-The $\bm{J}_N^{-1}$ factor couples all measurements: the gradient with respect to $\bm{s}_k$ depends on the information from \emph{all other} measurements through $\bm{J}_N$.  The classical A-optimal objective $\min\tr(\bm{J}_N^{-1})$ has the same coupling structure (its gradient is $-\tr(\bm{J}_N^{-1}(\partial\bm{J}_N/\partial s_{k,i})\bm{J}_N^{-1})$).  By contrast, the \emph{myopic BFIM-trace} criterion $\max\sum_k\tr(\bm{F}_k^\top\bm{F}_k)$ --- which maximizes $\tr(\bm{J}_N)$ rather than minimizing $\tr(\bm{J}_N^{-1})$ --- has per-step decoupled gradients (only the $k$-th summand depends on $\bm{s}_k$), and is the criterion used by the inner argmax in the BFIMGaussian codebase (see Section~\ref{subsec:ekf_relation}).
+The $\bm{J}_N^{-1}$ factor couples all measurements: the gradient with respect to $\bm{s}_k$ depends on the information from \emph{all other} measurements through $\bm{J}_N$.  The classical A-optimal objective $\min\tr(\bm{J}_N^{-1})$ has the same coupling structure (its gradient is $-\tr(\bm{J}_N^{-1}(\partial\bm{J}_N/\partial s_{k,i})\bm{J}_N^{-1})$).  By contrast, the myopic information-trace criterion $\max\sum_k\tr(\bm{F}_k^\top\bm{F}_k)$ --- which maximizes $\tr(\bm{J}_N)$ rather than minimizing $\tr(\bm{J}_N^{-1})$ --- has per-step decoupled gradients: only the $k$-th summand depends on $\bm{s}_k$.
 
 \subsection{Comparison of Design Criteria}
 
@@ -241,7 +241,7 @@ D-optimality has several advantages for sensor design:
 \begin{itemize}[nosep]
   \item \textbf{Invariance}: $\det\bm{J}_N$ is invariant under reparametrization of $\bm{x}$ (up to the Jacobian determinant), while $\tr(\bm{J}_N^{-1})$ is not.
   \item \textbf{Balanced information}: D-optimality penalizes singular or near-singular $\bm{J}_N$ more severely than A-optimality, encouraging measurements that inform \emph{all} directions of the state space.
-  \item \textbf{Information-theoretic meaning}: for Gaussian posteriors, $-\frac{1}{2}\ln\det(2\pi e\,\bm{J}_N^{-1})$ is the differential entropy; D-optimality minimizes the posterior entropy, equivalently maximizing the mutual information $I(\bm{x}; \bm{y}_{1:N})$.
+  \item \textbf{Information-theoretic meaning}: for Gaussian posteriors, $\frac{1}{2}\ln\det(2\pi e\,\bm{J}_N^{-1})$ is the differential entropy; D-optimality minimizes the posterior entropy, equivalently maximizing the mutual information $I(\bm{x}; \bm{y}_{1:N})$.
 \end{itemize}
 
 The criteria are related by the AM-GM inequality:
@@ -249,34 +249,6 @@ The criteria are related by the AM-GM inequality:
   \frac{1}{d_x}\tr(\bm{J}_N^{-1}) \;\geq\; \left(\det \bm{J}_N^{-1}\right)^{1/d_x} = \exp\!\left(-\frac{\ln\det\bm{J}_N}{d_x}\right),
 \end{equation}
 with equality when $\bm{J}_N$ is a scalar multiple of the identity (isotropic information).  For small $d_x$ (e.g., $d_x = 4$), minimizing any one criterion tends to minimize the others.
-
-\subsection{Relationship to the Adaptive EKF Approach}
-\label{subsec:ekf_relation}
-
-The BFIMGaussian codebase implements a bilevel approximation to problem~\eqref{eq:joint_opt}:
-\begin{enumerate}[nosep]
-  \item \textbf{Sensor parameters} are not optimized jointly at design time.  Instead, at run time, a myopic policy selects $\bm{s}_k$ at each EKF step to maximize the per-step BFIM trace $\tr(\bm{F}_k^\top \bm{F}_k / \sigma^2)$ (one-step greedy \emph{information-trace} criterion; this is distinct from classical A-optimality $\min\tr(\bm{J}_N^{-1})$ -- the myopic criterion maximizes the trace of the FIM rather than minimizing the trace of its inverse).
-  \item \textbf{Geometry} $\bm{c}$ is optimized end-to-end through the EKF + myopic policy, with gradients through the inner $\argmax$ via the Implicit Function Theorem.
-  \item The \textbf{training loss} $\mathcal{L} = \E[\sum_i ((\mu_{N,i} - x_{0,i})/x_{0,i})^2]$ is a Monte Carlo estimate of the \emph{relative} MSE, which upper-bounds the correspondingly-weighted CRB $\sum_i \E_{\bm{x}}[(\bm{J}_N^{-1})_{ii}/x_{0,i}^2]$ for any unbiased estimator.
-\end{enumerate}
-
-This bilevel approach is a \emph{sufficient but not necessary} way to solve \eqref{eq:joint_opt}.  The key differences:
-
-\begin{center}
-\begin{tabular}{@{}lll@{}}
-\toprule
-& Joint D-optimal \eqref{eq:joint_opt} & Bilevel EKF (current) \\
-\midrule
-Sensor params & fixed $\bm{s}_{1:N}$, optimized at design time & adaptive $\bm{s}_k(\bm{y}_{1:k-1})$, run time \\
-Criterion & $-\ln\det\bm{J}_N$ (D-optimal) & $\E\bigl[\sum_i((\mu_{N,i}-x_{0,i})/x_{0,i})^2\bigr]$ (relative MSE) \\
-Structure & single-level, $d_c + N d_s$ variables & bilevel (IFT through inner $\argmax$) \\
-Estimator & any efficient estimator & EKF (fixed) \\
-AD complexity & $\nabla_{\bm{c}, \bm{s}_{1:N}}$ of $\ln\det$ & $\nabla_{\bm{c}}$ through EKF + IFT \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-The joint D-optimal formulation is simpler: no inner optimization, no IFT, no EKF in the gradient computation.  It directly optimizes the fundamental information-theoretic quantity.  The bilevel EKF approach has the advantage of jointly tuning the geometry to the specific estimator (the EKF) that will be used at run time, including any suboptimalities of the EKF linearization.
 
 \subsection{Baselines}
 
@@ -339,16 +311,16 @@ This measures how much better the sensors \emph{could} be if tailored to the spe
 
 \subsubsection{The expected ignorance gap bounds the value of adaptation}
 
-Any adaptive policy $\pi = \{\pi_k: \bm{y}_{1:k-1} \mapsto \bm{s}_k\}$ achieves an expected information:
+Define the value achieved by the \emph{optimal} adaptive policy:
 \begin{equation}
-  V_{\text{adaptive}} = \E_{\bm{x}, \bm{y}}\!\left[\ln\det\bm{J}_N(\bm{x}, \pi(\bm{y}_{1:N-1}), \bm{c})\right].
+  V_{\text{adaptive}} = \max_{\pi}\;\E_{\bm{x}, \bm{y}}\!\left[\ln\det\bm{J}_N(\bm{x}, \pi(\bm{y}_{1:N-1}), \bm{c})\right],
 \end{equation}
-This is bounded by:
+where the maximum is over all measurable policies $\pi = \{\pi_k: \bm{y}_{1:k-1} \mapsto \bm{s}_k\}$.  This satisfies:
 \begin{equation}
   V_{\text{fixed}} \;\leq\; V_{\text{adaptive}} \;\leq\; \E_{\bm{x}}\!\left[V_{\text{oracle}}(\bm{x})\right],
   \label{eq:bounds}
 \end{equation}
-where the left inequality holds because the fixed design is a special case of a constant policy, and the right because no policy can beat the oracle.  Therefore:
+where the left inequality holds because the fixed design is a special (constant) policy included in the max, and the right because no policy can beat the oracle.  Therefore:
 \begin{equation}
   \boxed{0 \;\leq\; V_{\text{adaptive}} - V_{\text{fixed}} \;\leq\; \E_{\bm{x}}\!\left[IG(\bm{x})\right].}
   \label{eq:evpi}
@@ -417,10 +389,10 @@ If $\E[IG] < 1$ nat (equivalently, the oracle increases $\det\bm{J}_N$ by less t
 
 \subsubsection{The Bellman equation for adaptive D-optimal sensing}
 
-We now derive the optimal adaptive policy from first principles, showing how the ignorance gap decomposes the value function into an oracle ceiling minus a belief penalty that the policy minimizes.
+When $\E[IG]$ is non-negligible, one may try to capture part of the gap by running an adaptive policy $\pi = \{\pi_k : \bm{y}_{1:k-1} \mapsto \bm{s}_k\}$.  The optimal adaptive policy solves a POMDP on the belief space.  We present its Bellman formulation here; the reformulation in terms of the conditional ignorance gap $\Gamma_k$ (with its exploration--exploitation decomposition and simplifying regimes) is developed in Appendix~\ref{app:gap_dp}.
 
 \paragraph{Setup and notation.}
-Write $\Phi(\bm{x}, \bm{s}_{1:N}) = \ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c})$ for the log-information at state $\bm{x}$ with sensor sequence $\bm{s}_{1:N}$.  An adaptive policy $\pi = \{\pi_1, \ldots, \pi_N\}$ maps the observation history to sensor actions: $\bm{s}_k = \pi_k(\bm{y}_{1:k-1})$.  Let $b_k = p(\bm{x} \mid \bm{y}_{1:k-1})$ denote the posterior belief after $k-1$ observations.
+Write $\Phi(\bm{x}, \bm{s}_{1:N}) = \ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c})$ for the log-information at state $\bm{x}$ with sensor sequence $\bm{s}_{1:N}$.  Let $b_k = p(\bm{x} \mid \bm{y}_{1:k-1})$ denote the posterior belief after $k-1$ observations (so $b_1 = p_0$ is the prior).
 
 \paragraph{Value-to-go.}
 Define the \emph{value-to-go} at step $k$, given belief $b_k$ and committed sensors $\bm{s}_{1:k-1}$:
@@ -428,7 +400,7 @@ Define the \emph{value-to-go} at step $k$, given belief $b_k$ and committed sens
   W_k(b_k) &= \max_{\bm{s}_k} \; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right], \label{eq:bellman} \\
   W_{N+1}(b_{N+1}) &= \E_{\bm{x} \mid b_{N+1}}\!\left[\Phi(\bm{x}, \bm{s}_{1:N})\right], \label{eq:terminal}
 \end{align}
-where $b_{k+1}$ is the Bayesian posterior update of $b_k$ given $(\bm{y}_k, \bm{s}_k)$.  This is a POMDP over the continuous belief space---intractable in general.
+where $b_{k+1}$ is the Bayesian posterior update of $b_k$ given $(\bm{y}_k, \bm{s}_k)$.  The derivation of \eqref{eq:bellman}--\eqref{eq:terminal} from first principles (sufficient statistic reduction, peel-off-one-action, tower property) is in Appendix~\ref{app:bellman}.  This is a POMDP over the continuous belief space---intractable in general---and $V_{\text{adaptive}} = W_1(\text{prior})$.
 
 \paragraph{Oracle value-to-go.}
 Define the \emph{oracle value-to-go}: the best remaining log-information if $\bm{x}$ were known, given sensors $\bm{s}_{1:k-1}$ already committed:
@@ -436,120 +408,29 @@ Define the \emph{oracle value-to-go}: the best remaining log-information if $\bm
   V_k^\star(\bm{x}) = \max_{\bm{s}_{k:N}} \Phi(\bm{x}, \bm{s}_{1:k-1}, \bm{s}_{k:N}).
   \label{eq:oracle_vtg}
 \end{equation}
-Let $V_{k+1}^\star(\bm{x};\bm{s}_k) = \max_{\bm{s}_{k+1:N}}\Phi(\bm{x}, \bm{s}_{1:k-1}, \bm{s}_k, \bm{s}_{k+1:N})$ denote the oracle's value-to-go after committing $\bm{s}_k$ (the prefix $\bm{s}_{1:k-1}$ is suppressed; it is fixed throughout the recursion).  Then $V_k^\star$ satisfies its own (trivial) recursion,
-\begin{equation}
-  V_k^\star(\bm{x}) = \max_{\bm{s}_k} V_{k+1}^\star(\bm{x};\bm{s}_k),
-\end{equation}
-since the oracle observes $\bm{x}$ directly and faces no uncertainty.
-
-The adaptive policy can never exceed the oracle:
+Let $V_{k+1}^\star(\bm{x};\bm{s}_k) = \max_{\bm{s}_{k+1:N}}\Phi(\bm{x}, \bm{s}_{1:k-1}, \bm{s}_k, \bm{s}_{k+1:N})$ denote the oracle's value-to-go after committing $\bm{s}_k$.  Then $V_k^\star(\bm{x}) = \max_{\bm{s}_k} V_{k+1}^\star(\bm{x};\bm{s}_k)$, since the oracle observes $\bm{x}$ directly and faces no uncertainty.  The adaptive policy can never exceed the oracle:
 \begin{equation}
   W_k(b_k) \;\leq\; \E_{\bm{x} \mid b_k}\!\left[V_k^\star(\bm{x})\right].
   \label{eq:oracle_bound}
 \end{equation}
 
 \paragraph{Conditional ignorance gap.}
-Define the \emph{conditional ignorance gap} at step $k$:
+The deficit of the adaptive policy relative to the oracle is the \emph{conditional ignorance gap}:
 \begin{equation}
-  \boxed{\Gamma_k(b_k) = \E_{\bm{x} \mid b_k}\!\left[V_k^\star(\bm{x})\right] - W_k(b_k) \;\geq\; 0.}
+  \boxed{\Gamma_k(b_k) = \E_{\bm{x} \mid b_k}\!\left[V_k^\star(\bm{x})\right] - W_k(b_k) \;\geq\; 0,}
   \label{eq:cond_gap}
 \end{equation}
-This measures the information cost of not knowing $\bm{x}$ at step $k$, given the current belief.  It generalizes the (unconditional) ignorance gap: at $k=1$ with the prior, $\Gamma_1(\text{prior}) = \E_{\bm{x}}[V_{\text{oracle}}(\bm{x})] - V_{\text{optimal adaptive}}$ is the residual gap that even the optimal adaptive policy cannot close.
-
-\subsubsection{The gap dynamic program}
-
-Substituting $W_k = \E_{\bm{x}|b_k}[V_k^\star] - \Gamma_k$ into the Bellman equation \eqref{eq:bellman} yields a recursion on the conditional gap $\Gamma_k$.
-
-\paragraph{One-step Jensen gap.}
-Using $V_k^\star(\bm{x}) = \max_{\bm{s}_k} V_{k+1}^\star(\bm{x};\bm{s}_k)$, define the \emph{one-step conditional Jensen gap}:
-\begin{equation}
-  \Delta_k(b_k) = \E_{\bm{x} \mid b_k}\!\left[\max_{\bm{s}_k} V_{k+1}^\star(\bm{x};\bm{s}_k)\right] - \max_{\bm{s}_k}\, \E_{\bm{x} \mid b_k}\!\left[V_{k+1}^\star(\bm{x};\bm{s}_k)\right] \;\geq\; 0,
-  \label{eq:jensen_gap}
-\end{equation}
-where the inequality is Jensen's (max is convex).  This is the \emph{irreducible} one-step cost of not knowing $\bm{x}$: it vanishes when the oracle-optimal $\bm{s}_k$ is the same for all $\bm{x}$ in the posterior support, and it vanishes when the posterior $b_k$ is a point mass.
-
-\paragraph{Gap recursion.}
-Let $P_k(\bm{s}_k) = \E_{\bm{x}|b_k}[V_{k+1}^\star(\bm{x};\bm{s}_k)]$ denote the exploitative (certainty-equivalent) value of action $\bm{s}_k$ and $Q_k(\bm{s}_k) = \E_{\bm{y}_k|b_k,\bm{s}_k}[\Gamma_{k+1}(b_{k+1})]$ the expected future gap.  Substituting $W_k = \E_{\bm{x}|b_k}[V_k^\star] - \Gamma_k$ into \eqref{eq:bellman} and using $\E_{\bm{x}|b_k}[V_k^\star(\bm{x})] = \Delta_k(b_k) + \max_{\bm{s}_k} P_k(\bm{s}_k)$ yields:
-\begin{equation}
-  \boxed{\Gamma_k(b_k) = \Delta_k(b_k) + \underbrace{\max_{\bm{s}_k}P_k(\bm{s}_k) - \max_{\bm{s}_k}[P_k(\bm{s}_k) - Q_k(\bm{s}_k)]}_{\displaystyle \ge \min_{\bm{s}_k} Q_k(\bm{s}_k) \ge 0}.}
-  \label{eq:gap_dp}
-\end{equation}
-
-This is the \textbf{gap dynamic program}.  The total conditional gap at step $k$ decomposes into:
-\begin{itemize}[nosep]
-  \item $\Delta_k(b_k)$: the \textbf{irreducible Jensen gap} at this step---the cost of the oracle's ability to pick the best $\bm{s}_k$ for each $\bm{x}$, which no policy can avoid given belief $b_k$.
-  \item $\max P_k - \max(P_k - Q_k)$: the \textbf{future-gap term}, which the policy \emph{can} influence by choosing $\bm{s}_k$ to concentrate $b_{k+1}$ and thereby shrink $\Delta_{k+1}, \ldots, \Delta_N$.  It splits as $[P_k(\bm{s}_k^P) - P_k(\bm{s}_k^{\text{full}})] + Q_k(\bm{s}_k^{\text{full}})$, where $\bm{s}_k^P = \argmax P_k$ is the exploitative action and $\bm{s}_k^{\text{full}} = \argmax(P_k - Q_k)$ is the full Bellman optimum.  The first bracket is the \emph{exploitation regret} of deviating from the myopic action to reduce future uncertainty; the second is the residual future gap.
-\end{itemize}
-
-When the myopic and full-Bellman actions coincide ($\bm{s}_k^P = \bm{s}_k^{\text{full}}$), the exploitation regret vanishes and the recursion simplifies to $\Gamma_k = \Delta_k + Q_k(\bm{s}_k^P)$.  The weaker but cleaner bound $\Gamma_k \ge \Delta_k + \min_{\bm{s}_k} Q_k(\bm{s}_k)$ holds unconditionally and is used below to unroll the recursion.
-
-\paragraph{Boundary condition.}
-At the terminal step, $\Gamma_{N+1} = 0$ (no remaining decisions).  Unrolling the simpler lower-bound form gives:
-\begin{equation}
-  \Gamma_1(\text{prior}) \;\geq\; \sum_{k=1}^{N} \E\!\left[\Delta_k(b_k)\right] \quad \text{under the optimal policy,}
-  \label{eq:gap_sum}
-\end{equation}
-where the expectation is over the observation sequence induced by the policy.  The cumulative Jensen gap lower-bounds the total gap; equality holds when no step requires trading exploitation for exploration, which is the typical regime when the posterior concentrates fast relative to the curvature of the oracle map.
-
-\subsubsection{Interpretation: exploration--exploitation from first principles}
-
-The gap DP \eqref{eq:gap_dp} reveals the fundamental \emph{exploration--exploitation tradeoff} for adaptive sensing:
-
-\begin{enumerate}
-  \item \textbf{Exploitation} (maximize immediate value): choose $\bm{s}_k$ to maximize $P_k(\bm{s}_k) = \E_{\bm{x}|b_k}[V_{k+1}^\star(\bm{x};\bm{s}_k)]$---i.e., the best expected oracle value-to-go assuming the current belief is correct.  This is the certainty-equivalent or myopic policy.
-
-  \item \textbf{Exploration} (minimize future gap): choose $\bm{s}_k$ to minimize $Q_k(\bm{s}_k) = \E_{\bm{y}_k|b_k,\bm{s}_k}[\Gamma_{k+1}(b_{k+1})]$---i.e., concentrate the posterior $b_{k+1}$ to shrink the Jensen gaps $\Delta_{k+1}, \ldots, \Delta_N$ in all future steps.  A measurement that provides less immediate information but sharply concentrates the posterior in the direction where the oracle sensors vary most rapidly with $\bm{x}$ can be globally superior.
-\end{enumerate}
-
-The optimal $\bm{s}_k$ in \eqref{eq:gap_dp} balances these two objectives.  The balance depends on the \emph{horizon}: with many remaining steps, exploration is cheap (you have budget to ``recover'' from a less-informative measurement); with few remaining steps, exploitation dominates.
-
-\subsubsection{When the gap DP simplifies}
-
-Three regimes admit closed-form or near-closed-form solutions:
-
-\paragraph{Linear measurements ($\bm{F}$ independent of $\bm{x}$).}
-The oracle-optimal $\bm{s}_k$ does not depend on $\bm{x}$, so $\Delta_k = 0$ for all $k$ and all beliefs.  The gap DP is trivially $\Gamma_k = 0$: the fixed design is optimal, and the myopic policy coincides with the globally optimal policy.
-
-\paragraph{Fast posterior concentration (high SNR).}
-If after $k_0 \ll N$ steps the posterior is tightly concentrated ($b_k \approx \delta(\bm{x} - \hat{\bm{x}})$), then $\Delta_k \approx 0$ for $k > k_0$.  The gap is dominated by the first $k_0$ steps:
-\begin{equation}
-  \Gamma_1 \;\approx\; \sum_{k=1}^{k_0} \E[\Delta_k(b_k)].
-\end{equation}
-For the remaining $N - k_0$ steps, the certainty-equivalent policy $\bm{s}_k = \bm{s}_k^\star(\hat{\bm{x}}_{k-1})$ is near-optimal.  This is the common case in practice: a few initial measurements resolve most of the uncertainty, after which adaptation degenerates to the oracle policy evaluated at the posterior mean.
-
-\paragraph{Smooth oracle map ($\bm{s}^\star(\bm{x})$ Lipschitz).}
-If the oracle map $\bm{x} \mapsto \bm{s}^\star(\bm{x})$ is $L$-Lipschitz and the log-information $\Phi$ has bounded curvature $\kappa$ in $\bm{s}$ around the oracle, then:
-\begin{equation}
-  \Delta_k(b_k) \;\lesssim\; \kappa L^2 \, \Var_{\bm{x} \mid b_k}\!\left[\bm{x}\right],
-  \label{eq:delta_bound}
-\end{equation}
-where $\Var_{\bm{x}|b_k}[\bm{x}] = \tr(\bm{\Sigma}_{k-1})$ is the posterior variance.  Summing the per-step bound:
-\begin{equation}
-  \sum_{k=1}^{N} \E\!\left[\Delta_k(b_k)\right] \;\lesssim\; \kappa L^2 \sum_{k=1}^{N} \E\!\left[\tr(\bm{\Sigma}_{k-1})\right].
-  \label{eq:total_gap_bound}
-\end{equation}
-In the zero-exploitation-regret regime where \eqref{eq:gap_sum} is tight, this also bounds the total gap $\Gamma_1$ by the \emph{cumulative posterior variance} times the \emph{sensitivity of the oracle map}.  The bound connects the IG directly to estimator performance: a system with high Fisher information (fast variance reduction) and smooth oracle map (small $L$) has a small gap, regardless of $N$.
-
-\subsubsection{Practical policy from the gap DP}
-
-The gap DP \eqref{eq:gap_dp} suggests a practical two-phase policy:
-
-\begin{enumerate}[nosep]
-  \item \textbf{Monitor} $\Delta_k(b_k)$ at each step.  This requires the oracle map $\bm{x} \mapsto \bm{s}^\star(\bm{x})$, which is a small ($N \cdot d_s = 6$-variable) optimization per $\bm{x}$, evaluated over samples from the current posterior.
-  \item \textbf{If $\Delta_k \ll 1$}: use the certainty-equivalent policy $\bm{s}_k = \bm{s}_k^\star(\hat{\bm{x}}_{k-1})$.  The gap is negligible; exploration has no value.
-  \item \textbf{If $\Delta_k$ is large}: choose $\bm{s}_k$ to maximize posterior concentration in the direction of steepest variation of the oracle map, i.e., along $\nabla_{\bm{x}} \bm{s}^\star(\bm{x}) \big|_{\hat{\bm{x}}}$.  This targets the component of $\bm{x}$ that most affects the optimal sensor choice.
-\end{enumerate}
-
-The crossover from exploration to exploitation occurs when the posterior width in the direction of $\nabla_{\bm{x}} \bm{s}^\star$ drops below the scale at which $\bm{s}^\star$ varies appreciably---after which the certainty-equivalent policy is indistinguishable from the oracle.
+a function of the current belief alone.  At $k = 1$ with the prior, $\Gamma_1(\text{prior}) = \E_{\bm{x}}[V_{\text{oracle}}(\bm{x})] - V_{\text{adaptive}}$ is the residual gap that even the optimal adaptive policy cannot close---bounded in turn by $\E[IG(\bm{x})]$.  Substituting $W_k = \E[V_k^\star] - \Gamma_k$ into the Bellman recursion \eqref{eq:bellman} gives a dynamic program directly on $\Gamma_k$, the \emph{gap DP}, which exposes the exploration--exploitation tradeoff of optimal adaptive sensing.  The full development is in Appendix~\ref{app:gap_dp}.
 
 \subsubsection{Joint optimization of geometry and adaptive policy}
+\label{subsec:joint_adaptive}
 
 The full joint problem optimizes the device geometry $\bm{c}$ together with the adaptive policy:
 \begin{equation}
   \max_{\bm{c}} \; W_1(\text{prior};\, \bm{c}),
   \label{eq:joint_bellman}
 \end{equation}
-where $W_1(\text{prior};\, \bm{c})$ is the Bellman optimal value \eqref{eq:bellman} for geometry $\bm{c}$.  The geometry affects everything: the Jacobians $\bm{F}_k(\bm{x}, \bm{s}, \bm{c})$, the oracle map $\bm{s}^\star(\bm{x};\, \bm{c})$, and all gap terms $\Delta_k$.
+where $W_1(\text{prior};\, \bm{c})$ is the Bellman-optimal value \eqref{eq:bellman} for geometry $\bm{c}$.  The geometry affects the Jacobians $\bm{F}_k(\bm{x}, \bm{s}, \bm{c})$, the oracle map $\bm{s}^\star(\bm{x};\, \bm{c})$, and (through them) every gap term $\Delta_k$ in Appendix~\ref{app:gap_dp}.
 
 \paragraph{The envelope theorem.}
 At the optimal policy $\pi^\star$ for a given $\bm{c}$, the \emph{envelope theorem} (Danskin's theorem) gives:
@@ -557,35 +438,32 @@ At the optimal policy $\pi^\star$ for a given $\bm{c}$, the \emph{envelope theor
   \frac{dW_1}{d\bm{c}} = \frac{\partial}{\partial \bm{c}} \E\!\left[\Phi\!\left(\bm{x},\, \pi^\star(\bm{y};\, \bm{c}),\, \bm{c}\right)\right]\bigg|_{\pi^\star \text{ fixed}}.
   \label{eq:envelope}
 \end{equation}
-The first-order effect of changing the policy vanishes at the optimum.  We can differentiate as if the policy were frozen---only the direct effect of $\bm{c}$ on measurement quality matters, evaluated at whatever sensors the optimal policy happens to choose.
+The first-order effect of changing the policy vanishes at the optimum.  One differentiates as if the policy were frozen: only the direct effect of $\bm{c}$ on measurement quality matters, evaluated at whatever sensors the optimal policy happens to choose.
 
 This enables a \textbf{policy iteration} scheme:
 \begin{enumerate}[nosep]
-  \item \textbf{Policy step}: for current $\bm{c}$, solve or approximate the gap DP \eqref{eq:gap_dp} to obtain $\pi^\star(\bm{c})$.
-  \item \textbf{Geometry step}: take a gradient step on $\bm{c}$ using $\partial\Phi/\partial\bm{c}$ evaluated at the policy's sensor choices---the same FDFD adjoint computation used in the fixed-design optimization.
+  \item \textbf{Policy step}: for current $\bm{c}$, solve or approximate the gap DP of Appendix~\ref{app:gap_dp} to obtain $\pi^\star(\bm{c})$.
+  \item \textbf{Geometry step}: take a gradient step on $\bm{c}$ using $\partial\Phi/\partial\bm{c}$ evaluated at the policy's sensor choices---the same adjoint gradient computation used in the fixed-design optimization.
   \item Repeat until convergence.
 \end{enumerate}
 
 \paragraph{Reduction by regime.}
-The ignorance gap determines how much of this machinery is needed:
+The ignorance gap determines how much of this machinery is actually needed:
 \begin{center}
 \begin{tabular}{@{}lll@{}}
 \toprule
 Regime & Joint problem reduces to & Solver \\
 \midrule
-$\E[IG] \approx 0$ & Fixed D-optimal: $\max_{\bm{c}, \bm{s}_{1:N}} \E[\Phi]$ & Single-level Adam \\
-$\E[IG]$ moderate & CE policy iteration & Oracle map + EKF + FDFD adjoint \\
+$\E[IG] \approx 0$ & Fixed D-optimal: $\max_{\bm{c}, \bm{s}_{1:N}} \E[\Phi]$ & Single-level gradient descent \\
+$\E[IG]$ moderate & Certainty-equivalent policy iteration & Oracle map + recursive filter + adjoint \\
 $\E[IG]$ large & Full gap DP + policy iteration & Parameterized policy + DP \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\paragraph{Connection to the existing bilevel approach.}
-The BFIMGaussian bilevel formulation (optimizing $\bm{c}$ end-to-end through a myopic EKF policy) is an instance of the joint problem \eqref{eq:joint_bellman} with the policy restricted to the class ``myopic BFIM-trace maximization + EKF state update.''  The Implicit Function Theorem (IFT) rrule used to differentiate through $\bm{s}_k^\star(\bm{\mu}_{k-1}, \bm{c})$ is precisely the envelope theorem \eqref{eq:envelope} applied to the inner sensor-selection argmax.  The gap analysis shows that this approach is near-optimal whenever $\E[IG]$ is small---which is the expected regime for weakly nonlinear measurement models.
-
 \subsection{Examples: When Is the Ignorance Gap Large?}
 
-The photonic sensor problem has near-zero ignorance gap because the Jacobian $\bm{F}$ depends only weakly on $\bm{x}$ (second-order Taylor correction $\sim\!10^{-4}$).  To build intuition for the gap DP and the exploration--exploitation tradeoff, we describe several problem classes where $IG(\bm{x})$ is large and has non-trivial structure.
+When the Jacobian $\bm{F}$ depends only weakly on $\bm{x}$, the ignorance gap is near zero and adaptation has negligible value.  To build intuition for the opposite regime, we describe several problem classes where $IG(\bm{x})$ is large and has non-trivial structure.
 
 \subsubsection{Directional sensors with unknown source location}
 
@@ -603,7 +481,7 @@ The Jacobian $\bm{F}_k = \partial y_k / \partial \bm{x}$ is proportional to $g'(
 $IG(\bm{x})$ is large and approximately uniform: every source direction is equally ``surprised'' by the fixed design's compromise.  The gap scales as $\sim N \ln(2\pi / w)$---linear in $N$ and logarithmic in the ratio of the prior bearing range to the beamwidth.  For narrow beams ($w \ll 2\pi$), adaptation is essential.
 
 \paragraph{Optimal policy.}
-The gap DP prescribes: use the first $\sim\!1$--$2$ measurements with pointings spread across $[0, 2\pi)$ to localize $\phi(\bm{x})$ (coarse angular scan, exploration), then point remaining beams at $\hat\phi \pm w$ (monopulse-style targeted pointing, exploitation).  The crossover is set by the posterior angular uncertainty dropping below the beamwidth $w$.
+The optimal adaptive policy (derived via the gap DP in Appendix~\ref{app:gap_dp}) prescribes: use the first $\sim\!1$--$2$ measurements with pointings spread across $[0, 2\pi)$ to localize $\phi(\bm{x})$ (coarse angular scan, exploration), then point remaining beams at $\hat\phi \pm w$ (monopulse-style targeted pointing, exploitation).  The crossover is set by the posterior angular uncertainty dropping below the beamwidth $w$.
 
 \subsubsection{Multi-modal measurement function}
 
@@ -646,7 +524,7 @@ The oracle knows the support and directs all measurements at the active componen
 $IG(\bm{x})$ depends on the support pattern: supports that are well-aligned with the fixed design's measurement directions have small $IG$; ``adversarial'' supports (e.g., not aligned with any standard basis direction when the fixed design uses random projections) have large $IG$.  The distribution is discrete, indexed by $\binom{d_x}{K}$ possible supports.
 
 \paragraph{Optimal policy.}
-The gap DP prescribes a two-phase strategy: (1)~\emph{support identification} using broad measurements (e.g., random projections), then (2)~\emph{targeted estimation} using measurements concentrated on the identified support.  This is the adaptive compressed sensing strategy of Haupt et al.\ (2011), here derived from the gap DP as the solution that minimizes $\sum \E[\Delta_k]$.
+The optimal adaptive policy prescribes a two-phase strategy: (1)~\emph{support identification} using broad measurements (e.g., random projections), then (2)~\emph{targeted estimation} using measurements concentrated on the identified support.  This is the adaptive compressed sensing strategy of Haupt et al.\ (2011), recovered here from the gap DP of Appendix~\ref{app:gap_dp} as the solution that minimizes $\sum \E[\Delta_k]$.
 
 \subsubsection{Summary: taxonomy of ignorance gap regimes}
 
@@ -655,7 +533,7 @@ The gap DP prescribes a two-phase strategy: (1)~\emph{support identification} us
 \toprule
 Problem & $\E[IG]$ & IG distribution & Adaptation benefit \\
 \midrule
-Weakly nonlinear $\bm{F}$ (our problem) & $\approx 0$ & Point mass at 0 & Negligible \\
+Weakly nonlinear $\bm{F}$ & $\approx 0$ & Point mass at 0 & Negligible \\
 Directional sensors & $\sim N\ln(2\pi/w)$ & Approximately uniform & Large, uniform \\
 Multi-modal spectroscopy & Moderate & Skewed (dynamic range) & Selective \\
 Threshold nonlinearity & $\sim \ln\beta \cdot \Pr(x \approx x_c)$ & Peaked at $x_c$ & Near threshold only \\
@@ -698,6 +576,262 @@ D-optimality is preferred over A-optimality ($\min\tr\bm{J}_N^{-1}$) for three r
   \item S.~P.~Boyd and L.~Vandenberghe, \emph{Convex Optimization}.  Cambridge University Press, 2004.  (Chapter 7: statistical estimation and A-optimality.)
 
   \item J.~Haupt, R.~Castro, and R.~Nowak, ``Distilled sensing: Adaptive sampling for sparse detection and estimation,'' \emph{IEEE Trans.\ Information Theory}, vol.~57, no.~9, pp.~6222--6235, 2011.
+
+  \item R.~Bellman, \emph{Dynamic Programming}.  Princeton University Press, 1957.
 \end{enumerate}
+
+\appendix
+
+%===============================================================================
+\section{Derivation of the Bellman Equation}
+\label{app:bellman}
+%===============================================================================
+
+We derive the Bellman equation \eqref{eq:bellman} from first principles for the adaptive D-optimal sensing problem.  The argument is completely general to any finite-horizon sequential decision problem; we specialize the notation to the setting of this paper.
+
+\subsection{Problem setup}
+
+The ingredients are:
+\begin{itemize}[nosep]
+  \item An unknown state $\bm{x} \sim p_0(\bm{x})$ (the prior).
+  \item A horizon of $N$ decision steps, $k = 1, 2, \ldots, N$.
+  \item At step $k$, we pick an action $\bm{s}_k \in \R^{d_s}$ and observe
+  \begin{equation}
+    \bm{y}_k = \bm{h}(\bm{x}, \bm{s}_k, \bm{c}) + \bm{v}_k, \qquad \bm{v}_k \sim \mathcal{N}(\bm{0}, \sigma^2 \bm{I}).
+  \end{equation}
+  \item An adaptive policy $\pi = (\pi_1, \ldots, \pi_N)$ where $\pi_k: \bm{y}_{1:k-1} \mapsto \bm{s}_k$.
+  \item A terminal reward $\Phi(\bm{x}, \bm{s}_{1:N}) = \ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c})$, accrued only at the end.
+\end{itemize}
+
+Our goal is to find the policy that maximizes expected terminal reward:
+\begin{equation}
+  \pi^\star = \argmax_\pi \; \E_{\bm{x},\, \bm{y}_{1:N}}\!\left[\Phi(\bm{x}, \pi(\bm{y}_{1:N-1}))\right],
+  \label{eq:app:target}
+\end{equation}
+and we denote the optimum by $V_{\text{adaptive}} = \max_\pi \E[\Phi]$.  Problem \eqref{eq:app:target} is a maximization over \emph{functions} $\pi_k$, an infinite-dimensional object---hopeless at face value.
+
+\subsection{Sufficient statistic: the belief state}
+
+Because $\bm{x}$ is the only unknown and the likelihoods $p(\bm{y}_k \mid \bm{x}, \bm{s}_k)$ are known, \textbf{all information in $\bm{y}_{1:k-1}$ relevant to future decisions is carried by the posterior belief}
+\begin{equation}
+  b_k(\bm{x}) \;=\; p(\bm{x} \mid \bm{y}_{1:k-1}).
+  \label{eq:app:belief}
+\end{equation}
+Two observation histories yielding the same posterior $b_k$ are equivalent going forward.  So we can equivalently search over policies of the form $\pi_k: b_k \mapsto \bm{s}_k$---the POMDP reformulation.  Boundary cases:
+\begin{itemize}[nosep]
+  \item $b_1 = p_0$ (prior, no observations yet);
+  \item $b_{N+1} = p(\bm{x} \mid \bm{y}_{1:N})$ (posterior after all $N$ observations).
+\end{itemize}
+
+The belief updates by Bayes' rule: given $(b_k, \bm{s}_k, \bm{y}_k)$,
+\begin{equation}
+  b_{k+1}(\bm{x}) \;=\; \frac{p(\bm{y}_k \mid \bm{x}, \bm{s}_k)\, b_k(\bm{x})}{\int p(\bm{y}_k \mid \bm{x}', \bm{s}_k)\, b_k(\bm{x}')\, d\bm{x}'}.
+  \label{eq:app:bayes}
+\end{equation}
+Crucially, the marginal distribution of $\bm{y}_k$ given $(b_k, \bm{s}_k)$ is
+\begin{equation}
+  p(\bm{y}_k \mid b_k, \bm{s}_k) \;=\; \int p(\bm{y}_k \mid \bm{x}, \bm{s}_k)\, b_k(\bm{x})\, d\bm{x}.
+  \label{eq:app:marginal}
+\end{equation}
+
+\subsection{Value-to-go}
+
+The \emph{value-to-go} $W_k(b_k)$ is the best achievable expected terminal reward, starting from belief $b_k$ at step $k$, using the optimal policy for the remaining steps $k, k+1, \ldots, N$:
+\begin{equation}
+  W_k(b_k) \;=\; \max_{\pi_k, \pi_{k+1}, \ldots, \pi_N}\; \E\!\left[\Phi(\bm{x}, \bm{s}_{1:N}) \mid b_k, \pi_{k:N}\right].
+  \label{eq:app:vtg_def}
+\end{equation}
+(The already-committed prefix $\bm{s}_{1:k-1}$ is held fixed; we suppress it notationally.)  Two boundary cases:
+\begin{itemize}[nosep]
+  \item \textbf{$k = 1$:} $W_1(\text{prior}) = V_{\text{adaptive}}$---the quantity we actually care about.
+  \item \textbf{$k = N+1$:} no decisions remain; $\bm{s}_{1:N}$ are all committed; the terminal value is simply the expected reward under the final belief,
+  \begin{equation}
+    W_{N+1}(b_{N+1}) \;=\; \E_{\bm{x} \mid b_{N+1}}\!\left[\Phi(\bm{x}, \bm{s}_{1:N})\right].
+    \label{eq:app:terminal}
+  \end{equation}
+\end{itemize}
+
+\subsection{The key manipulation: peel off one step}
+
+This is the heart of the derivation.  Start from \eqref{eq:app:vtg_def} and split the outer max into ``choose $\bm{s}_k$ now'' and ``choose the remaining $\pi_{k+1:N}$'':
+\begin{equation}
+  W_k(b_k) \;=\; \max_{\bm{s}_k}\; \max_{\pi_{k+1}, \ldots, \pi_N}\; \E\!\left[\Phi \mid b_k, \bm{s}_k, \pi_{k+1:N}\right].
+  \label{eq:app:split}
+\end{equation}
+Now apply the \emph{tower property} (law of total expectation), conditioning on the next observation $\bm{y}_k$:
+\begin{align}
+  \E\!\left[\Phi \mid b_k, \bm{s}_k, \pi_{k+1:N}\right] &= \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[\E\!\left[\Phi \mid b_{k+1}, \pi_{k+1:N}\right]\right],
+  \label{eq:app:tower}
+\end{align}
+because $b_{k+1}$ is a deterministic function of $(b_k, \bm{s}_k, \bm{y}_k)$ via Bayes \eqref{eq:app:bayes}, and all subsequent randomness depends on $b_{k+1}$ only through the belief (Markov property of beliefs).
+
+Substituting \eqref{eq:app:tower} into \eqref{eq:app:split} and pushing the $\max$ over $\pi_{k+1:N}$ \emph{inside} the expectation $\E_{\bm{y}_k \mid b_k, \bm{s}_k}$ (valid because $\bm{y}_k$ is drawn before $\pi_{k+1:N}$ is applied):
+\begin{equation}
+  W_k(b_k) \;=\; \max_{\bm{s}_k}\; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[\;\max_{\pi_{k+1}, \ldots, \pi_N}\; \E\!\left[\Phi \mid b_{k+1}, \pi_{k+1:N}\right]\right].
+  \label{eq:app:pushed}
+\end{equation}
+The inner quantity in square brackets is \textbf{exactly $W_{k+1}(b_{k+1})$} by the definition \eqref{eq:app:vtg_def} applied at step $k+1$.  Therefore:
+\begin{equation}
+  \boxed{\;W_k(b_k) \;=\; \max_{\bm{s}_k}\; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right].\;}
+  \label{eq:app:bellman}
+\end{equation}
+This is the \textbf{Bellman equation}: the optimal value at $(k, b_k)$ equals the best over actions $\bm{s}_k$ of the expected optimal value at the next belief $b_{k+1}$, where the expectation is over $\bm{y}_k \sim p(\bm{y}_k \mid b_k, \bm{s}_k)$.
+
+\subsection{Why the push-in of the max is legal}
+
+Equation \eqref{eq:app:pushed} involved moving $\max_{\pi_{k+1:N}}$ inside $\E_{\bm{y}_k \mid b_k, \bm{s}_k}$.  In general, $\E[\max] \neq \max[\E]$ (max is convex, so $\E[\max] \ge \max[\E]$ by Jensen's inequality---this is exactly the one-step Jensen gap $\Delta_k$ of \eqref{eq:jensen_gap}).  So why is the push-in legal here?
+
+The answer: \textbf{we are \emph{not} commuting the operations abstractly}.  We are exploiting the fact that $\pi_{k+1:N}$ can \emph{depend on $\bm{y}_k$} (through $b_{k+1}$).  A policy that observes $\bm{y}_k$ before committing $\pi_{k+1:N}$ is strictly more powerful than one that commits in advance, and the former is what our original problem \eqref{eq:app:target} allows.  Formally, for each realization of $\bm{y}_k$, we choose the optimal $\pi_{k+1:N}$ as a function of that realization---i.e., we choose a conditional plan $\pi_{k+1:N}(\bm{y}_k, \cdot)$ pointwise in $\bm{y}_k$.  Maximizing pointwise inside the expectation gives the same value as maximizing over all such conditional plans outside.  This is the \emph{interchangeability lemma} for adaptive optimization, and it is the rigorous form of Bellman's \emph{principle of optimality}: \emph{an optimal policy's continuation is optimal from whatever state results from its first decision}.
+
+\subsection{The full Bellman system}
+
+Combining the recursion and the boundary condition, the optimal adaptive policy is characterized by:
+\begin{align}
+  W_{N+1}(b_{N+1}) &\;=\; \E_{\bm{x} \mid b_{N+1}}\!\left[\Phi(\bm{x}, \bm{s}_{1:N})\right], \label{eq:app:sys_terminal} \\
+  W_k(b_k) &\;=\; \max_{\bm{s}_k}\; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right], \quad k = N, N-1, \ldots, 1, \label{eq:app:sys_rec} \\
+  \pi^\star_k(b_k) &\;=\; \argmax_{\bm{s}_k}\; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right], \label{eq:app:sys_policy} \\
+  V_{\text{adaptive}} &\;=\; W_1(\text{prior}). \label{eq:app:sys_value}
+\end{align}
+
+\subsection{Action-value (\texorpdfstring{$Q$}{Q}) decomposition}
+
+Define the action-value at step $k$:
+\begin{equation}
+  \mathcal{Q}_k(b_k, \bm{s}_k) \;=\; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right].
+  \label{eq:app:Q}
+\end{equation}
+Then \eqref{eq:app:sys_rec} becomes
+\begin{equation}
+  W_k(b_k) \;=\; \max_{\bm{s}_k}\; \mathcal{Q}_k(b_k, \bm{s}_k), \qquad \pi^\star_k(b_k) \;=\; \argmax_{\bm{s}_k}\; \mathcal{Q}_k(b_k, \bm{s}_k).
+\end{equation}
+
+In the gap DP of Section~\ref{subsec:ignorance_gap}, $\mathcal{Q}_k$ is further decomposed into an \emph{exploit} part $P_k(\bm{s}_k) = \E_{\bm{x} \mid b_k}[V_{k+1}^\star(\bm{x}; \bm{s}_k)]$ minus an \emph{explore-cost} part $Q_k(\bm{s}_k) = \E_{\bm{y}_k \mid b_k, \bm{s}_k}[\Gamma_{k+1}(b_{k+1})]$, so that $W_k(b_k) = \max_{\bm{s}_k}[P_k(\bm{s}_k) - Q_k(\bm{s}_k)]$.  This is the same Bellman equation, recast to expose the exploration--exploitation tradeoff.
+
+\subsection{Sanity check: one step back from the terminal}
+
+At $k = N$, the Bellman recursion \eqref{eq:app:sys_rec} gives
+\begin{align}
+  W_N(b_N) &\;=\; \max_{\bm{s}_N}\; \E_{\bm{y}_N \mid b_N, \bm{s}_N}\!\left[\E_{\bm{x} \mid b_{N+1}}[\Phi(\bm{x}, \bm{s}_{1:N})]\right] \\
+  &\;=\; \max_{\bm{s}_N}\; \E_{\bm{x} \mid b_N}\!\left[\Phi(\bm{x}, \bm{s}_{1:N-1}, \bm{s}_N)\right],
+  \label{eq:app:sanity}
+\end{align}
+where the second line uses the tower property: $\E_{\bm{y}_N \mid b_N, \bm{s}_N} \E_{\bm{x} \mid b_{N+1}}[f(\bm{x})] = \E_{\bm{x} \mid b_N}[f(\bm{x})]$ for any $f$ not depending on $\bm{y}_N$, because $\bm{y}_N$ is marginalized out.  Equation \eqref{eq:app:sanity} is the \emph{certainty-equivalent} evaluation at the last step: with no future to plan for, the optimal action myopically maximizes expected terminal reward under the current belief.  This is consistent with the gap DP reduction at step $N$: since $\Gamma_{N+1} = 0$, the future-cost term $Q_N \equiv 0$, so $W_N = \max_{\bm{s}_N} P_N(\bm{s}_N)$---pure exploit, no explore.
+
+\subsection{Why the equation is powerful and cursed}
+
+\paragraph{Powerful.}  The Bellman equation reduces an intractable optimization over \emph{functions} (policies on the space of observation histories) to a recursion over \emph{single-step} decisions.  If one can evaluate the $\max$ and $\E$ at each step---e.g., by discretizing actions and observations---the problem is solved by $N$ sweeps of dynamic programming.
+
+\paragraph{Cursed.}  The belief $b_k$ is a probability distribution over $\bm{x}$, i.e., a point in an infinite-dimensional simplex.  $W_k(\cdot)$ is a function on this simplex.  Representing $W_k$ exactly is generally impossible except in special cases (linear-Gaussian, where $b_k$ is Gaussian and $W_k$ admits a closed form via the Kalman filter; finite discrete states).  This is why the gap DP \eqref{eq:gap_dp} developed in Appendix~\ref{app:gap_dp} is generally intractable and why approximations---certainty-equivalent policies, Jensen-gap bounds---are needed in practice.
+
+\subsection{Summary}
+
+Starting from the intractable
+\begin{equation}
+  V_{\text{adaptive}} \;=\; \max_\pi \; \E\!\left[\Phi(\bm{x}, \pi(\bm{y}_{1:N-1}))\right],
+\end{equation}
+three moves give the Bellman equation:
+\begin{enumerate}[nosep,label=(\alph*)]
+  \item \textbf{Sufficient statistic reduction}: replace the history $\bm{y}_{1:k-1}$ with the belief $b_k$.
+  \item \textbf{Peel off one action}: split $\max_{\pi_{k:N}} = \max_{\bm{s}_k} \max_{\pi_{k+1:N}}$.
+  \item \textbf{Tower property plus interchangeability}: push $\max_{\pi_{k+1:N}}$ inside $\E_{\bm{y}_k}$, yielding $W_{k+1}(b_{k+1})$ by definition.
+\end{enumerate}
+The result is the recursion
+\begin{equation}
+  W_k(b_k) \;=\; \max_{\bm{s}_k}\; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right], \qquad W_{N+1}(b_{N+1}) \;=\; \E_{\bm{x} \mid b_{N+1}}\!\left[\Phi\right].
+\end{equation}
+The derivation rests on exactly two facts: \textbf{(1) the Markov property of beliefs under Bayesian updating}, and \textbf{(2) the principle of optimality} (the optimal continuation policy can depend on the intervening observations without loss).
+
+%===============================================================================
+\section{Adaptive Solvers via the Gap Dynamic Program}
+\label{app:gap_dp}
+%===============================================================================
+
+The Bellman equation \eqref{eq:bellman} and the conditional ignorance gap $\Gamma_k(b_k)$ \eqref{eq:cond_gap} are defined in the main text.  This appendix reformulates the Bellman recursion directly on $\Gamma_k$---the \emph{gap dynamic program}---which exposes the exploration--exploitation tradeoff of optimal adaptive sensing in closed form and admits analytical simplifications in several regimes (linear measurements, fast posterior concentration, Lipschitz oracle map).  It also gives a practical two-phase policy for the moderate-$\E[IG]$ regime.  The development is problem-agnostic: the equations apply to any sequential sensing problem with a D-optimal terminal reward.
+
+\subsection{The gap dynamic program}
+
+Substituting $W_k = \E_{\bm{x}|b_k}[V_k^\star] - \Gamma_k$ into the Bellman equation \eqref{eq:bellman} yields a recursion on the conditional gap $\Gamma_k$.
+
+\paragraph{One-step Jensen gap.}
+Using $V_k^\star(\bm{x}) = \max_{\bm{s}_k} V_{k+1}^\star(\bm{x};\bm{s}_k)$, define the \emph{one-step conditional Jensen gap}:
+\begin{equation}
+  \Delta_k(b_k) = \E_{\bm{x} \mid b_k}\!\left[\max_{\bm{s}_k} V_{k+1}^\star(\bm{x};\bm{s}_k)\right] - \max_{\bm{s}_k}\, \E_{\bm{x} \mid b_k}\!\left[V_{k+1}^\star(\bm{x};\bm{s}_k)\right] \;\geq\; 0,
+  \label{eq:jensen_gap}
+\end{equation}
+where the inequality is Jensen's (max is convex).  This is the \emph{irreducible} one-step cost of not knowing $\bm{x}$: it vanishes when the oracle-optimal $\bm{s}_k$ is the same for all $\bm{x}$ in the posterior support, and it vanishes when the posterior $b_k$ is a point mass.
+
+\paragraph{Gap recursion.}
+Let $P_k(\bm{s}_k) = \E_{\bm{x}|b_k}[V_{k+1}^\star(\bm{x};\bm{s}_k)]$ denote the exploitative (certainty-equivalent) value of action $\bm{s}_k$ and $Q_k(\bm{s}_k) = \E_{\bm{y}_k|b_k,\bm{s}_k}[\Gamma_{k+1}(b_{k+1})]$ the expected future gap.  Substituting $W_k = \E_{\bm{x}|b_k}[V_k^\star] - \Gamma_k$ into \eqref{eq:bellman} and using $\E_{\bm{x}|b_k}[V_k^\star(\bm{x})] = \Delta_k(b_k) + \max_{\bm{s}_k} P_k(\bm{s}_k)$ yields:
+\begin{equation}
+  \boxed{\Gamma_k(b_k) = \Delta_k(b_k) + \underbrace{\max_{\bm{s}_k}P_k(\bm{s}_k) - \max_{\bm{s}_k}[P_k(\bm{s}_k) - Q_k(\bm{s}_k)]}_{\displaystyle \ge Q_k(\bm{s}_k^{\text{full}}) \ge 0}.}
+  \label{eq:gap_dp}
+\end{equation}
+
+This is the \textbf{gap dynamic program}.  The total conditional gap at step $k$ decomposes into:
+\begin{itemize}[nosep]
+  \item $\Delta_k(b_k)$: the \textbf{irreducible Jensen gap} at this step---the cost of the oracle's ability to pick the best $\bm{s}_k$ for each $\bm{x}$, which no policy can avoid given belief $b_k$.
+  \item $\max P_k - \max(P_k - Q_k)$: the \textbf{future-gap term}, which the policy \emph{can} influence by choosing $\bm{s}_k$ to concentrate $b_{k+1}$ and thereby shrink $\Delta_{k+1}, \ldots, \Delta_N$.  It splits as $[P_k(\bm{s}_k^P) - P_k(\bm{s}_k^{\text{full}})] + Q_k(\bm{s}_k^{\text{full}})$, where $\bm{s}_k^P = \argmax P_k$ is the exploitative action and $\bm{s}_k^{\text{full}} = \argmax(P_k - Q_k)$ is the full Bellman optimum.  The first bracket is the \emph{exploitation regret} of deviating from the myopic action to reduce future uncertainty; the second is the residual future gap.
+\end{itemize}
+
+When the myopic and full-Bellman actions coincide ($\bm{s}_k^P = \bm{s}_k^{\text{full}}$), the exploitation regret vanishes and the recursion simplifies to $\Gamma_k = \Delta_k + Q_k(\bm{s}_k^P)$.  Dropping the nonnegative exploitation regret gives the cleaner lower bound $\Gamma_k(b_k) \ge \Delta_k(b_k) + Q_k(\bm{s}_k^{\text{full}})$, which unrolls cleanly along the optimal trajectory.
+
+\paragraph{Boundary condition.}
+At the terminal step, $\Gamma_{N+1} = 0$ (no remaining decisions).  Under the optimal policy, $\bm{s}_k^{\text{full}}$ is the committed action at step $k$, so by the tower property, $Q_k(\bm{s}_k^{\text{full}}) = \E_{\bm{y}_k|b_k,\bm{s}_k^{\text{full}}}[\Gamma_{k+1}(b_{k+1})]$.  Taking expectation over the trajectory induced by the optimal policy and telescoping gives:
+\begin{equation}
+  \Gamma_1(\text{prior}) \;\geq\; \sum_{k=1}^{N} \E\!\left[\Delta_k(b_k)\right] \quad \text{under the optimal policy,}
+  \label{eq:gap_sum}
+\end{equation}
+where the expectation is over the observation sequence induced by the policy.  The cumulative Jensen gap lower-bounds the total gap; equality holds when no step requires trading exploitation for exploration, which is the typical regime when the posterior concentrates fast relative to the curvature of the oracle map.
+
+\subsection{Interpretation: exploration--exploitation from first principles}
+
+The gap DP \eqref{eq:gap_dp} reveals the fundamental \emph{exploration--exploitation tradeoff} for adaptive sensing:
+
+\begin{enumerate}
+  \item \textbf{Exploitation} (maximize immediate value): choose $\bm{s}_k$ to maximize $P_k(\bm{s}_k) = \E_{\bm{x}|b_k}[V_{k+1}^\star(\bm{x};\bm{s}_k)]$---i.e., the best expected oracle value-to-go assuming the current belief is correct.  This is the certainty-equivalent or myopic policy.
+
+  \item \textbf{Exploration} (minimize future gap): choose $\bm{s}_k$ to minimize $Q_k(\bm{s}_k) = \E_{\bm{y}_k|b_k,\bm{s}_k}[\Gamma_{k+1}(b_{k+1})]$---i.e., concentrate the posterior $b_{k+1}$ to shrink the Jensen gaps $\Delta_{k+1}, \ldots, \Delta_N$ in all future steps.  A measurement that provides less immediate information but sharply concentrates the posterior in the direction where the oracle sensors vary most rapidly with $\bm{x}$ can be globally superior.
+\end{enumerate}
+
+The optimal $\bm{s}_k$ in \eqref{eq:gap_dp} balances these two objectives.  The balance depends on the \emph{horizon}: with many remaining steps, exploration is cheap (you have budget to ``recover'' from a less-informative measurement); with few remaining steps, exploitation dominates.
+
+\subsection{When the gap DP simplifies}
+
+Three regimes admit closed-form or near-closed-form solutions:
+
+\paragraph{Linear measurements ($\bm{F}$ independent of $\bm{x}$).}
+The oracle-optimal $\bm{s}_k$ does not depend on $\bm{x}$, so $\Delta_k = 0$ for all $k$ and all beliefs.  The gap DP is trivially $\Gamma_k = 0$: the fixed design is optimal, and the myopic policy coincides with the globally optimal policy.
+
+\paragraph{Fast posterior concentration (high SNR).}
+If after $k_0 \ll N$ steps the posterior is tightly concentrated ($b_k \approx \delta(\bm{x} - \hat{\bm{x}})$), then $\Delta_k \approx 0$ for $k > k_0$.  The gap is dominated by the first $k_0$ steps:
+\begin{equation}
+  \Gamma_1 \;\approx\; \sum_{k=1}^{k_0} \E[\Delta_k(b_k)].
+\end{equation}
+For the remaining $N - k_0$ steps, the certainty-equivalent policy $\bm{s}_k = \bm{s}_k^\star(\hat{\bm{x}}_{k-1})$ is near-optimal.  This is the common case in practice: a few initial measurements resolve most of the uncertainty, after which adaptation degenerates to the oracle policy evaluated at the posterior mean.
+
+\paragraph{Smooth oracle map ($\bm{s}^\star(\bm{x})$ Lipschitz).}
+If the oracle map $\bm{x} \mapsto \bm{s}^\star(\bm{x})$ is $L$-Lipschitz and the log-information $\Phi$ has bounded curvature $\kappa$ in $\bm{s}$ around the oracle, then:
+\begin{equation}
+  \Delta_k(b_k) \;\lesssim\; \kappa L^2 \, \Var_{\bm{x} \mid b_k}\!\left[\bm{x}\right],
+  \label{eq:delta_bound}
+\end{equation}
+where $\Var_{\bm{x}|b_k}[\bm{x}] = \tr(\bm{\Sigma}_{k-1})$ is the posterior variance.  Summing the per-step bound:
+\begin{equation}
+  \sum_{k=1}^{N} \E\!\left[\Delta_k(b_k)\right] \;\lesssim\; \kappa L^2 \sum_{k=1}^{N} \E\!\left[\tr(\bm{\Sigma}_{k-1})\right].
+  \label{eq:total_gap_bound}
+\end{equation}
+In the zero-exploitation-regret regime where \eqref{eq:gap_sum} is tight, this also bounds the total gap $\Gamma_1$ by the \emph{cumulative posterior variance} times the \emph{sensitivity of the oracle map}.  The bound connects the IG directly to estimator performance: a system with high Fisher information (fast variance reduction) and smooth oracle map (small $L$) has a small gap, regardless of $N$.
+
+\subsection{Practical policy from the gap DP}
+
+The gap DP \eqref{eq:gap_dp} suggests a practical two-phase policy:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Monitor} $\Delta_k(b_k)$ at each step.  This requires the oracle map $\bm{x} \mapsto \bm{s}^\star(\bm{x})$, which is an $N d_s$-variable optimization per $\bm{x}$, evaluated over samples from the current posterior.
+  \item \textbf{If $\Delta_k \ll 1$}: use the certainty-equivalent policy $\bm{s}_k = \bm{s}_k^\star(\hat{\bm{x}}_{k-1})$.  The gap is negligible; exploration has no value.
+  \item \textbf{If $\Delta_k$ is large}: choose $\bm{s}_k$ to maximize posterior concentration in the direction of steepest variation of the oracle map, i.e., along $\nabla_{\bm{x}} \bm{s}^\star(\bm{x}) \big|_{\hat{\bm{x}}}$.  This targets the component of $\bm{x}$ that most affects the optimal sensor choice.
+\end{enumerate}
+
+The crossover from exploration to exploitation occurs when the posterior width in the direction of $\nabla_{\bm{x}} \bm{s}^\star$ drops below the scale at which $\bm{s}^\star$ varies appreciably---after which the certainty-equivalent policy is indistinguishable from the oracle.
 
 \end{document}

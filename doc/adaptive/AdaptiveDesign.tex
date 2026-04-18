@@ -1,0 +1,776 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\argmin}{\operatorname{argmin}}
+\newcommand{\argmax}{\operatorname{argmax}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\Var}{\operatorname{Var}}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\newtheorem{remark}{Remark}
+
+\title{Adaptive Experimental Design:\\Posterior CRB, Ignorance Gap, and Adaptive Policies}
+\author{Z.\ Lin}
+\date{April 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We develop a self-contained theoretical framework for adaptive experimental design.  Starting from the general posterior Cram\'er--Rao bound (PCRB) and the Tichavsk\'y--Muravchik--Nehorai recursion for arbitrary discrete-time state-space models, we successively specialize to a static state, additive Gaussian measurements, and the resulting Bayesian D-optimal problem for \emph{pre-computed} sensor sequences.  We then introduce the \emph{ignorance gap} $IG(\bm{x})$---the log-determinant deficit of the best state-agnostic design relative to an oracle that sees the state---and show that its prior-expectation upper-bounds the improvement achievable by any adaptive policy.  When $\E[IG]$ is negligible, the pre-computed design is essentially optimal and no adaptivity is warranted.  When $\E[IG]$ is substantial, we define an adaptive policy precisely, contrast it with the pre-computed setting, and characterize the optimal policy via the Bellman equation for the value-to-go $W_k$.  We extend this to the joint optimization of device geometry and adaptive policy using the envelope theorem, prescribe a policy-iteration scheme, and catalog problem classes that exhibit large ignorance gaps.  An appendix derives the Bellman equation from first principles.
+\end{abstract}
+
+\tableofcontents
+
+%===============================================================================
+\section{General PCRB: The Tichavsk\'y Recursion}
+%===============================================================================
+
+\subsection{State-space setting}
+
+Consider a discrete-time state-space model:
+\begin{align}
+  \bm{x}_k &= \bm{g}_k(\bm{x}_{k-1}, \bm{w}_k), \qquad \bm{w}_k \sim p_{\bm{w}_k}, \label{eq:state} \\
+  \bm{y}_k &= \bm{h}_k(\bm{x}_k, \bm{s}_k, \bm{c}) + \bm{v}_k, \qquad \bm{v}_k \sim p_{\bm{v}_k}, \label{eq:obs}
+\end{align}
+where $\bm{x}_k \in \R^{d_x}$ is the state, $\bm{y}_k \in \R^{d_y}$ is the observation, $\bm{s}_k \in \R^{d_s}$ is a controllable sensor parameter at step $k$, $\bm{c} \in \R^{d_c}$ collects device-geometry (structural) parameters held fixed across the horizon, $\bm{w}_k$ is process noise, and $\bm{v}_k$ is measurement noise.  The prior on the initial state is $\bm{x}_0 \sim p_0$.  The sensor parameter $\bm{s}_k$ may be fixed at design time or chosen adaptively based on $\bm{y}_{1:k-1}$.
+
+\subsection{The Bayesian Information Matrix}
+
+Define the \emph{Bayesian Information Matrix} (BIM) at step $k$ as:
+\begin{equation}
+  \bm{J}_k \;=\; \E\!\left[-\nabla_{\bm{x}_k} \nabla_{\bm{x}_k}^\top \ln p(\bm{x}_k \mid \bm{y}_{1:k})\right],
+  \label{eq:bim}
+\end{equation}
+where the expectation is over the joint distribution $p(\bm{x}_{0:k}, \bm{y}_{1:k})$.  For any (conditionally or asymptotically) unbiased estimator $\hat{\bm{x}}_k$ of $\bm{x}_k$ given $\bm{y}_{1:k}$, the PCRB is:
+\begin{equation}
+  \E\!\left[(\hat{\bm{x}}_k - \bm{x}_k)(\hat{\bm{x}}_k - \bm{x}_k)^\top\right] \;\succeq\; \bm{J}_k^{-1}.
+  \label{eq:pcrb}
+\end{equation}
+
+\subsection{The Tichavsk\'y recursion}
+
+\begin{theorem}[Tichavsk\'y, Muravchik \& Nehorai, 1998]
+\label{thm:pcrb}
+Under regularity conditions (twice-differentiable log-densities, finite Fisher information), the BIM satisfies the recursion
+\begin{equation}
+  \bm{J}_{k+1} = \bm{D}_k^{22} - \bm{D}_k^{21}\left(\bm{J}_k + \bm{D}_k^{11}\right)^{-1}\bm{D}_k^{12} + \bm{H}_{k+1},
+  \label{eq:recursion}
+\end{equation}
+where the $d_x \times d_x$ matrices arise from the state transition and the measurement:
+\begin{align}
+  \bm{D}_k^{11} &= \E\!\left[-\nabla_{\bm{x}_k} \nabla_{\bm{x}_k}^\top \ln p(\bm{x}_{k+1} \mid \bm{x}_k)\right], \label{eq:D11} \\
+  \bm{D}_k^{12} &= \E\!\left[-\nabla_{\bm{x}_k} \nabla_{\bm{x}_{k+1}}^\top \ln p(\bm{x}_{k+1} \mid \bm{x}_k)\right], \label{eq:D12} \\
+  \bm{D}_k^{21} &= \left(\bm{D}_k^{12}\right)^\top, \label{eq:D21} \\
+  \bm{D}_k^{22} &= \E\!\left[-\nabla_{\bm{x}_{k+1}} \nabla_{\bm{x}_{k+1}}^\top \ln p(\bm{x}_{k+1} \mid \bm{x}_k)\right], \label{eq:D22} \\
+  \bm{H}_{k+1} &= \E\!\left[-\nabla_{\bm{x}_{k+1}} \nabla_{\bm{x}_{k+1}}^\top \ln p(\bm{y}_{k+1} \mid \bm{x}_{k+1}, \bm{s}_{k+1})\right]. \label{eq:H}
+\end{align}
+The recursion is initialized with the prior information,
+\begin{equation}
+  \bm{J}_0 = \E\!\left[-\nabla_{\bm{x}_0} \nabla_{\bm{x}_0}^\top \ln p_0(\bm{x}_0)\right] = \bm{\Sigma}_0^{-1} \qquad \text{(if $p_0$ is Gaussian with covariance $\bm{\Sigma}_0$).}
+  \label{eq:J0}
+\end{equation}
+\end{theorem}
+
+\begin{remark}
+The $\bm{D}_k^{ij}$ matrices depend only on the state dynamics; $\bm{H}_{k+1}$ is the expected measurement Fisher Information Matrix (FIM) of $p(\bm{y}_{k+1} \mid \bm{x}_{k+1}, \bm{s}_{k+1})$ with respect to $\bm{x}_{k+1}$.  The PCRB \eqref{eq:pcrb} holds for \emph{any} choice of $\bm{s}_k$---deterministic or adaptively randomized---provided the expectation in $\bm{H}_{k+1}$ includes the randomness of the sensor policy.
+\end{remark}
+
+%===============================================================================
+\section{Specialization: Static State}
+%===============================================================================
+
+When the state is static ($\bm{x}_k = \bm{x}_0$ for all $k$, i.e., $\bm{g}_k$ is the identity with vanishing process noise), the transition becomes deterministic: $p(\bm{x}_{k+1} \mid \bm{x}_k) = \delta(\bm{x}_{k+1} - \bm{x}_k)$.  The $\bm{D}_k^{ij}$ matrices diverge in this limit, and the Schur complement in \eqref{eq:recursion} collapses.
+
+\paragraph{Limiting argument.}
+Consider additive Gaussian dynamics $\bm{x}_{k+1} = \bm{x}_k + \bm{w}_k$ with $\bm{w}_k \sim \mathcal{N}(\bm{0}, \bm{Q}_k)$ and take $\bm{Q}_k \to \bm{0}$.  Direct computation from \eqref{eq:D11}--\eqref{eq:D22} gives $\bm{D}_k^{11} = \bm{D}_k^{22} = \bm{Q}_k^{-1}$ and $\bm{D}_k^{12} = \bm{D}_k^{21} = -\bm{Q}_k^{-1}$.  The recursion becomes
+\begin{equation}
+  \bm{J}_{k+1} = \bm{Q}_k^{-1} - \bm{Q}_k^{-1}\!\left(\bm{J}_k + \bm{Q}_k^{-1}\right)^{-1}\!\bm{Q}_k^{-1} + \bm{H}_{k+1}.
+\end{equation}
+Applying the Woodbury identity $\bm{Q}^{-1} - \bm{Q}^{-1}(\bm{J} + \bm{Q}^{-1})^{-1}\bm{Q}^{-1} = (\bm{Q} + \bm{J}^{-1})^{-1}$ and taking $\bm{Q}_k \to \bm{0}$ gives $(\bm{Q}_k + \bm{J}_k^{-1})^{-1} \to \bm{J}_k$.  Hence:
+\begin{equation}
+  \boxed{\;\bm{J}_{k+1} = \bm{J}_k + \bm{H}_{k+1}, \qquad \bm{J}_0 = \bm{\Sigma}_0^{-1}.\;}
+  \label{eq:static}
+\end{equation}
+
+\paragraph{Additive information.}
+For a static state, information simply accumulates: each measurement contributes its FIM $\bm{H}_k$ to the running total.  After $N$ steps,
+\begin{equation}
+  \bm{J}_N \;=\; \bm{\Sigma}_0^{-1} + \sum_{k=1}^{N} \bm{H}_k(\bm{s}_k, \bm{c}),
+  \label{eq:JN_static}
+\end{equation}
+and the PCRB is
+\begin{equation}
+  \E\!\left[(\hat{\bm{x}} - \bm{x})(\hat{\bm{x}} - \bm{x})^\top\right] \;\succeq\; \left(\bm{\Sigma}_0^{-1} + \sum_{k=1}^{N} \bm{H}_k(\bm{s}_k, \bm{c})\right)^{-1}.
+  \label{eq:pcrb_static}
+\end{equation}
+The additive structure holds whether $\bm{s}_k$ is fixed or chosen adaptively---adaptivity affects the \emph{value} of each $\bm{H}_k$, not the sum structure.
+
+%===============================================================================
+\section{Specialization: Nonlinear Gaussian Measurement}
+%===============================================================================
+
+Now suppose the observation model is
+\begin{equation}
+  \bm{y}_k = \bm{h}(\bm{x}, \bm{s}_k, \bm{c}) + \bm{v}_k, \qquad \bm{v}_k \sim \mathcal{N}(\bm{0}, \bm{R}_k),
+  \label{eq:gauss_obs}
+\end{equation}
+where $\bm{h}: \R^{d_x} \times \R^{d_s} \times \R^{d_c} \to \R^{d_y}$ is a possibly nonlinear measurement function and $\bm{R}_k$ is the noise covariance (possibly depending on $\bm{s}_k$ and $\bm{c}$).
+
+\paragraph{Measurement FIM.}
+The log-likelihood is
+\begin{equation}
+  \ln p(\bm{y}_k \mid \bm{x}, \bm{s}_k) = -\tfrac{1}{2}(\bm{y}_k - \bm{h})^\top \bm{R}_k^{-1}(\bm{y}_k - \bm{h}) + \text{const},
+\end{equation}
+and the measurement Jacobian is $\bm{F}_k = \partial\bm{h}/\partial\bm{x}\big|_{\bm{x},\bm{s}_k,\bm{c}} \in \R^{d_y \times d_x}$.  A direct calculation (the cross-term in the Hessian vanishes under $\E_{\bm{y}|\bm{x}}$) gives the FIM at a specific $\bm{x}$:
+\begin{equation}
+  \mathrm{FIM}(\bm{x}; \bm{s}_k, \bm{c}) = \bm{F}_k(\bm{x})^\top \bm{R}_k^{-1} \bm{F}_k(\bm{x}).
+\end{equation}
+Taking the expectation over $\bm{x}$ (as required by \eqref{eq:H}):
+\begin{equation}
+  \bm{H}_k(\bm{s}_k, \bm{c}) = \E_{\bm{x}}\!\left[\bm{F}_k^\top \bm{R}_k^{-1} \bm{F}_k\right].
+  \label{eq:H_gauss}
+\end{equation}
+For \textbf{isotropic} noise $\bm{R}_k = \sigma^2 \bm{I}$ this simplifies to $\bm{H}_k = \sigma^{-2}\,\E_{\bm{x}}[\bm{F}_k^\top \bm{F}_k]$.
+
+\paragraph{Combined static + Gaussian form.}
+Combining Sections~2 and 3, for a static state observed through nonlinear Gaussian measurements with isotropic noise:
+\begin{equation}
+  \boxed{\;\bm{J}_N = \bm{\Sigma}_0^{-1} + \frac{1}{\sigma^2}\sum_{k=1}^{N} \E_{\bm{x}}\!\left[\bm{F}_k(\bm{x}, \bm{s}_k, \bm{c})^\top \bm{F}_k(\bm{x}, \bm{s}_k, \bm{c})\right],\;}
+  \label{eq:JN_combined}
+\end{equation}
+with PCRB
+\begin{equation}
+  \E\!\left[\|\hat{\bm{x}} - \bm{x}\|^2\right] \;\geq\; \tr\!\left(\bm{J}_N^{-1}\right).
+  \label{eq:mse_bound}
+\end{equation}
+
+\begin{remark}[Two notions of $\bm{J}_N$]
+\label{rem:two_JN}
+The BIM \eqref{eq:JN_combined} places $\E_{\bm{x}}[\cdot]$ \emph{inside} the sum.  For design, we will also use the \emph{state-dependent} information
+\begin{equation}
+  \bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c}) = \bm{\Sigma}_0^{-1} + \frac{1}{\sigma^2}\sum_{k=1}^{N} \bm{F}_k(\bm{x})^\top \bm{F}_k(\bm{x}),
+  \label{eq:JN_state}
+\end{equation}
+which is a random matrix through $\bm{x}$.  The two are related by $\E_{\bm{x}}[\bm{J}_N(\bm{x})] = \bm{J}_N$, and by Jensen's inequality (concavity of $\ln\det$),
+\begin{equation}
+  \E_{\bm{x}}\!\left[\ln\det\bm{J}_N(\bm{x})\right] \;\le\; \ln\det \E_{\bm{x}}[\bm{J}_N(\bm{x})].
+\end{equation}
+We use the same symbol $\bm{J}_N$ for both and disambiguate by whether an $\bm{x}$ argument is shown.
+\end{remark}
+
+%===============================================================================
+\section{Pre-Computed Optimal Sensors: Averaged D-Optimality}
+\label{sec:fixed}
+%===============================================================================
+
+\subsection{The fixed-design problem}
+
+Suppose we commit to a sensor sequence $\bm{s}_{1:N} = (\bm{s}_1, \ldots, \bm{s}_N)$ at design time, \emph{before} any observations are collected.  Each $\bm{s}_k$ is a fixed vector in $\R^{d_s}$, \emph{not} a function of anything.  Coupled with the device geometry $\bm{c}$, this defines a \emph{pre-computed} (or \emph{static}, or \emph{non-adaptive}) design.
+
+Since information accumulates additively under \eqref{eq:JN_combined} and the PCRB depends on $(\bm{c}, \bm{s}_{1:N})$ only through $\bm{J}_N$, a natural design objective is the Bayesian D-optimal criterion:
+\begin{equation}
+  \boxed{\;\min_{\bm{c},\; \bm{s}_1, \ldots, \bm{s}_N}\; \E_{\bm{x}}\!\left[-\ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c})\right].\;}
+  \label{eq:joint_opt}
+\end{equation}
+This is a \textbf{single-level} optimization over $d_c + N d_s$ variables.  The objective is the expected log-volume of the per-state Cram\'er--Rao uncertainty ellipsoid ($\propto (\det\bm{J}_N)^{-1/2}$).
+
+\begin{remark}[Why single-level]
+The integrand $\sum_k \bm{F}_k(\bm{x}, \bm{s}_k, \bm{c})^\top\bm{F}_k(\bm{x}, \bm{s}_k, \bm{c})$ is a sum of per-step contributions where each $\bm{s}_k$ appears in only one summand and the summand does not reference any $\bm{y}_{1:k-1}$---there is no inner optimization or dependence on observations to unroll.  The outer minimization over $(\bm{c}, \bm{s}_{1:N})$ is therefore flat (single-level) in $d_c + N d_s$ variables.
+\end{remark}
+
+\subsection{Gradient structure}
+
+Problem~\eqref{eq:joint_opt} is smooth in $(\bm{c}, \bm{s}_{1:N})$ when $\bm{h}$ is smooth.  Componentwise, the integrand's gradient at a fixed $\bm{x}$ is
+\begin{equation}
+  \frac{\partial}{\partial s_{k,i}}\!\left(-\ln\det\bm{J}_N(\bm{x})\right) = -\frac{2}{\sigma^2}\,\tr\!\left(\bm{J}_N(\bm{x})^{-1}\,\bm{F}_k^\top \frac{\partial \bm{F}_k}{\partial s_{k,i}}\right),
+  \label{eq:grad_s}
+\end{equation}
+using $\partial\ln\det A/\partial A = A^{-\top}$ (which reduces to $A^{-1}$ on the symmetric PD $\bm{J}_N$).  The expected gradient is obtained by taking $\E_{\bm{x}}[\cdot]$ (Monte Carlo in practice).  The gradient with respect to $\bm{c}$ is analogous, with $\partial\bm{F}_k/\partial c_j$ propagated through whatever physics model relates the geometry to the measurement Jacobian.
+
+The $\bm{J}_N^{-1}$ factor couples all measurements: $\partial/\partial s_{k,i}$ of the objective depends on the information from \emph{all other} measurements through $\bm{J}_N$.  This is structural to $\ln\det$ criteria.
+
+\subsection{Comparison of alphabetic criteria}
+
+Classical optimal-design theory considers several scalar functions of $\bm{J}_N$:
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Criterion & Objective & Interpretation \\
+\midrule
+A-optimal & $\min \tr(\bm{J}_N^{-1})$ & Minimize average variance \\
+D-optimal & $\min -\ln\det\bm{J}_N$ & Minimize log-volume of confidence ellipsoid \\
+E-optimal & $\min \lambda_{\max}(\bm{J}_N^{-1})$ & Minimize worst-case variance \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+D-optimality has three properties that make it the natural choice:
+\begin{itemize}[nosep]
+  \item \textbf{Reparametrization invariance}: $\det\bm{J}_N$ transforms covariantly under nonsingular changes of coordinates on $\bm{x}$ (up to the Jacobian determinant), while $\tr(\bm{J}_N^{-1})$ does not.
+  \item \textbf{Balanced information}: it penalizes near-singular $\bm{J}_N$ much more severely than A-optimality, forcing the sensor sequence to inform \emph{all} state directions rather than piling effort into the most informative one.
+  \item \textbf{Information-theoretic meaning}: for Gaussian posteriors, $\tfrac{1}{2}\ln\det(2\pi e\,\bm{J}_N^{-1})$ is the differential entropy, so minimizing $-\ln\det\bm{J}_N$ minimizes the posterior entropy---equivalently, maximizing the mutual information $I(\bm{x};\bm{y}_{1:N})$.
+\end{itemize}
+The criteria are related by AM--GM: $d_x^{-1}\tr(\bm{J}_N^{-1}) \ge (\det\bm{J}_N^{-1})^{1/d_x}$ with equality when $\bm{J}_N$ is a scalar multiple of $\bm{I}$.  For small $d_x$ they tend to move together.
+
+%===============================================================================
+\section{The Ignorance Gap}
+\label{sec:ig}
+%===============================================================================
+
+The pre-computed design \eqref{eq:joint_opt} hedges against the unknown $\bm{x}$ by averaging over the prior.  How much worse is this hedging than an oracle that sees $\bm{x}$ and picks sensors specifically for it?  The ignorance gap answers this question.
+
+\subsection{Oracle and fixed-design values}
+
+Define the \emph{oracle} value at a specific state $\bm{x}$:
+\begin{equation}
+  V_{\text{oracle}}(\bm{x}) \;=\; \max_{\bm{s}_{1:N}} \ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c}).
+  \label{eq:oracle}
+\end{equation}
+This is the best possible log-information if the true $\bm{x}$ were known at design time.  No realizable policy can exceed it, because no realizable policy has access to $\bm{x}$.
+
+Define the \emph{fixed-design} value:
+\begin{equation}
+  V_{\text{fixed}} \;=\; \max_{\bm{s}_{1:N}} \E_{\bm{x}}\!\left[\ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c})\right],
+  \label{eq:fixed}
+\end{equation}
+with optimal pre-computed sensors $\bm{s}^\star_{1:N}$.  This is exactly the (negated) optimal value of \eqref{eq:joint_opt} for fixed $\bm{c}$.
+
+\subsection{Definition of the ignorance gap}
+
+The \textbf{ignorance gap at $\bm{x}$} is
+\begin{equation}
+  \boxed{\;IG(\bm{x}) \;=\; V_{\text{oracle}}(\bm{x}) - \ln\det\bm{J}_N(\bm{x}, \bm{s}^\star_{1:N}, \bm{c}) \;\geq\; 0.\;}
+  \label{eq:IG}
+\end{equation}
+It measures how much better the sensors \emph{could} be if tailored specifically to this $\bm{x}$, relative to the one-size-fits-all $\bm{s}^\star_{1:N}$.  By Jensen's inequality and the definition of $V_{\text{fixed}}$, $\E_{\bm{x}}[IG(\bm{x})] = \E[V_{\text{oracle}}] - V_{\text{fixed}}$, the prior-expected ignorance cost.
+
+\subsection{The expected ignorance gap bounds adaptation}
+
+Introduce (a preview of Section~\ref{sec:adaptive}) the value of the optimal adaptive policy:
+\begin{equation}
+  V_{\text{adaptive}} \;=\; \max_\pi \; \E_{\bm{x}, \bm{y}}\!\left[\ln\det\bm{J}_N(\bm{x}, \pi(\bm{y}_{1:N-1}), \bm{c})\right],
+  \label{eq:vadapt}
+\end{equation}
+where the max is over all measurable policies $\pi = \{\pi_k: \bm{y}_{1:k-1} \mapsto \bm{s}_k\}$.  Since a fixed design is a special (constant) policy, $V_{\text{adaptive}} \ge V_{\text{fixed}}$.  Since no policy can beat the oracle, $V_{\text{adaptive}} \le \E_{\bm{x}}[V_{\text{oracle}}(\bm{x})]$.  Therefore:
+\begin{equation}
+  \boxed{\;0 \;\leq\; V_{\text{adaptive}} - V_{\text{fixed}} \;\leq\; \E_{\bm{x}}[IG(\bm{x})].\;}
+  \label{eq:evpi}
+\end{equation}
+This is the \emph{Expected Value of Perfect Information} (EVPI) bound from decision theory: the expected ignorance gap is an upper bound on the value of the optimal adaptive policy over the best fixed design.
+
+\begin{corollary}
+\label{cor:useless_adapt}
+If $\E_{\bm{x}}[IG(\bm{x})] \approx 0$, then no adaptive policy---no matter how clever---can significantly improve upon the pre-computed design \eqref{eq:joint_opt}.
+\end{corollary}
+
+\subsection{When is the ignorance gap small?}
+
+$IG(\bm{x}) \equiv 0$ exactly when $\argmax_{\bm{s}_{1:N}} \ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c})$ does not depend on $\bm{x}$---i.e., the same sensor sequence is optimal regardless of the true state.  This holds exactly when $\bm{F}(\bm{x}, \bm{s}, \bm{c})$ is independent of $\bm{x}$ (linear measurement model).
+
+More generally, $IG(\bm{x})$ is small when the Jacobian's $\bm{x}$-dependence is weak relative to its $\bm{s}$-dependence.  A Taylor expansion of a weakly-nonlinear measurement $\bm{h}(\bm{x}, \bm{s}, \bm{c})$ around the prior mean $\bm{\mu}_0$ gives $\bm{F}(\bm{x}, \bm{s}, \bm{c}) = \bm{F}_0(\bm{s}, \bm{c}) + O(\|\bm{x} - \bm{\mu}_0\|)$; if the prior standard deviation is small compared to the scale on which $\bm{F}$ varies with $\bm{x}$, the oracle-optimal sensors are nearly $\bm{x}$-independent and $IG \approx 0$.
+
+\subsection{Computability of the ignorance gap}
+
+The ignorance gap is directly computable from the pre-computed solution with \emph{no adaptive solver required}:
+\begin{enumerate}[nosep]
+  \item Solve \eqref{eq:joint_opt} to obtain $(\bm{c}^\star, \bm{s}^\star_{1:N})$.
+  \item For a Monte Carlo sample $\{\bm{x}^{(i)}\}_{i=1}^M$ drawn from the prior:
+  \begin{enumerate}[nosep]
+    \item Evaluate $\ln\det\bm{J}_N(\bm{x}^{(i)}, \bm{s}^\star_{1:N}, \bm{c}^\star)$ (the fixed-design log-det at $\bm{x}^{(i)}$).
+    \item Solve $\max_{\bm{s}_{1:N}} \ln\det\bm{J}_N(\bm{x}^{(i)}, \bm{s}_{1:N}, \bm{c}^\star)$ (an $N d_s$-variable optimization).
+    \item Compute $IG(\bm{x}^{(i)})$ as their difference.
+  \end{enumerate}
+  \item Report sample statistics: $\widehat{\E}[IG]$, $\widehat{\mathrm{std}}[IG]$, $\widehat{\max}[IG]$, $\Pr[IG > \epsilon]$.
+\end{enumerate}
+If $\widehat{\E}[IG] \ll 1$ nat, Corollary~\ref{cor:useless_adapt} says we are done: the fixed design is essentially optimal.  This offline check costs $M$ small optimizations and should precede any investment in an adaptive solver.
+
+\paragraph{Diagnostic statistics.}
+Beyond the mean, the distribution of $IG(\bm{x})$ is informative:
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Statistic & Interpretation \\
+\midrule
+$\E[IG]$ & Upper bound on adaptation value (EVPI, in nats) \\
+$\mathrm{std}[IG] / \E[IG]$ & Heterogeneity: large $\Rightarrow$ benefit concentrated on certain $\bm{x}$ \\
+$\max IG$ & Worst-case suboptimality of fixed design \\
+$\Pr(IG > \epsilon)$ & Fraction of state space where adaptation matters \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%===============================================================================
+\section{Adaptive Policies}
+\label{sec:adaptive}
+%===============================================================================
+
+When $\E[IG]$ is \emph{not} negligible, the fixed design leaves value on the table: by observing intermediate $\bm{y}_k$'s we may be able to infer something about $\bm{x}$ and then use that information to pick later sensors more informatively.  This motivates \emph{adaptive} policies.
+
+\subsection{Definition of an adaptive policy}
+
+An \textbf{adaptive policy} is a sequence of measurable functions
+\begin{equation}
+  \pi = \{\pi_1, \pi_2, \ldots, \pi_N\}, \qquad \pi_k: \R^{d_y (k-1)} \to \R^{d_s},
+\end{equation}
+where $\pi_k(\bm{y}_{1:k-1})$ is the sensor action chosen at step $k$ as a function of \emph{only} the observations collected \emph{before} step $k$.  By convention $\pi_1$ takes no argument (nothing has been observed yet), so $\pi_1 \in \R^{d_s}$ is a fixed vector.
+
+Equivalently, since $\bm{y}_{1:k-1}$ enters only through the posterior $b_k = p(\bm{x} \mid \bm{y}_{1:k-1})$ (the \emph{belief}), we can write $\pi_k(b_k)$---a map from beliefs to sensors.
+
+\subsection{Contrast with pre-computed sensors}
+
+The difference is operational:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Property & Pre-computed (Section~\ref{sec:fixed}) & Adaptive (this section) \\
+\midrule
+$\bm{s}_k$ is & a fixed vector $\in \R^{d_s}$ & a function $\pi_k(\bm{y}_{1:k-1})$ \\
+Chosen & at design time, before any data & at run time, after each observation \\
+Depends on $\bm{y}_{1:k-1}$? & No & Yes \\
+Search space & $\R^{d_c + N d_s}$ (finite-dim) & space of functions (infinite-dim) \\
+Information benefit & hedges average-case $\bm{x}$ & can target inferred $\hat{\bm{x}}$ \\
+Upper bound on value & $V_{\text{fixed}}$ \eqref{eq:fixed} & $V_{\text{adaptive}} \le V_{\text{fixed}} + \E[IG]$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The pre-computed setting commits the full sequence $\bm{s}_{1:N}$ before seeing any $\bm{y}_k$; the adaptive setting selects $\bm{s}_k$ after $\bm{y}_{1:k-1}$ have been revealed.  The gap between what each can achieve is upper-bounded by $\E[IG]$.
+
+\begin{remark}[Not every run-time computation is ``adaptive'']
+A design that executes sensors $\bm{s}^\star_{1:N}$ at run time but with \emph{fixed} (pre-computed) values is still a pre-computed design in this sense---even though the sensors are physically deployed during data collection.  ``Adaptive'' refers specifically to whether $\bm{s}_k$ \emph{depends on $\bm{y}_{1:k-1}$} as a function, not when the numerical values are computed.
+\end{remark}
+
+%===============================================================================
+\section{Finding the Optimal Adaptive Policy: Bellman's Equation}
+\label{sec:bellman}
+%===============================================================================
+
+Problem \eqref{eq:vadapt} is a search over functions, and is at face value intractable.  The key simplification is that the posterior $b_k$ is a \emph{sufficient statistic} for the observation history $\bm{y}_{1:k-1}$---two histories producing the same posterior are equivalent for all future decisions---so we can work with policies on beliefs.
+
+\subsection{Value-to-go}
+
+Write $\Phi(\bm{x}, \bm{s}_{1:N}) = \ln\det\bm{J}_N(\bm{x}, \bm{s}_{1:N}, \bm{c})$ for the log-information at state $\bm{x}$ with sensor sequence $\bm{s}_{1:N}$.  Let $b_k = p(\bm{x} \mid \bm{y}_{1:k-1})$ denote the belief at step $k$.  Define the \textbf{value-to-go} $W_k(b_k)$: the best achievable expected log-information from step $k$ onward, starting at belief $b_k$ and using the optimal continuation policy.
+
+\subsection{Bellman recursion}
+
+The value-to-go satisfies the \textbf{Bellman equation}:
+\begin{align}
+  W_k(b_k) &= \max_{\bm{s}_k} \; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right], \qquad k = N, N-1, \ldots, 1, \label{eq:bellman} \\
+  W_{N+1}(b_{N+1}) &= \E_{\bm{x} \mid b_{N+1}}\!\left[\Phi(\bm{x}, \bm{s}_{1:N})\right], \label{eq:terminal}
+\end{align}
+where $b_{k+1}$ is the Bayesian posterior update of $b_k$ given the newly observed $(\bm{y}_k, \bm{s}_k)$.  The optimal policy is
+\begin{equation}
+  \pi^\star_k(b_k) \;=\; \argmax_{\bm{s}_k}\; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right],
+  \label{eq:pi_star}
+\end{equation}
+and the value of the optimal adaptive policy from the prior is
+\begin{equation}
+  V_{\text{adaptive}} \;=\; W_1(p_0).
+\end{equation}
+
+Equations \eqref{eq:bellman}--\eqref{eq:terminal} reduce an infinite-dimensional optimization (over policies = measurable functions) to a sequence of finite-dimensional optimizations (a $\max$ over $\bm{s}_k$ at each step).  The price is that $W_k$ is a function on the space of beliefs, which is itself infinite-dimensional; representing $W_k$ exactly is generally impossible except in special cases (linear-Gaussian, finite-state).  See Appendix~\ref{app:bellman} for the derivation from first principles.
+
+\subsection{Oracle value-to-go and the conditional ignorance gap}
+
+Analogous to the unconditional ignorance gap, define the \emph{oracle value-to-go} at step $k$ given committed sensors $\bm{s}_{1:k-1}$:
+\begin{equation}
+  V_k^\star(\bm{x}) \;=\; \max_{\bm{s}_{k:N}} \Phi(\bm{x}, \bm{s}_{1:k-1}, \bm{s}_{k:N}).
+  \label{eq:oracle_vtg}
+\end{equation}
+The adaptive policy can never beat the oracle, so $W_k(b_k) \le \E_{\bm{x}\mid b_k}[V_k^\star(\bm{x})]$.  The deficit is the \textbf{conditional ignorance gap}:
+\begin{equation}
+  \Gamma_k(b_k) \;=\; \E_{\bm{x} \mid b_k}\!\left[V_k^\star(\bm{x})\right] - W_k(b_k) \;\geq\; 0.
+  \label{eq:cond_gap}
+\end{equation}
+At $k = 1$ with the prior, $\Gamma_1(p_0) = \E[V_{\text{oracle}}] - V_{\text{adaptive}}$ is the gap that even the \emph{optimal} adaptive policy cannot close.  Substituting $W_k = \E[V_k^\star] - \Gamma_k$ into \eqref{eq:bellman} yields a dynamic program on $\Gamma_k$---the \emph{gap DP}---which exposes an explicit exploration--exploitation decomposition of the optimal policy.  That reformulation is useful for theoretical analysis (bounds on $\Gamma_1$, regime classification) but is not required for the remainder of this document; it is standard and available in the optimal-experimental-design literature.
+
+%===============================================================================
+\section{Joint Optimization of Geometry and Adaptive Policy}
+\label{sec:joint}
+%===============================================================================
+
+We now combine the two optimizations: over the device geometry $\bm{c}$ and over the adaptive policy $\pi$.
+
+\subsection{The joint problem}
+
+The full joint problem is
+\begin{equation}
+  \boxed{\;\max_{\bm{c}} \; W_1(p_0;\, \bm{c}),\;}
+  \label{eq:joint_bellman}
+\end{equation}
+where $W_1(p_0;\, \bm{c})$ is the Bellman-optimal value \eqref{eq:bellman} at the prior for geometry $\bm{c}$, i.e., the joint problem implicitly solves an inner Bellman recursion for each $\bm{c}$.  The geometry enters through every level of the problem: the Jacobians $\bm{F}_k(\bm{x}, \bm{s}, \bm{c})$, the oracle map $\bm{s}^\star(\bm{x};\, \bm{c})$, the transition of beliefs (via the likelihoods), and the terminal $\Phi(\bm{x}, \bm{s}_{1:N}, \bm{c})$.
+
+\subsection{Envelope theorem for the outer gradient}
+
+Differentiating \eqref{eq:joint_bellman} naively would require $\partial\pi^\star/\partial\bm{c}$ (how the optimal policy changes with $\bm{c}$)---a formidable object.  The \emph{envelope theorem} (Danskin) says we don't need it:
+\begin{equation}
+  \boxed{\;\frac{dW_1}{d\bm{c}}\bigg|_{\bm{c} = \bm{c}_0} = \frac{\partial}{\partial \bm{c}}\, \E\!\left[\Phi\!\left(\bm{x},\, \pi^\star(\bm{y};\, \bm{c}_0),\, \bm{c}\right)\right]\bigg|_{\bm{c} = \bm{c}_0},\;}
+  \label{eq:envelope}
+\end{equation}
+where $\pi^\star(\cdot;\, \bm{c}_0)$ is the optimal policy \emph{frozen} at $\bm{c}_0$, treated as a fixed function of its argument.  In words: at the optimal policy for a given geometry, the first-order effect of perturbing the policy vanishes (by the first-order optimality condition on $\pi$).  We differentiate as if the policy were fixed---only the direct effect of $\bm{c}$ on the measurement matters, evaluated at whatever sensor values the optimal policy happens to emit.
+
+\subsection{Policy iteration scheme}
+
+Equation \eqref{eq:envelope} enables an alternating \textbf{policy iteration} scheme:
+\begin{enumerate}[nosep]
+  \item \textbf{Policy step}: for current $\bm{c}$, solve or approximate the Bellman recursion \eqref{eq:bellman} to obtain (or approximate) $\pi^\star(\bm{c})$.
+  \item \textbf{Geometry step}: take a gradient step on $\bm{c}$ using $\partial\Phi/\partial\bm{c}$ evaluated at $\pi^\star(\bm{y};\, \bm{c})$---the same adjoint/sensitivity computation one would use in the fixed-design problem \eqref{eq:joint_opt}, only now evaluated at the (possibly belief-dependent) sensors produced by the current policy.
+  \item Repeat until convergence.
+\end{enumerate}
+
+Because the Bellman recursion is generically intractable, step~1 is where the computational burden lies; step~2 is cheap by the envelope theorem.
+
+\subsection{Reduction by regime}
+
+The ignorance gap $\E[IG]$ controls how much of this machinery is actually needed:
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Regime & Joint problem reduces to & Solver \\
+\midrule
+$\E[IG] \approx 0$ & Fixed D-optimal: $\max_{\bm{c}, \bm{s}_{1:N}} \E[\Phi]$ & Single-level gradient descent \\
+$\E[IG]$ moderate & Certainty-equivalent policy iteration & Oracle map + recursive filter + adjoint \\
+$\E[IG]$ large & Full Bellman DP + policy iteration & Parameterized policy + DP solver \\
+\bottomrule
+\end{tabular}
+\end{center}
+The first column is the problem one \emph{actually} solves; the second is the minimum machinery required.  The computability check of Section~\ref{sec:ig} determines which row applies, \emph{before} any solver is implemented.
+
+\paragraph{Certainty-equivalent (CE) policy.}
+In the moderate-$\E[IG]$ regime, a natural and often near-optimal heuristic is the \emph{certainty-equivalent} policy: at each step, plug the posterior mean $\hat{\bm{x}}_{k-1} = \E[\bm{x} \mid b_k]$ into the oracle map and use the resulting sensors,
+\begin{equation}
+  \bm{s}_k^{\mathrm{CE}} \;=\; \bm{s}_k^\star(\hat{\bm{x}}_{k-1}).
+\end{equation}
+This replaces the Bellman optimization with a per-step plug-in and is exact as the posterior concentrates; its suboptimality is controlled by the rate of posterior variance reduction and the Lipschitz constant of the oracle map $\bm{x} \mapsto \bm{s}^\star(\bm{x})$.
+
+%===============================================================================
+\section{A Tractable Case Study: Adaptive Radar Beam Search}
+\label{sec:examples}
+%===============================================================================
+
+We conclude with a concrete problem that exercises every ingredient of the framework: the ignorance gap is demonstrably large, the geometry $\bm{c}$ exerts first-order control on achievable performance, \emph{and} the Bellman recursion \eqref{eq:bellman}--\eqref{eq:terminal} is exactly solvable.  The policy-iteration scheme of Section~\ref{sec:joint} therefore becomes a concrete algorithm rather than an aspirational one.  The problem is deliberately small and canonical so that every claim can be verified numerically.
+
+\subsection{Problem setup}
+\label{subsec:radar_setup}
+
+\paragraph{State.}  A single target occupies one of $K$ discrete cells at distinct angular positions.  We use $K = 16$ cells equally spaced on a circular arc at fixed range from the antenna, so that cell $z \in \{1, \ldots, K\}$ has bearing $\varphi(z) = 2\pi (z - 1)/K \in [0, 2\pi)$.  The prior $p_0$ on $z$ is uniform (arbitrary but known priors are equally handled).
+
+\paragraph{Actions.}  At each step $k = 1, \ldots, N$ with $N$ modest (we use $N = 4$), the operator steers the antenna to a pointing direction $\theta_k \in \Theta = \{\theta_1, \ldots, \theta_M\}$ taken from a finite, symmetric set of $M \sim K$ candidate pointings.
+
+\paragraph{Observations.}  Each pointing returns a single binary detection $y_k \in \{0, 1\}$ with Bernoulli likelihood
+\begin{equation}
+  \Pr(y_k = 1 \mid z, \theta_k;\, \bm{c}) \;=\; p_{\mathrm{FA}} + (p_{\mathrm{D}} - p_{\mathrm{FA}})\, G_{\bm{c}}\!\left(\theta_k - \varphi(z)\right),
+  \label{eq:radar_likelihood}
+\end{equation}
+where $G_{\bm{c}}(\alpha) \in [0, 1]$ is the normalized antenna gain pattern at angular offset $\alpha$ from the steered main-lobe direction, $p_{\mathrm{D}}$ is the on-target detection probability, and $p_{\mathrm{FA}}$ is the false-alarm rate.
+
+\paragraph{Geometry.}  The design variable $\bm{c}$ is the full vector of antenna-array parameters.  Concretely, take the antenna to be a phased array of $N_e$ elements at positions $\{\bm{r}_n\}_{n=1}^{N_e}$ on the aperture plane, driven by complex excitations $\{a_n\}_{n=1}^{N_e} \in \mathbb{C}^{N_e}$ (each $a_n = |a_n| e^{\mathrm{i}\varphi_n}$ carries both an amplitude \emph{and} a phase).  The far-field array factor at angular offset $\alpha$ from the steered direction is
+\begin{equation}
+  F_{\bm{c}}(\alpha) \;=\; \sum_{n=1}^{N_e} a_n \,\exp\!\bigl(\mathrm{i}\, k_0\, \bm{r}_n \cdot \hat{\bm{\alpha}}\bigr), \qquad k_0 = 2\pi/\lambda,
+  \label{eq:array_factor}
+\end{equation}
+and the normalized gain pattern used in \eqref{eq:radar_likelihood} is $G_{\bm{c}}(\alpha) = |F_{\bm{c}}(\alpha)|^2 / \max_{\alpha'}|F_{\bm{c}}(\alpha')|^2$.  The design vector is $\bm{c} = (\{\bm{r}_n\}, \{a_n\})$, counted over its real degrees of freedom: $d_c \sim 2 N_e$ for a linear array with \emph{fixed} (e.g., half-wavelength-spaced) element positions and only complex excitations as free variables, $\sim 3 N_e$ if linear-array positions are also free, and $\sim 4 N_e$ for a full planar array (element positions in $\R^2$ plus complex amplitudes).  A typical $N_e \in \{8, \ldots, 64\}$ gives $d_c$ in the tens to low hundreds.  Receiver parameters $(p_{\mathrm{D}}, p_{\mathrm{FA}})$ are held fixed for clarity, but could be appended to $\bm{c}$ if they are themselves design variables.
+
+\begin{remark}[Why complex excitations matter]
+Real non-negative amplitudes (pure amplitude tapers) on a symmetric element layout produce conjugate-symmetric patterns $G_{\bm{c}}(\alpha) = G_{\bm{c}}(-\alpha)$, so any null at relative offset $+\alpha$ from the main lobe is mirrored at $-\alpha$.  Complex $a_n$ break this mirror symmetry: the extra element-wise phase degree of freedom enables shaped asymmetric main lobes and nulls at \emph{arbitrary} relative offsets (not just symmetric pairs)---a qualitatively richer design space than the real-amplitude subspace.  Under standard linear-phase steering the entire pattern still rotates rigidly with the pointing $\theta_k$, so these are offsets relative to the main lobe, not angular positions fixed in absolute terms.
+\end{remark}
+
+\paragraph{Terminal reward.}  Take $\Phi(z, \theta_{1:N}) = \ln K - H(z \mid y_{1:N})$, the information gained about $z$ relative to the uniform prior.  Equivalently (for a uniform prior) $\Phi = I(z; y_{1:N})$, the mutual information between the unknown cell and the observation sequence, which is also $\ln\det\bm{J}_N$ up to an additive constant under the categorical's softmax parametrization.  Thus $\Phi \in [0, \ln K]$ with $\Phi = 0$ at the prior and $\Phi = \ln K$ at full resolution.  Maximizing $\Phi$ concentrates the posterior on the true cell.
+
+\subsection{The ignorance gap is large}
+
+\paragraph{Oracle.}  Knowing $z$, the oracle always points $\theta_k^\star = \varphi(z)$ (or the nearest element of $\Theta$), receiving an on-target Bernoulli with probability $p_{\mathrm{D}}$ at every step.  After $N$ such measurements, the likelihood ratio for cell $z$ against any competing cell grows as $\bigl(p_{\mathrm{D}}(1-p_{\mathrm{FA}}) / (p_{\mathrm{FA}}(1-p_{\mathrm{D}}))\bigr)^{\text{\# detections}}$, which concentrates the posterior on $z$.  For $p_{\mathrm{D}} \gg p_{\mathrm{FA}}$ and $N$ at or above the information-theoretic minimum $\log_2 K$ (at the benchmark $K = 16$, $N = 4$ saturates this), the posterior is essentially fully resolved (entropy $\to 0$), giving $V_{\text{oracle}}(z) \approx \ln K$.
+
+\paragraph{Fixed design (narrow-beam family).}  Assume the geometry $\bm{c}$ produces a single-main-lobe, directional gain pattern with main-lobe angular width $\Delta\theta_{\mathrm{ML}}(\bm{c}) \lesssim 2\pi/K$ (one cell per main lobe) and negligible sidelobes.  The fixed design must commit $\theta_{1:N}$ before any data; with $N < K$ narrow beams, at most $N$ distinct cells are illuminated.  Conditioning on where the target falls:
+\begin{itemize}[nosep,leftmargin=*]
+  \item target lies in one of the $N$ probed cells (probability $N/K$): the on-target beam drives $H \to 0$, so $\Phi = \ln K$;
+  \item target lies in the $K - N$ un-probed cells (probability $(K-N)/K$): all $N$ beams return the off-beam Bernoulli and cannot distinguish the un-probed cells, so $H \approx \ln(K-N)$ and $\Phi \approx \ln K - \ln(K-N) = \ln\!\bigl(K/(K-N)\bigr)$.
+\end{itemize}
+Averaging:
+\begin{equation}
+  V_{\text{fixed}} \;\approx\; \ln K \;-\; \frac{K-N}{K}\,\ln(K-N).
+  \label{eq:radar_vfixed}
+\end{equation}
+
+\paragraph{Scaling.}  Combining the two, for designs with narrow single main lobes and budget $N < K$,
+\begin{equation}
+  \boxed{\;\E[IG] \;=\; V_{\text{oracle}} - V_{\text{fixed}} \;\approx\; \frac{K-N}{K}\,\ln(K-N) \text{ nats},\;}
+  \label{eq:radar_ig}
+\end{equation}
+which, for $K \gg N$, scales as $\sim \ln K$; it vanishes continuously as $N \to K$.  Note that $\E[IG]$ is always bounded above by the prior entropy $\ln K$, as it must be.
+
+\paragraph{Numerical estimate.}  Take $K = 16$, $N = 4$, a narrow-beam design with main-lobe width $\Delta\theta_{\mathrm{ML}} \lesssim 2\pi/K = \pi/8$ (e.g., a uniform linear array with $N_e \gtrsim 16$ half-wavelength-spaced elements), $p_{\mathrm{D}} = 0.9$, $p_{\mathrm{FA}} = 0.05$.  Equation \eqref{eq:radar_ig} gives $\E[IG] \approx (12/16)\ln 12 \approx 1.86$ nats, consistent with Monte Carlo evaluation of \eqref{eq:IG}.  The EVPI upper bound is substantial---a $2.5\times$ average reduction in the Cram\'er--Rao uncertainty volume ($e^{\E[IG]/2} \approx e^{0.93}$)---though, as the Rough-sizing discussion below shows, whether adaptation actually \emph{attains} any of that bound is a regime-dependent question, not implied by the size of $\E[IG]$ alone.
+
+\subsection{Geometry has first-order impact}
+
+The full design $\bm{c}$ shapes every feature of $G_{\bm{c}}$ independently: main-lobe width, sidelobe structure, null placement, and grating-lobe behavior.  Each of these feeds into the Bernoulli likelihood \eqref{eq:radar_likelihood} in a distinct way, and each is independently tunable via the $d_c$ components of $\bm{c}$:
+
+\begin{itemize}[nosep]
+  \item \emph{Main-lobe width $\Delta\theta_{\mathrm{ML}}$} (set primarily by aperture size $L \sim \max_{n,n'} \|\bm{r}_n - \bm{r}_{n'}\|$, with $\Delta\theta_{\mathrm{ML}} \sim \lambda/L$ for a well-tapered aperture).  Narrow lobes concentrate on-target signal per pointing but can only probe one cell at a time, giving a large $\E[IG]$ in the narrow-beam EVPI sense.  Whether adaptation realizes any of that gap is a separate, regime-dependent question analyzed in the Rough-sizing discussion below.
+  \item \emph{First sidelobe level} (controlled by the amplitude taper $\{a_n\}$: uniform taper gives $-13\,$dB, Dolph--Chebyshev or Taylor tapers trade sidelobe level against main-lobe width).  Low sidelobes suppress cell-to-cell measurement ambiguity and benefit \emph{both} fixed and adaptive designs.
+  \item \emph{Grating lobes} (set by element spacing: $d > \lambda/2$ introduces copies of the main lobe at other angles).  Grating lobes create fundamental ambiguities that no policy can resolve---an aliasing that only $\bm{c}$ can fix.
+  \item \emph{Null structure at specific relative offsets} (shaped by complex amplitudes and element positions).  Deep nulls at designed \emph{relative} offsets from the main lobe allow the measurement to reject specific cell pairs even when the main lobe is steered toward one of them, enhancing cell-pair discrimination in a way that scalar-beamwidth-only parametrizations cannot.  Because a phased array steered by linear phase rotates the entire pattern together, these nulls are tied to the main-lobe pointing (their absolute angular positions shift with $\theta_k$); their value is in the pattern's relative structure, not fixed absolute nulls.
+\end{itemize}
+
+Each of these features has first-order impact on both $V_{\text{adaptive}}$ and $V_{\text{fixed}}$, and they interact: amplitude tapering that sharpens the main lobe also reduces directivity and raises certain sidelobes.  The joint optimum over $(\bm{c}, \pi)$ is the solution of a $d_c$-dimensional constrained optimization whose objective is modulated by the adaptive policy that will run on top.
+
+\paragraph{Rough sizing.}
+Binary observations limit the per-step mutual information to at most $\ln 2$ nats, so full resolution of $K$ cells requires at least $N \ge \log_2 K$ measurements regardless of beam design.  Under a flat ``in-beam / out-of-beam'' idealization, write $m$ for the number of cells illuminated per beam; the single-measurement mutual information $I(z; y_k) = H(y_k) - H(y_k \mid z)$ with
+\begin{equation}
+  \Pr(y_k = 1) \;=\; (m/K)\, p_{\mathrm{D}} + ((K-m)/K)\, p_{\mathrm{FA}}
+\end{equation}
+is maximized over $m$ at $m^\star$ within $O(1)$ of $K/2$ for any $(p_{\mathrm{D}}, p_{\mathrm{FA}})$ with $p_{\mathrm{D}} > p_{\mathrm{FA}}$.  Under this optimum the single-beam main-lobe width is
+\begin{equation}
+  \Delta\theta_{\mathrm{ML}}^\star \;\sim\; \pi \qquad \text{(half the cell ring for $K$ cells on a circle).}
+  \label{eq:radar_width_scaling}
+\end{equation}
+A key fact about contiguous-arc beams on the ring: each beam has two arc boundaries, so $N$ fixed pointings create at most $2N$ distinct boundary positions and hence at most $2N$ distinguishable segments, each containing $K/(2N)$ cells (in the balanced case).  Cells within a segment share the same $N$-bit label under any \emph{fixed} schedule and cannot be distinguished.  Adaptive policies, by contrast, can choose each subsequent pointing so its arc bisects the current posterior support, implementing a binary search that reaches single-cell resolution in $\log_2 K$ steps.
+
+\emph{Two regimes} follow, at opposite extremes of the beam-width knob:
+
+\begin{itemize}[nosep,leftmargin=*]
+  \item \emph{Narrow-beam restriction} ($m \approx 1$, $\Delta\theta_{\mathrm{ML}} \lesssim 2\pi/K$).  Each measurement probes one cell.  Fixed and adaptive both visit at most $N$ cells in $N$ steps; under the uniform prior they achieve the \emph{same} expected value $V_{\text{fixed}} = V_{\text{adaptive}} \approx \ln K - \frac{K-N}{K}\ln(K-N) \approx 0.91$ nats at $K=16, N=4$.  The EVPI bound \eqref{eq:evpi} is therefore slack (LHS $= 0$, RHS $= \frac{K-N}{K}\ln(K-N) \approx 1.86$ nats).  Large computable $\E[IG]$, zero realized adaptive advantage.
+
+  \item \emph{Wide-beam regime} ($m \approx K/2$, $\Delta\theta_{\mathrm{ML}} \sim \pi$).  Fixed pointings create at most $2N$ segments; at $K = 16, N = 4$ this caps fixed-design resolution at $\ln(2N) = \ln 8 \approx 2.08$ nats.  Adaptive binary search reaches full resolution $V_{\text{adaptive}} = \ln K = \ln 16 \approx 2.77$ nats.  The adaptive advantage $V_{\text{adaptive}} - V_{\text{fixed}} = \ln(K/(2N)) = \ln 2 \approx 0.69$ nats equals $\E[IG]$ at this $\bm{c}$, so the EVPI bound is \emph{tight} and adaptation realizes the full gap.
+\end{itemize}
+
+The narrow-beam regime maximizes the \emph{computable} EVPI upper bound but fails to saturate it; the wide-beam regime has a smaller computable $\E[IG]$ but saturates it fully.  Joint optimization over $(\bm{c}, \pi)$ favors the wide-beam design: both $V_{\text{fixed}}^\star = \ln(2N)$ and $V_{\text{adaptive}}^\star = \ln K$ are maximized by $m \approx K/2$.  A poor choice of $\bm{c}$ (sidelobes that confuse specific cell pairs, element spacing introducing grating lobes, or element placement whose $2N$ arc boundaries are badly distributed) wastes the $N$-step budget.  This is exactly the coupling that Section~\ref{sec:joint}'s policy iteration is designed to exploit.
+
+\subsection{Full Bellman DP is tractable}
+
+This is a finite-state, finite-action, finite-observation POMDP with short horizon.  Exact solvability follows from three standard facts:
+
+\paragraph{Sondik's theorem (PWLC value functions).}
+For finite POMDPs, each $W_k(b_k)$ is piecewise-linear and convex on the belief simplex.  It is represented \emph{exactly} by a finite set of $\alpha$-vectors $\{\bm{\alpha}_k^{(i)}\}_{i=1}^{\Gamma_k} \subset \R^K$:
+\begin{equation}
+  W_k(b_k) = \max_{i} \; \langle b_k, \bm{\alpha}_k^{(i)}\rangle.
+\end{equation}
+Backward induction from the terminal condition \eqref{eq:terminal}---itself a linear functional of $b_{N+1}$, hence a single $\alpha$-vector---produces $\Gamma_{k-1}$ from $\Gamma_k$ by a discrete operation (one new vector per $(\theta_k, \bm{\alpha}_k^{(i_0)}, \bm{\alpha}_k^{(i_1)})$ triple, modulo dominance pruning).
+
+\paragraph{Dimension count.}
+With $K = 16$, $M = 16$, $|\mathcal{Y}| = 2$, $N = 4$:
+\begin{itemize}[nosep]
+  \item Belief dimension: $K - 1 = 15$.
+  \item Worst-case $\alpha$-vector growth: $|\Gamma_{k-1}| \le |\mathcal{A}| \cdot |\Gamma_k|^{|\mathcal{Y}|} = 16 \cdot |\Gamma_k|^2$.  Unchecked this is doubly exponential; in practice incremental pruning keeps $|\Gamma_k|$ in the hundreds.
+  \item Memory/time per backup: $O(|\Gamma| \cdot K \cdot M \cdot |\mathcal{Y}|)$---negligible on a laptop.
+\end{itemize}
+Off-the-shelf solvers (incremental pruning, SARSOP, PBVI) handle problems of this size in seconds.  A hand-coded exact solver in Julia or Python runs in under a minute.
+
+\paragraph{Symmetry reduction.}
+The $K$-cell ring with a uniform prior and a reflection-symmetric beam pattern carries a dihedral $D_K$ symmetry (cyclic rotations plus one reflection).  For $K = 16$ that is $|G| = 32$.  The value function inherits the symmetry, $W_k(\sigma \cdot b_k) = W_k(b_k)$ for all $\sigma \in G$, so $\alpha$-vectors appear in orbits of size up to $|G|$ and only one representative per orbit needs to be explicitly stored.  The belief space itself remains $(K-1)$-dimensional---intermediate beliefs generically break the prior's symmetry after the first measurement---but the effective number of distinct $\alpha$-vectors (and distinct actions, up to symmetry) shrinks by a factor of $|G|$, with corresponding savings in memory and backup time.
+
+In short: step~1 of policy iteration---solve the inner POMDP for the current $\bm{c}$ (which enters only through the likelihood values $G_{\bm{c}}(\theta_k - \varphi(z))$ at the $M \cdot K$ action/cell pairs)---is not a research project but a textbook computation.  The dependence of the inner DP on $\bm{c}$ is smooth except at isolated policy-switch boundaries.
+
+\subsection{Policy iteration for the joint optimum}
+
+With exact inner DP available, the envelope-theorem-based scheme of Section~\ref{sec:joint} becomes:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Policy step.}  For the current design $\bm{c}_t$, solve the finite POMDP exactly to obtain $\pi^\star(\bm{c}_t)$ as a depth-$N$ policy tree: every branch corresponds to a value of $y_{1:k-1}$ and maps to an action $\theta_k$.
+  \item \textbf{Geometry step.}  For each realized branch of the policy tree, $\Phi$ depends on $\bm{c}$ analytically through the Bernoulli likelihood \eqref{eq:radar_likelihood} and the array factor \eqref{eq:array_factor} (the derivative of a complex exponential with respect to its amplitude or phase is again a complex exponential).  The full vector-valued gradient $\nabla_{\bm{c}}\Phi \in \R^{d_c}$ is computable in closed form per branch, or by automatic differentiation through the forward model that maps $(\{\bm{r}_n\}, \{a_n\})$ to the gain values $G_{\bm{c}}(\theta_k - \varphi(z))$.  Aggregate by Monte Carlo over the belief-trajectory distribution induced by $\pi^\star(\bm{c}_t)$:
+  \begin{equation}
+    \nabla_{\bm{c}} W_1\big|_{\bm{c} = \bm{c}_t} \;=\; \E_{z,\, y_{1:N} \sim \pi^\star(\bm{c}_t)}\!\left[\nabla_{\bm{c}}\Phi\!\left(z,\, \pi^\star(y_{1:N}; \bm{c}_t),\, \bm{c}\right)\right]_{\bm{c} = \bm{c}_t}.
+    \label{eq:radar_env}
+  \end{equation}
+  Because $\pi^\star(\bm{c}_t)$ is held fixed by the envelope theorem, the right-hand side requires no policy Jacobian $d\pi^\star/d\bm{c}$---a quantity that is ill-defined at policy-switch boundaries where the $\argmax$ in \eqref{eq:pi_star} changes.
+  \item \textbf{Gradient step.}  Update $\bm{c}_{t+1} = \mathrm{Proj}_{\mathcal{C}}\!\left(\bm{c}_t + \eta\, \nabla_{\bm{c}} W_1\right)$ and repeat, where $\mathcal{C}$ is the feasible set (aperture bounds, per-element power constraints $|a_n| \le a_{\max}$ or total-power constraint $\sum_n |a_n|^2 \le P$, minimum-element-spacing to control mutual coupling, etc.) and $\mathrm{Proj}_{\mathcal{C}}$ is a suitable projection.  Each complex $a_n$ is parametrized by its real pair $(a_n^{\mathrm{re}}, a_n^{\mathrm{im}}) \in \R^2$, and the gradient is taken with respect to these real components; no Wirtinger calculus is required, and the whole optimization runs in real parameter space $\R^{d_c}$.
+\end{enumerate}
+
+Because the inner DP in step~1 is solved \emph{exactly}, there is no approximation error in the gradient direction \eqref{eq:radar_env}---only Monte Carlo variance (over $z$ and the stochastic $y_{1:N}$ trajectory), shrinking as $|\text{samples}|^{-1/2}$.  Convergence of the outer loop is governed by the smoothness of $W_1(\cdot)$ as a function of $\bm{c}$, which is continuous except on the codimension-one boundaries where $\pi^\star$ becomes non-unique; the envelope theorem remains valid through these, with a subgradient taking the place of the gradient.
+
+\subsection{What this problem illuminates}
+
+The radar case study stresses every moving part of the framework at minimum dimension:
+
+\begin{itemize}[nosep]
+  \item \textbf{$\E[IG]$ as a go/no-go gate.}  Setting $N = K$ (budget equals number of cells) allows the fixed design to visit every cell, collapsing $\E[IG] \to 0$---the framework correctly predicts that adaptation becomes pointless and the aperture-size optimum degenerates (any aperture large enough to resolve cells suffices).  The phase transition at $N = K$ is sharp and numerically verifiable.
+  \item \textbf{The DP diagnoses the regime.}  The DP produces a different $\pi^\star$ in each of the two beam-width regimes, and the EVPI bound \eqref{eq:evpi} reacts accordingly.  In the narrow-beam regime ($m \approx 1$) the DP returns a policy that ties any fixed cell-by-cell schedule, correctly reporting zero adaptive benefit despite a large computable $\E[IG] \approx 1.86$ nats---the EVPI is slack, and the case study shows how to detect a slack EVPI numerically.  In the wide-beam regime ($m \approx K/2$) the DP returns a binary-search policy that strictly beats any fixed schedule by the full $\E[IG] = \ln(K/(2N)) \approx 0.69$ nats, saturating the EVPI.  Either way the DP is \emph{right about which regime it is in}, and the explore--exploit structure in the wide-beam solution emerges without any hand-crafted policy parametrization, making the case study a discriminating test of the whole framework.
+  \item \textbf{Geometry--policy coupling is quantitatively predicted.}  The binary-partition main-lobe scaling \eqref{eq:radar_width_scaling} can be tested numerically against the policy-iteration fixed point; agreement confirms that the envelope-theorem gradient is correctly capturing the joint optimum along the main-lobe-width dimension of $\bm{c}$.  The \emph{remaining} dimensions of $\bm{c}$---amplitude taper, sidelobe structure, null placement, element positions---are shaped by components of the gradient \eqref{eq:radar_env} that no scalar scaling argument can predict, providing a genuine multi-dimensional test of the framework.
+\end{itemize}
+
+\paragraph{Adjacent problems.}
+The same template covers several other canonical testbeds amenable to exact DP:
+\begin{itemize}[nosep]
+  \item \emph{Sequential material identification by spectroscopy}: finite set of candidate chemicals as hypotheses, actions = excitation wavelengths from a discrete grid, observations = quantized absorbance; geometry $\bm{c}$ = spectrometer linewidth and wavelength grid.
+  \item \emph{Adaptive compressed sensing with known sparsity}: state = support set of $s \ll d$ active indices out of $d$ ambient dimensions (discrete state space of cardinality $\binom{d}{s}$), actions = dictionary rows, observations = quantized linear projections or thresholded detections (finite alphabet); geometry $\bm{c}$ = dictionary design.  For $(d, s) = (10, 2)$ there are $45$ states; with observations quantized to a finite alphabet the resulting POMDP remains exactly tractable.
+  \item \emph{Medical-imaging sequential slicing}: discrete lesion-location hypotheses, actions = scan parameters, observations = quantized intensities; geometry $\bm{c}$ = field-of-view and slice-selection gradients.
+\end{itemize}
+All three share the property that finite state/action/observation spaces plus short horizon keep the Bellman recursion exactly solvable, while nonlinear measurement likelihoods keep $\E[IG] > 0$ and the geometry variable meaningful.
+
+%===============================================================================
+\section*{References}
+%===============================================================================
+
+\begin{enumerate}[label={[\arabic*]}]
+  \item P.~Tichavsk\'y, C.~H.~Muravchik, and A.~Nehorai, ``Posterior Cram\'er--Rao bounds for discrete-time nonlinear filtering,'' \emph{IEEE Trans.\ Signal Processing}, vol.~46, no.~5, pp.~1386--1396, 1998.
+
+  \item H.~L.~Van Trees, \emph{Detection, Estimation, and Modulation Theory, Part I}.  New York: Wiley, 1968.
+
+  \item K.~Chaloner and I.~Verdinelli, ``Bayesian experimental design: A review,'' \emph{Statistical Science}, vol.~10, no.~3, pp.~273--304, 1995.
+
+  \item R.~Bellman, \emph{Dynamic Programming}.  Princeton University Press, 1957.
+
+  \item S.~P.~Boyd and L.~Vandenberghe, \emph{Convex Optimization}.  Cambridge University Press, 2004.
+
+  \item J.~Haupt, R.~Castro, and R.~Nowak, ``Distilled sensing: Adaptive sampling for sparse detection and estimation,'' \emph{IEEE Trans.\ Information Theory}, vol.~57, no.~9, pp.~6222--6235, 2011.
+
+  \item M.~L.~Hernandez, ``Optimal sensor management for target tracking applications,'' Ph.D.\ thesis, University of Cambridge, 2004.
+\end{enumerate}
+
+\appendix
+
+%===============================================================================
+\section{Derivation of Bellman's Equation}
+\label{app:bellman}
+%===============================================================================
+
+We derive equations~\eqref{eq:bellman}--\eqref{eq:terminal} from first principles.  The argument is general to any finite-horizon sequential decision problem; we specialize the notation to the setting of this document.
+
+\subsection{Problem setup}
+
+Recall the ingredients:
+\begin{itemize}[nosep]
+  \item An unknown state $\bm{x} \sim p_0$ (the prior).
+  \item Horizon $N$ with steps $k = 1, 2, \ldots, N$.
+  \item At step $k$, an action $\bm{s}_k \in \R^{d_s}$ is chosen, then $\bm{y}_k = \bm{h}(\bm{x}, \bm{s}_k, \bm{c}) + \bm{v}_k$ is observed, $\bm{v}_k \sim \mathcal{N}(\bm{0}, \sigma^2\bm{I})$.
+  \item An adaptive policy $\pi = (\pi_1, \ldots, \pi_N)$ with $\pi_k: \bm{y}_{1:k-1} \mapsto \bm{s}_k$.
+  \item A terminal reward $\Phi(\bm{x}, \bm{s}_{1:N})$ accrued only at the end.
+\end{itemize}
+
+The goal is to find
+\begin{equation}
+  V_{\text{adaptive}} \;=\; \max_\pi \; \E_{\bm{x},\, \bm{y}_{1:N}}\!\left[\Phi(\bm{x}, \pi(\bm{y}_{1:N-1}))\right],
+  \label{eq:app:target}
+\end{equation}
+a maximization over functions---hopeless at face value.
+
+\subsection{Sufficient statistic: the belief state}
+
+Because $\bm{x}$ is the only unknown and the likelihoods $p(\bm{y}_k \mid \bm{x}, \bm{s}_k)$ are known, \textbf{all information in $\bm{y}_{1:k-1}$ relevant to future decisions is carried by the posterior belief}
+\begin{equation}
+  b_k(\bm{x}) \;=\; p(\bm{x} \mid \bm{y}_{1:k-1}).
+  \label{eq:app:belief}
+\end{equation}
+Two observation histories yielding the same $b_k$ are indistinguishable going forward, so we may search over policies $\pi_k: b_k \mapsto \bm{s}_k$ without loss.  Boundary cases: $b_1 = p_0$ (prior, no data yet), $b_{N+1}$ is the posterior after all $N$ observations.
+
+The belief updates by Bayes' rule: given $(b_k, \bm{s}_k, \bm{y}_k)$,
+\begin{equation}
+  b_{k+1}(\bm{x}) \;=\; \frac{p(\bm{y}_k \mid \bm{x}, \bm{s}_k)\, b_k(\bm{x})}{\int p(\bm{y}_k \mid \bm{x}', \bm{s}_k)\, b_k(\bm{x}')\, d\bm{x}'}.
+\end{equation}
+The marginal distribution of $\bm{y}_k$ used for expectations in the Bellman equation is
+\begin{equation}
+  p(\bm{y}_k \mid b_k, \bm{s}_k) \;=\; \int p(\bm{y}_k \mid \bm{x}, \bm{s}_k)\, b_k(\bm{x})\, d\bm{x}.
+\end{equation}
+
+\subsection{Value-to-go: definition}
+
+Define the \emph{value-to-go} at step $k$ given belief $b_k$ and committed sensors $\bm{s}_{1:k-1}$ (the latter suppressed in the notation):
+\begin{equation}
+  W_k(b_k) \;=\; \max_{\pi_k, \pi_{k+1}, \ldots, \pi_N}\; \E\!\left[\Phi(\bm{x}, \bm{s}_{1:N}) \mid b_k, \pi_{k:N}\right].
+  \label{eq:app:vtg_def}
+\end{equation}
+Boundary cases:
+\begin{itemize}[nosep]
+  \item $k = 1$: $W_1(p_0) = V_{\text{adaptive}}$---the quantity we want.
+  \item $k = N+1$: no decisions remain; $\bm{s}_{1:N}$ are all committed; the terminal value is simply the expected reward under the final belief,
+  \begin{equation}
+    W_{N+1}(b_{N+1}) \;=\; \E_{\bm{x} \mid b_{N+1}}\!\left[\Phi(\bm{x}, \bm{s}_{1:N})\right].
+    \label{eq:app:terminal}
+  \end{equation}
+\end{itemize}
+
+\subsection{Peeling off one step}
+
+Start from \eqref{eq:app:vtg_def} and split the outer max into ``choose $\bm{s}_k$ now'' and ``choose the remaining $\pi_{k+1:N}$'':
+\begin{equation}
+  W_k(b_k) \;=\; \max_{\bm{s}_k}\; \max_{\pi_{k+1}, \ldots, \pi_N}\; \E\!\left[\Phi \mid b_k, \bm{s}_k, \pi_{k+1:N}\right].
+  \label{eq:app:split}
+\end{equation}
+Apply the \emph{tower property} (law of total expectation) by conditioning on $\bm{y}_k$:
+\begin{equation}
+  \E\!\left[\Phi \mid b_k, \bm{s}_k, \pi_{k+1:N}\right] = \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[\E\!\left[\Phi \mid b_{k+1}, \pi_{k+1:N}\right]\right],
+\end{equation}
+using the fact that $b_{k+1}$ is a deterministic function of $(b_k, \bm{s}_k, \bm{y}_k)$ and all remaining randomness depends on $b_{k+1}$ only through the belief (Markov property of beliefs).
+
+Substituting into \eqref{eq:app:split} and pushing $\max_{\pi_{k+1:N}}$ \emph{inside} $\E_{\bm{y}_k \mid b_k, \bm{s}_k}$ (justified below):
+\begin{equation}
+  W_k(b_k) \;=\; \max_{\bm{s}_k}\; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[\max_{\pi_{k+1}, \ldots, \pi_N} \E\!\left[\Phi \mid b_{k+1}, \pi_{k+1:N}\right]\right].
+\end{equation}
+The inner bracket is exactly $W_{k+1}(b_{k+1})$ by the definition \eqref{eq:app:vtg_def} at step $k+1$.  Therefore:
+\begin{equation}
+  \boxed{\;W_k(b_k) \;=\; \max_{\bm{s}_k}\; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right].\;}
+  \label{eq:app:bellman}
+\end{equation}
+
+\subsection{Why the push-in of the max is legal}
+
+In general $\E[\max_i X_i] \ge \max_i \E[X_i]$ (Jensen, since $\max$ is convex)---the inequality is strict, not an equality.  So why is the move in \eqref{eq:app:bellman} legal?
+
+Because we are \emph{not} exchanging $\max$ with $\E$ abstractly.  We are exploiting that $\pi_{k+1:N}$ may \emph{depend on $\bm{y}_k$} (through $b_{k+1}$).  A policy that observes $\bm{y}_k$ before committing the continuation is strictly more powerful than one that commits the continuation in advance---and it is the former that problem~\eqref{eq:app:target} allows.  Formally, for each realization of $\bm{y}_k$ we choose the optimal continuation pointwise, and maximizing pointwise inside the expectation gives the same value as maximizing over all measurable continuation plans outside.  This is the \emph{interchangeability lemma} for adaptive optimization---the rigorous form of Bellman's \emph{principle of optimality}: an optimal policy's continuation is optimal from whatever state results from its first decision.
+
+\subsection{The full Bellman system}
+
+Combining the recursion and the boundary condition:
+\begin{align}
+  W_{N+1}(b_{N+1}) &\;=\; \E_{\bm{x} \mid b_{N+1}}\!\left[\Phi(\bm{x}, \bm{s}_{1:N})\right], \label{eq:app:sys_terminal} \\
+  W_k(b_k) &\;=\; \max_{\bm{s}_k}\; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right], \quad k = N, N-1, \ldots, 1, \label{eq:app:sys_rec} \\
+  \pi^\star_k(b_k) &\;=\; \argmax_{\bm{s}_k}\; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right], \label{eq:app:sys_policy} \\
+  V_{\text{adaptive}} &\;=\; W_1(p_0). \label{eq:app:sys_value}
+\end{align}
+
+\subsection{Action-value (\texorpdfstring{$Q$}{Q}) decomposition}
+
+Define the action-value
+\begin{equation}
+  \mathcal{Q}_k(b_k, \bm{s}_k) \;=\; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right].
+\end{equation}
+Then $W_k(b_k) = \max_{\bm{s}_k} \mathcal{Q}_k(b_k, \bm{s}_k)$ and $\pi^\star_k = \argmax_{\bm{s}_k} \mathcal{Q}_k$.  This is the standard action-value formulation used in reinforcement learning and approximate dynamic programming.
+
+\subsection{Sanity check at the terminal step}
+
+At $k = N$, using the terminal \eqref{eq:app:sys_terminal}:
+\begin{align}
+  W_N(b_N) &\;=\; \max_{\bm{s}_N}\; \E_{\bm{y}_N \mid b_N, \bm{s}_N}\!\left[\E_{\bm{x} \mid b_{N+1}}[\Phi(\bm{x}, \bm{s}_{1:N})]\right] \\
+  &\;=\; \max_{\bm{s}_N}\; \E_{\bm{x} \mid b_N}\!\left[\Phi(\bm{x}, \bm{s}_{1:N-1}, \bm{s}_N)\right],
+\end{align}
+where the second line uses the tower property (for any integrable $f$ not depending on $\bm{y}_N$, $\E_{\bm{y}_N \mid b_N, \bm{s}_N} \E_{\bm{x} \mid b_{N+1}}[f(\bm{x})] = \E_{\bm{x} \mid b_N}[f(\bm{x})]$).  The last step commits no future action, so the optimal $\bm{s}_N$ is simply the certainty-equivalent choice under the current belief---consistent with the intuition that explore/exploit balance collapses to pure exploit at the final step.
+
+\subsection{Why the equation is powerful and cursed}
+
+\paragraph{Powerful.}  The Bellman equation reduces an intractable optimization over \emph{functions} (policies on observation histories) to a recursion over \emph{single-step} decisions.  If one can evaluate the $\max$ and $\E$ at each step (e.g., by discretizing actions and observations, or by parametric approximation), the problem is solved by $N$ sweeps of dynamic programming.
+
+\paragraph{Cursed.}  The belief $b_k$ is a probability distribution over $\bm{x}$---a point in an infinite-dimensional space---and $W_k(\cdot)$ is a function on this space.  Representing $W_k$ exactly is generally impossible except in special cases: (i)~\emph{linear-Gaussian}, where $b_k$ is fully parametrized by its mean and covariance and $W_k$ admits a closed form via Kalman-filter-based DP; (ii)~\emph{finite discrete states}, where $b_k$ is a vector on the simplex and $W_k$ is piecewise-linear and convex (Sondik).  For general nonlinear problems, approximations are unavoidable: parametric $W_k$, particle-filter beliefs, certainty-equivalent policies, or the Jensen-gap bounds of the gap DP.
+
+\subsection{Summary}
+
+Starting from
+\begin{equation}
+  V_{\text{adaptive}} \;=\; \max_\pi \; \E\!\left[\Phi(\bm{x}, \pi(\bm{y}_{1:N-1}))\right],
+\end{equation}
+three moves yield the Bellman equation:
+\begin{enumerate}[nosep,label=(\alph*)]
+  \item \textbf{Sufficient statistic reduction}: replace history $\bm{y}_{1:k-1}$ with belief $b_k$.
+  \item \textbf{Peel off one action}: $\max_{\pi_{k:N}} = \max_{\bm{s}_k}\, \max_{\pi_{k+1:N}}$.
+  \item \textbf{Tower property with interchangeability}: push $\max_{\pi_{k+1:N}}$ inside $\E_{\bm{y}_k}$, revealing $W_{k+1}(b_{k+1})$.
+\end{enumerate}
+The recursion
+\begin{equation}
+  W_k(b_k) \;=\; \max_{\bm{s}_k}\; \E_{\bm{y}_k \mid b_k, \bm{s}_k}\!\left[W_{k+1}(b_{k+1})\right], \qquad W_{N+1}(b_{N+1}) \;=\; \E_{\bm{x} \mid b_{N+1}}\!\left[\Phi\right]
+\end{equation}
+rests on exactly two facts: \textbf{the Markov property of beliefs under Bayesian updating}, and \textbf{the principle of optimality} (the optimal continuation can depend on intervening observations without loss).
+
+\end{document}
