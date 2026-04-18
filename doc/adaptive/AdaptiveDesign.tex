@@ -157,6 +157,192 @@ Throughout the main text we work with $\Phi$ directly.  When a case study permit
 \end{itemize}
 
 %===============================================================================
+\section{Why information gain and not PCRB? A structural asymmetry}
+\label{sec:phi_vs_pcrb}
+%===============================================================================
+
+A natural alternative to the framework just laid out would build on the prior-averaged posterior Cram\'er--Rao bound (PCRB) rather than on the pointwise information gain $\Phi$.  Both formulations admit a clean pre-committed design problem.  The rest of the machinery---oracle, ignorance gap, Bellman reward at a realized trajectory---looks similar in structure.  This section shows that the similarity is superficial: only the $\Phi$ framework admits a rigorous pointwise extension.  The PCRB-based alternative is strictly weaker, by two independent mechanisms.  The conclusion is not that PCRB is wrong (it is a correct and useful bound), but that it is insufficient as the foundational object of a joint geometry--policy theory.
+
+\subsection{The PCRB-based fixed-design alternative}
+\label{subsec:pcrb_alternative}
+
+For definiteness, consider a static unknown state $\bm{x} \sim p_0$ observed through $N$ conditionally independent measurements $\bm{y}_k = \bm{h}(\bm{x}, \bm{s}_k, \bm{c}) + \bm{v}_k$, $\bm{v}_k \sim \mathcal{N}(\bm{0}, \sigma^2 \bm{I})$, with Jacobian $\bm{F}_k(\bm{x}) = \partial\bm{h}/\partial\bm{x}$.  Accumulating Fisher information across measurements and averaging over the prior produces the Bayesian Information Matrix
+\begin{equation}
+  \bm{J}_P(\bm{s}_{1:N}, \bm{c}) \;=\; \bm{J}_0 \;+\; \sigma^{-2}\sum_{k=1}^N \E_{\bm{x} \sim p_0}\!\bigl[\bm{F}_k(\bm{x}, \bm{s}_k, \bm{c})^\top \bm{F}_k(\bm{x}, \bm{s}_k, \bm{c})\bigr],
+  \label{eq:JP}
+\end{equation}
+where $\bm{J}_0 = -\E_{\bm{x}}[\nabla^2 \ln p_0(\bm{x})]$ is the prior information.  The PCRB (Van Trees) states that for any estimator $\hat{\bm{x}}(\bm{y}_{1:N})$,
+\begin{equation}
+  \E_{\bm{x}, \bm{y}_{1:N}}\!\bigl[(\hat{\bm{x}} - \bm{x})(\hat{\bm{x}} - \bm{x})^\top\bigr] \;\succeq\; \bm{J}_P(\bm{s}_{1:N}, \bm{c})^{-1}.
+  \label{eq:pcrb_ineq}
+\end{equation}
+Minimizing the log-volume of the PCRB ellipsoid gives the Bayesian D-optimal fixed-design problem
+\begin{equation}
+  V^{\mathrm{PCRB}}_{\mathrm{fixed}}(\bm{c}) \;=\; \max_{\bm{s}_{1:N}}\; \ln\det \bm{J}_P(\bm{s}_{1:N}, \bm{c}).
+  \label{eq:vfixed_pcrb}
+\end{equation}
+This is a clean single-level, estimator-free objective---structurally parallel to the $\Phi$-based $V_{\mathrm{fixed}}(\bm{c}) = \max_{\bm{s}} \E_{\bm{x}}[\Phi(\bm{x}, \bm{s}, \bm{c})]$ of the next section.
+
+If the framework stopped at the fixed-design problem, the two would be roughly interchangeable (the $\Phi$ formulation reduces to \eqref{eq:vfixed_pcrb} in the Gaussian-posterior regime per \eqref{eq:phi_fisher}).  The divergence begins when one attempts to extend the framework to a pointwise oracle, a pointwise ignorance gap, or a Bellman terminal reward.
+
+\subsection{Pointwise values can beat the aggregate in both frameworks}
+\label{subsec:pointwise_both}
+
+A tempting way to distinguish the two frameworks is to observe that pointwise values at specific $\bm{x}$ can exceed the global prior-averaged bound.  This is \emph{not} a distinguishing feature---it happens in both frameworks:
+
+\begin{itemize}[nosep, leftmargin=2em]
+  \item In the $\Phi$ framework, $\Phi(\bm{x}, \bm{s}, \bm{c})$ is the expected information gain \emph{conditional on $\bm{x}$}.  By Theorem~\ref{thm:phi_is_mi}, $\E_{\bm{x}}[\Phi(\bm{x},\bm{s},\bm{c})] = I(\bm{x};\bm{y}\mid\bm{s},\bm{c})$.  Pointwise $\Phi(\bm{x})$ can exceed or fall short of $I$; the inequality holds only in the prior-weighted integral.
+  \item In the PCRB framework, the pointwise MSE of a Bayesian estimator (posterior mean, MAP) at a specific $\bm{x}_0$ can be \emph{below} $\tr \bm{J}_P^{-1}$, at the cost of being above $\tr \bm{J}_P^{-1}$ at other $\bm{x}$ values.  The prior acts as shrinkage: it reduces variance at favorable $\bm{x}$ (e.g., interior of the prior support) while biasing estimates at unfavorable $\bm{x}$ (e.g., boundary).  The PCRB inequality \eqref{eq:pcrb_ineq} holds only for the prior-weighted integral.
+\end{itemize}
+
+The question is not whether pointwise values can beat aggregate bounds (yes in both), but whether each framework supplies a \emph{rigorous pointwise object} that can serve as the building block for an oracle or ignorance-gap analysis.
+
+\subsection{The asymmetry: \texorpdfstring{$\Phi$}{Phi} has a pointwise summand, PCRB does not}
+\label{subsec:asymmetry}
+
+\paragraph{In the $\Phi$ framework, $\Phi(\bm{x})$ is literally the pointwise integrand of MI.}  By Theorem~\ref{thm:phi_is_mi},
+\begin{equation}
+  I(\bm{x};\bm{y}\mid\bm{s},\bm{c}) \;=\; \int \Phi(\bm{x}, \bm{s}, \bm{c})\, p_0(\bm{x})\, d\bm{x}.
+\end{equation}
+$\Phi(\bm{x})$ is the rigorous pointwise object whose prior-weighted integral is the aggregate.  The construction is exact at the level of joint distributions $p(\bm{x}, \bm{y} \mid \bm{s}, \bm{c})$: no estimator is invoked, no approximation is made, and $\Phi(\bm{x})$ is well-defined for arbitrary (possibly highly non-Gaussian) likelihoods.  It supports unambiguously the oracle $V_{\mathrm{oracle}}(\bm{x};\bm{c}) = \max_{\bm{s}} \Phi(\bm{x}, \bm{s}, \bm{c})$, the pointwise ignorance gap $IG(\bm{x};\bm{c})$, and the Bellman terminal reward $R(b_{N+1}) = H(p_0) - H(b_{N+1})$.
+
+\paragraph{The PCRB framework has no analogous pointwise summand.}  Two independent obstructions preclude a direct pointwise version:
+
+\begin{enumerate}[leftmargin=2em, nosep]
+
+\item \textbf{PCRB itself has no pointwise integrand.}  The bound \eqref{eq:pcrb_ineq} is formed by averaging Fisher information over the prior \emph{before} inversion: $\bm{J}_P = \bm{J}_0 + \sum_k \E_{\bm{x}}[\bm{F}_k^\top \bm{F}_k]$.  The natural candidate for a pointwise summand would be $\tr \bm{J}_N(\bm{x})^{-1}$, the inverse Fisher information at a specific $\bm{x}$.  But
+\begin{equation}
+  \E_{\bm{x}}\!\bigl[\tr \bm{J}_N(\bm{x})^{-1}\bigr] \;\neq\; \tr \bm{J}_P^{-1}
+  \qquad\text{in general,}
+\end{equation}
+by Jensen's inequality (the map $\bm{A} \mapsto \tr \bm{A}^{-1}$ is convex on the positive-definite cone).  There is no decomposition of the PCRB bound into a prior-weighted integral of pointwise bounds.  The object $\tr \bm{J}_N(\bm{x})^{-1}$, if used at all, is an \emph{ad hoc} choice that does not recover \eqref{eq:pcrb_ineq} upon averaging.
+
+\item \textbf{No pointwise MSE bound holds for biased Bayesian estimators.}  Even setting aside (1) and hoping that $\tr \bm{J}_N(\bm{x}_0)^{-1}$ bounds pointwise MSE at $\bm{x}_0$, one runs into the classical CRB obstruction.  The pointwise classical CRB
+\begin{equation}
+  \Cov_{\bm{y}\mid\bm{x}_0}\!\bigl[\hat{\bm{x}}(\bm{y})\bigr] \;\succeq\; \bm{J}_N(\bm{x}_0)^{-1}
+  \label{eq:classical_crb}
+\end{equation}
+holds \emph{only for unbiased estimators} of the deterministic parameter $\bm{x}_0$.  Sequential Bayesian estimators---posterior mean, MAP, any Kalman-filter-like recursive estimator---are \emph{not} unbiased: the prior regularizes them, inducing a shrinkage bias $\bm{b}(\bm{x}_0) = \E[\hat{\bm{x}}\mid \bm{x}_0] - \bm{x}_0 \neq \bm{0}$ that is the price of admitting the prior at all.  Therefore \eqref{eq:classical_crb} does not apply.
+
+The biased-CRB correction does exist,
+\begin{equation}
+  \Cov_{\bm{y}\mid\bm{x}_0}\!\bigl[\hat{\bm{x}}(\bm{y})\bigr] \;\succeq\; \bigl(\bm{I} + \nabla_{\bm{x}}\bm{b}(\bm{x}_0)\bigr)\, \bm{J}_N(\bm{x}_0)^{-1}\, \bigl(\bm{I} + \nabla_{\bm{x}}\bm{b}(\bm{x}_0)\bigr)^\top,
+\end{equation}
+but requires the gradient $\nabla_{\bm{x}}\bm{b}$ of the estimator's bias function---a quantity available in closed form only in trivial cases.  In any practical sequential-sensing problem the bias function is implicit, defined operationally by the recursive posterior-mean update, and its gradient is neither tabulated nor tractable.  The biased-CRB is therefore of theoretical but not operational value.
+
+\end{enumerate}
+
+\paragraph{Together.}  Obstruction (1) says PCRB does not provide a pointwise summand; obstruction (2) says no other pointwise MSE bound applies to the estimators that sequential Bayesian sensing actually uses.  The gap cannot be closed by more careful accounting.
+
+\subsection{Asymptotic recovery is not enough}
+\label{subsec:asymptotic}
+
+In the Bernstein--von Mises regime (high SNR, large $N$, smooth identifiable model), the posterior concentrates near the true $\bm{x}_0$ with covariance approximately $\bm{J}_N(\bm{x}_0)^{-1}$, and the Bayesian estimator's pointwise MSE is $\bm{J}_N(\bm{x}_0)^{-1}$ \emph{asymptotically}.  This is an equality in the limit, not a bound at finite $N$.
+
+For the joint-DP framework we need a rigorous pointwise object at \emph{all} $N$---oracle and ignorance-gap analyses operate precisely in the regime where the sensor budget is finite and the posterior still carries meaningful uncertainty that the policy must navigate.  Asymptotic equality at infinite $N$ does not supply the decomposition we need at the finite horizons of Sections~\ref{sec:bellman}--\ref{sec:examples}.  $\Phi$ does, at every $N$, without any asymptotic assumption.
+
+\subsection{What PCRB can and cannot support}
+\label{subsec:pcrb_capabilities}
+
+The asymmetry has concrete consequences for what each framework can rigorously formulate.
+
+\paragraph{PCRB rigorously supports:}
+\begin{itemize}[nosep, leftmargin=2em]
+  \item \textbf{Prior-averaged fixed design.}  $V^{\mathrm{PCRB}}_{\mathrm{fixed}}(\bm{c}) = \max_{\bm{s}} \ln\det \bm{J}_P$ is a well-posed single-level problem.
+  \item \textbf{Gradient-based design.}  $\partial V^{\mathrm{PCRB}}_{\mathrm{fixed}} / \partial\bm{c}$ and $\partial V^{\mathrm{PCRB}}_{\mathrm{fixed}} / \partial\bm{s}_k$ are analytic in closed form.
+  \item \textbf{Prior-averaged monotone bounds.}  Inequalities like $\E[\mathrm{MSE}_{\mathrm{fixed}}] \ge \tr\bm{J}_P^{-1}$.
+\end{itemize}
+
+\paragraph{PCRB cannot rigorously support:}
+\begin{itemize}[nosep, leftmargin=2em]
+  \item \textbf{Pointwise oracle $V_{\mathrm{oracle}}(\bm{x})$.}  Would require a pointwise MSE bound; obstructions (1) and (2) above preclude it.
+  \item \textbf{Pointwise ignorance gap $IG(\bm{x})$.}  Defined as $V_{\mathrm{oracle}}(\bm{x}) - (\text{fixed value at } \bm{x})$; inherits the obstruction.
+  \item \textbf{Bellman terminal reward at a realized trajectory.}  The terminal $\E_{\bm{x}\mid b_{N+1}}[\Phi(\bm{x}, \bm{s}_{1:N})]$ in \eqref{eq:terminal} requires pointwise evaluation of the reward along each observation path.  PCRB provides no such pointwise quantity.
+\end{itemize}
+
+These are not omissions that additional work could fill in; they are structurally absent because the PCRB inequality is an \emph{integral} bound by construction, with no pointwise decomposition surviving the prior-averaging step that defines $\bm{J}_P$.
+
+\subsection{The \texorpdfstring{$\Phi$}{Phi} framework subsumes the PCRB framework in the Gaussian regime}
+\label{subsec:phi_subsumes}
+
+In the Gaussian-posterior / BvM regime of Section~\ref{subsec:fisher_specialization},
+\begin{equation}
+  \Phi(\bm{x}, \bm{s}, \bm{c}) \;\approx\; \mathrm{const} \;+\; \tfrac{1}{2}\,\ln\det \bm{J}_N(\bm{x}, \bm{s}, \bm{c}).
+\end{equation}
+Taking prior averages and applying the $\Phi$-to-MI identity:
+\begin{equation}
+  V_{\mathrm{fixed}}(\bm{c}) \;=\; \max_{\bm{s}}\; \E_{\bm{x}}[\Phi(\bm{x}, \bm{s}, \bm{c})] \;\approx\; \max_{\bm{s}}\; \tfrac{1}{2}\,\E_{\bm{x}}[\ln\det \bm{J}_N(\bm{x}, \bm{s}, \bm{c})] \;+\; \mathrm{const}.
+  \label{eq:vfixed_gaussian}
+\end{equation}
+This is closely related to \eqref{eq:vfixed_pcrb}, the PCRB-based objective, though the two differ by the order of log-det and expectation (Jensen gap).  Both recover the classical Bayesian D-optimal program in the Gaussian regime, up to this reordering.
+
+The $\Phi$ framework therefore includes the PCRB-style fixed-design objective as a special case (via \eqref{eq:vfixed_gaussian}), extends it pointwise (via $\Phi(\bm{x}, \cdot)$), and remains rigorous outside the Gaussian regime (exact MI without any approximation).  The reverse containment does not hold: PCRB admits no pointwise extension, and ceases to be a bound outside the regime where the estimators happen to be asymptotically unbiased.
+
+\subsection{PCRB as an independent MSE-anchored baseline}
+\label{subsec:pcrb_baseline}
+
+The structural limitations of Section~\ref{subsec:asymmetry} do \emph{not} disqualify the PCRB framework from playing a useful role in the joint-design picture---they only prevent it from serving as the \emph{foundation}.  One constructive use remains: the PCRB-based joint fixed-design optimization \eqref{eq:vfixed_pcrb} serves as an \textbf{independent, MSE-anchored reference baseline} against which the $\Phi$-based joint $(\bm{c}, \pi)$ DP result can be reported.
+
+The baseline is well-defined without any of the obstructions discussed above:
+\begin{itemize}[nosep, leftmargin=2em]
+  \item The PCRB inequality \eqref{eq:pcrb_ineq} is rigorous at any finite $N$ for \emph{any} estimator satisfying the mild regularity conditions of the bound.  No unbiasedness is assumed---the inequality is in prior-averaged form, which tolerates the bias inherent in Bayesian estimators because the expectation smooths over $\bm{x}$.
+  \item The joint optimization
+  \begin{equation}
+    \bigl(\bm{c}_{\mathrm{PCRB}}^\star,\, \bm{s}^\star_{\mathrm{PCRB}}\bigr) \;=\; \argmax_{\bm{c},\, \bm{s}_{1:N}}\; \ln\det \bm{J}_P(\bm{s}_{1:N}, \bm{c})
+    \label{eq:pcrb_baseline}
+  \end{equation}
+  is a single-level problem in $d_c + N d_s$ real variables---flat, amenable to gradient descent, and well-studied in the classical experimental-design literature.  It produces a geometry $\bm{c}_{\mathrm{PCRB}}^\star$ that rigorously minimizes the log-volume of the prior-averaged MSE ellipsoid.
+  \item The output geometry carries a concrete MSE interpretation: any estimator deployed at $\bm{c}_{\mathrm{PCRB}}^\star$ with fixed schedule $\bm{s}^\star_{\mathrm{PCRB}}$ has prior-averaged MSE bounded below by $\tr \bm{J}_P(\bm{s}^\star_{\mathrm{PCRB}}, \bm{c}_{\mathrm{PCRB}}^\star)^{-1}$.
+\end{itemize}
+
+This baseline has three operational uses in reporting joint-$(\bm{c}, \pi)$ DP results.
+
+\paragraph{Sanity check on adaptive gain.}
+Evaluating $V_{\mathrm{adaptive}}$ at $\bm{c}_{\mathrm{PCRB}}^\star$ (the baseline geometry) isolates the policy contribution: if the adaptive policy at the PCRB-optimal geometry already substantially beats the fixed $\bm{s}^\star_{\mathrm{PCRB}}$, we learn that adaptation pays off even on a geometry designed for the non-adaptive setting.  If not, the case for joint-policy optimization is weak at this geometry, independent of whether a better $\bm{c}$ exists.
+
+\paragraph{MSE-anchored quantitative claim.}
+The comparison
+\begin{equation}
+  \text{MSE ratio} \;=\; \frac{\tr \bm{\Sigma}_N^{\mathrm{adaptive}}(\bm{c}^\star)}{\tr \bm{J}_P(\bm{s}^\star_{\mathrm{PCRB}}, \bm{c}_{\mathrm{PCRB}}^\star)^{-1}}
+\end{equation}
+gives a reviewer-friendly quantitative statement of the combined joint-geometry-and-adaptive-policy gain, in concrete prior-averaged MSE units.  Unlike an information-gain ratio, which invites the question ``but what does this buy me in MSE?'', the PCRB-anchored ratio answers that question directly.
+
+\paragraph{Null hypothesis for the whole framework.}
+If $V_{\mathrm{adaptive}}(\bm{c}^\star)$ does not exceed $V^{\mathrm{PCRB}}_{\mathrm{fixed}}(\bm{c}_{\mathrm{PCRB}}^\star)$ after the Gaussian-regime translation of \eqref{eq:vfixed_gaussian}, then the joint-$(\bm{c}, \pi)$ DP machinery does not pay for itself relative to classical Bayesian D-optimal design.  In that case, one should report the PCRB-optimal $\bm{c}_{\mathrm{PCRB}}^\star$ with its fixed schedule and stop.  This is the quantitative analog of Corollary~\ref{cor:useless_adapt}, operationalized in MSE units.
+
+\paragraph{Summary of the relationship.}
+The two frameworks are \emph{complementary}, with distinct scopes:
+
+\begin{itemize}[nosep, leftmargin=2em]
+  \item The $\Phi$ framework supplies the \emph{internal machinery}---oracle, ignorance gap, Bellman reward, envelope-theorem gradient, joint optimization.  It is rigorous pointwise, estimator-agnostic, and valid at all $N$ and all likelihoods.
+  \item The PCRB framework supplies the \emph{external MSE anchor}---a rigorously prior-averaged baseline geometry $\bm{c}_{\mathrm{PCRB}}^\star$ and a concrete MSE bound against which the $\Phi$-framework's output can be benchmarked.
+\end{itemize}
+
+Neither replaces the other.  The $\Phi$ framework without the PCRB baseline lacks a concrete MSE endpoint for its information-theoretic quantities; the PCRB framework without $\Phi$ lacks the pointwise machinery needed to formulate the adaptive half of the problem.  Reporting the joint-DP result and the PCRB baseline side-by-side is the natural way to close both gaps.
+
+\subsection{Summary}
+\label{subsec:phi_vs_pcrb_summary}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Capability & $\Phi$ framework & PCRB framework \\
+\midrule
+Prior-averaged fixed design & yes, rigorous at any $N$ & yes, rigorous at any $N$ \\
+Pointwise reward at specific $\bm{x}$ & $\Phi(\bm{x}, \bm{s}, \bm{c})$ (exact integrand of MI) & ad hoc; no rigorous candidate \\
+Valid for biased estimators & yes (estimator-agnostic) & no; bound requires unbiasedness \\
+Oracle $V_{\mathrm{oracle}}(\bm{x})$ & well-defined pointwise & not available \\
+Ignorance gap $IG(\bm{x})$ & well-defined pointwise & not available \\
+Bellman terminal reward at $b_{N+1}$ & $H(p_0) - H(b_{N+1})$ & no pointwise analog \\
+Gaussian/BvM specialization & recovers Bayesian D-optimal & (definitional) \\
+Validity outside Gaussian regime & exact & bound does not apply \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Three observations consolidate the asymmetry.  First, both frameworks admit the Jensen-gap phenomenon in which pointwise values can exceed the aggregate bound; this is neither special nor distinguishing.  Second, $\Phi(\bm{x})$ admits a rigorous pointwise interpretation as the pointwise integrand of MI, whereas no such pointwise integrand of PCRB exists.  Third, even if one wished to bound pointwise MSE directly, no such non-asymptotic bound applies to the biased Bayesian estimators actually used in sequential sensing.  The $\Phi$ framework is therefore the minimal rigorous setting in which the joint geometry--policy theory---oracle, ignorance gap, Bellman reward, envelope-theorem gradient, and joint optimization---can be stated at all.
+
+%===============================================================================
 \section{Pre-computed sensors: the fixed-design problem}
 \label{sec:fixed}
 %===============================================================================
