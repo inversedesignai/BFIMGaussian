@@ -648,6 +648,40 @@ The symmetry-reduced fixed-design search at $w = 0.6$ returns
 \]
 four pointings equally spaced around the ring (quarter-rotations of each other).  Any $D_K$-orbit representative is equivalent.  This differs from the top-hat narrow-beam result $s^\star = [1, 7, 9, 13]$ in that the Gaussian-beam likelihood favors maximally-separated pointings (no two within a beamwidth of each other), whereas the top-hat was indifferent to separation as long as all four cells were distinct.
 
+\subsection{Takeaway: EVPI diagnoses, joint DP decides}
+\label{subsec:takeaway}
+
+The sweep is the cleanest possible demonstration of \emph{why joint geometry-policy optimization is irreducible}.  The four columns of Table~\ref{tab:joint_sweep}---$V_{\text{oracle}}$, $V_{\text{adaptive}}$, $V_{\text{fixed}}$, and $\E[IG]$---behave qualitatively differently as $w$ sweeps from 0 to $\pi$:
+\begin{itemize}[nosep]
+\item $V_{\text{oracle}}$ is monotonically decreasing.  The oracle always benefits from a narrower beam because it knows where to point.
+\item $V_{\text{adaptive}}$ has an interior maximum at $w = 0.60$ rad, value $0.865$ nats.
+\item $V_{\text{fixed}}$ has an interior maximum at $w = 0.70$ rad, value $0.758$ nats.  Different from both the above.
+\item $\E[IG] = V_{\text{oracle}} - V_{\text{fixed}}$ inherits the monotone decrease of $V_{\text{oracle}}$ minus a shallow $V_{\text{fixed}}$ curve: $\E[IG]$ is monotonically decreasing (on this grid).
+\item The \emph{realized} adaptive advantage $V_{\text{adaptive}} - V_{\text{fixed}}$ has yet another maximum, at $w = 0.25$ rad (0.153 nats).
+\end{itemize}
+
+Consequently:
+
+\begin{center}
+\fbox{\parbox{0.93\textwidth}{
+\textbf{Necessary-but-not-sufficient claim:} $\E[IG](\bm{c})$ is an upper bound on $V_{\text{adaptive}}(\bm{c}) - V_{\text{fixed}}(\bm{c})$, but is typically a \emph{loose} bound, and choosing $\bm{c}$ to maximize $\E[IG]$ does \emph{not} maximize the realized adaptive advantage.  The two-regime comparison makes this stark:
+\begin{center}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+$\bm{c}$ & $\E[IG]$ & $V_{\text{adaptive}} - V_{\text{fixed}}$ & saturation \\
+\midrule
+narrow top-hat ($m = 1$) & $\mathbf{2.081}$ & $0.121$ & $5.8\%$ \\
+wide top-hat ($m = K/2$) & $0.513$ & $\mathbf{0.289}$ & $\mathbf{56.4\%}$ \\
+Gaussian $w = 0.6$       & $0.635$ & $0.108$ & $17.0\%$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The narrow design has the largest EVPI but the smallest realized gain; the wide top-hat has smaller EVPI but more than $2\times$ the realized gain; and the Gaussian $w^\star$ maximum has the highest \emph{absolute} $V_{\text{adaptive}}$ but middling saturation.  Three different $\bm{c}$ values are optimal under three different criteria, and no substitute for the joint DP will find the right $\bm{c}^\star$.
+}}
+\end{center}
+
+Use EVPI as the go/no-go gate.  Use the joint DP to find the actual $(\bm{c}^\star, \pi^\star)$.
+
 %====================================================================
 \section{Related work and originality check}
 \label{sec:related}
