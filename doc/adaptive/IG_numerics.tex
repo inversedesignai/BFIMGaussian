@@ -464,6 +464,102 @@ The ideal-limit prediction $\E[IG]^{\text{narrow}} \approx 1.86$ nats becomes $2
 In the narrow regime, $\E[IG] = 2.08$ nats is substantial (EVPI upper bound of $\sim 2.5\times$ uncertainty-volume reduction), but as the main document argues, adaptation cannot realize any of this in a narrow-beam setting: with single-cell beams, adaptive and fixed designs both visit $N$ cells in $N$ steps, in the same expected order under the uniform prior.  Section~9 of \texttt{AdaptiveDesign.tex} predicts $V_{\text{adaptive}}^{\text{narrow}} = V_{\text{fixed}}^{\text{narrow}} = 0.499$ nats.  Verifying this---and verifying the tight-EVPI result $V_{\text{adaptive}}^{\text{wide}} - V_{\text{fixed}}^{\text{wide}} = \E[IG]^{\text{wide}} = 0.51$ nats---requires the full finite-horizon Bellman DP, which is the next computational step.
 
 %====================================================================
+\section{Exact Bellman DP and \texorpdfstring{$V_{\text{adaptive}}$}{V\_adaptive}}
+\label{sec:dp}
+%====================================================================
+
+\subsection{Algorithm}
+
+The terminal reward $\Phi = \ln K - H(z \mid y_{1:N})$ is a nonlinear functional of the terminal belief, so Sondik's piecewise-linear-convex representation does not apply directly.  We instead do backward induction on the belief tree reachable from the uniform prior.  The recursion is
+\begin{equation}
+  W_k(b) = \max_{a \in \{1, \ldots, K\}} \; \sum_{y \in \{0, 1\}} P(y \mid b, a) \cdot W_{k+1}\!\bigl(T(b, a, y)\bigr), \qquad W_{N+1}(b) = \ln K - H(b),
+  \label{eq:bellman_dp}
+\end{equation}
+where $T(b, a, y)$ is the Bayesian update of $b$ under observation $y$ when taking action $a$.
+
+At depth $d$ from root the recursion branches by $(K \text{ actions}) \times (2 \text{ outcomes})$, giving $(2K)^N = 32^4 \approx 10^6$ terminal evaluations in the worst case.  Each evaluation is $O(K)$ for the posterior update and entropy.  Total work: $\approx 10^7$ elementary operations per regime.  Julia runtime: $\sim 0.1$~seconds.  Memory peak: a handful of belief vectors of length $K$, so $< 1$~MB.
+
+\subsection{Numerical results}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}lrr@{}}
+\toprule
+& narrow ($m{=}1$) & wide ($m{=}K/2{=}8$) \\
+\midrule
+$V_{\text{oracle}}$        & 2.579634 & 1.923462 \\
+$V_{\text{adaptive}}$      & 0.619198 & 1.699767 \\
+$V_{\text{fixed}}$         & 0.498683 & 1.410526 \\
+$\E[IG]$ (EVPI bound)      & 2.080950 & 0.512935 \\
+$V_{\text{adaptive}} - V_{\text{fixed}}$ (realized gain) & 0.120515 & 0.289241 \\
+EVPI saturation \%         & 5.8\%    & 56.4\%   \\
+\bottomrule
+\end{tabular}
+\caption{Exact Bellman-DP results with $K = 16$, $N = 4$, $p_{\mathrm{D}} = 0.9$, $p_{\mathrm{FA}} = 0.05$.  All numbers in nats unless noted.  ``EVPI saturation'' is the fraction $(V_{\text{adaptive}} - V_{\text{fixed}}) / \E[IG]$, showing how much of the ignorance-gap upper bound the optimal adaptive policy actually realizes.}
+\label{tab:dp_results}
+\end{table}
+
+\subsection{Optimal policy tree (first two levels)}
+
+\paragraph{Narrow regime.}  The depth-2 head of the DP-optimal policy tree:
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+history  & action \\
+\midrule
+$\emptyset$ (root) & cell 1 \\
+$y_1 = 0$ (miss)      & cell 1 \\
+$y_1 = 1$ (detect)    & cell 16 \\
+$(y_1, y_2) = (0, 0)$ & cell 1 \\
+$(y_1, y_2) = (0, 1)$ & cell 16 \\
+$(y_1, y_2) = (1, 0)$ & cell 16 \\
+$(y_1, y_2) = (1, 1)$ & cell 16 \\
+\bottomrule
+\end{tabular}
+\end{center}
+The policy probes cell 1 at the first step and, if the observation was a miss, probes it \emph{again} at step 2 (because at finite noise a single miss does not definitively rule out cell 1: the posterior on cell 1 only dropped from $1/16 = 0.0625$ to $\approx 0.007$).  After a detection it switches to a different cell.
+
+\paragraph{Wide regime.}  The depth-2 head:
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+history & action \\
+\midrule
+$\emptyset$ (root)  & cell 1 \\
+$y_1 = 0$ (miss)    & cell 4 \\
+$y_1 = 1$ (detect)  & cell 13 \\
+$(0, 0)$            & cell 4 \\
+$(0, 1)$            & cell 3 \\
+$(1, 0)$            & cell 3 \\
+$(1, 1)$            & cell 4 \\
+\bottomrule
+\end{tabular}
+\end{center}
+The wide-beam adaptive policy shows visible binary-search structure: a detection at cell~1 (which covers cells $\{14, 15, 16, 1, 2, 3, 4\}$) narrows the support to roughly the top half of the ring; a miss narrows to the bottom half.  Step~2 at cell~4 (which covers $\{1, \ldots, 7\}$) vs.\ cell~13 (which covers $\{10, \ldots, 16\}$) is consistent with bisecting the post-step-1 support.
+
+\subsection{Departures from idealized predictions}
+
+Both regimes diverge from the idealized predictions of \texttt{AdaptiveDesign.tex} \S9 in the direction expected once finite Bernoulli noise is taken into account:
+
+\paragraph{Narrow regime predicted zero adaptive benefit; actually 0.12 nats.}
+The main document's §9 claim that ``under the strictly narrow-beam restriction, $V_{\text{adaptive}} = V_{\text{fixed}}$'' is exact only in the ideal $(p_{\mathrm{D}}, p_{\mathrm{FA}}) \to (1, 0)$ limit.  At finite noise the adaptive policy does realize a small but strictly positive gain---5.8\% of the EVPI ceiling.  The mechanism is visible in the policy tree: after a detection the adaptive policy \emph{switches} to a different cell (since the on-target cell is now likely resolved), whereas a pre-committed fixed schedule would continue visiting cells determined in advance.  The benefit is modest because the fixed design with 4 distinct-cell pointings is \emph{already} almost-optimally-chosen under the uniform prior, leaving adaptation little room.
+
+\paragraph{Wide regime predicted $\ln 2 \approx 0.69$ nats gain; actually 0.29 nats.}
+The \S9 idealized prediction $V_{\text{adaptive}} - V_{\text{fixed}} = \ln(K/(2N)) = \ln 2$ is an upper bound assumed to be saturated when adaptive binary search can fully resolve.  At finite $(p_{\mathrm{D}}, p_{\mathrm{FA}})$ full resolution isn't achievable in $N = 4$ noisy binary measurements (the information bound $4 \ln 2 = 2.77$ nats is not reached by either side).  Adaptive achieves 1.70~nats, fixed 1.41, leaving a realized gap of 0.29~nats---56\% of the EVPI.  The direction matches prediction but the magnitude is reduced by noise.
+
+\paragraph{EVPI tightness structure is actually reversed from the idealization.}
+The idealized analysis suggested the wide regime had tight EVPI and the narrow regime slack EVPI.  Numerically this is qualitatively preserved (56\% vs.\ 6\% saturation), but the narrow regime is \emph{more} slack than predicted (expected 0\%, got 6\%, which is in the right direction), and the wide regime is \emph{less} tight than predicted (expected 100\%, got 56\%).  The quantitative message is that \emph{EVPI is a genuinely loose upper bound at finite noise in all regimes we checked}, and the realized adaptive benefit is always strictly less than $\E[IG]$.  This strengthens rather than weakens the case for running an exact DP when adaptation is being considered.
+
+\subsection{Key quantitative takeaway}
+
+At the joint $(\bm{c}, \pi)$ optimum (wide beam, adaptive policy), finite-noise numerics give
+\begin{equation}
+  V_{\text{adaptive}}^\star - V_{\text{fixed}}^\star = 0.289 \text{ nats}
+  \;\approx\; e^{0.289/2} - 1 \approx 16\% \text{ reduction in CRB volume}.
+\end{equation}
+This is the \emph{actual} dividend of adopting the full adaptive framework at this problem size---measurable, positive, but about half of what the idealized closed-form suggested.  The ignorance-gap go/no-go gate ($\E[IG] > 1$ nat in the narrow regime) would have recommended proceeding with the DP; post-solve, we see the realized gain was much smaller but still present.
+
+%====================================================================
 \section{Related work and originality check}
 \label{sec:related}
 %====================================================================

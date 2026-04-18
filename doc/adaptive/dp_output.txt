@@ -1,0 +1,63 @@
+Parameters: K=16, N=4, p_D=0.9, p_FA=0.05
+
+========================================================================
+POMDP Bellman DP — regime: NARROW (m = 1) (m = 1 cells/beam)
+========================================================================
+Beam pointing at cell 1 covers: [1]
+
+V_adaptive = W_1(prior) = 0.619198 nats
+Optimal action at root = cell 1
+Bellman solve time: 0.13 s
+
+Policy-tree construction: 0.46 s (V check = 0.619198)
+
+Optimal policy tree (first 2 levels):
+  step 1 (no obs):          action = cell 1
+  step 2 (y_1 = 0):        action = cell 1
+    step 3 (y_1=0, y_2=0):   action = cell 1
+    step 3 (y_1=0, y_2=1):   action = cell 16
+  step 2 (y_1 = 1):        action = cell 16
+    step 3 (y_1=1, y_2=0):   action = cell 16
+    step 3 (y_1=1, y_2=1):   action = cell 16
+
+========================================================================
+POMDP Bellman DP — regime: WIDE (m = K/2 = 8) (m = 8 cells/beam)
+========================================================================
+Beam pointing at cell 1 covers: [1, 2, 3, 4, 14, 15, 16]
+
+V_adaptive = W_1(prior) = 1.699767 nats
+Optimal action at root = cell 1
+Bellman solve time: 0.12 s
+
+Policy-tree construction: 0.30 s (V check = 1.699767)
+
+Optimal policy tree (first 2 levels):
+  step 1 (no obs):          action = cell 1
+  step 2 (y_1 = 0):        action = cell 4
+    step 3 (y_1=0, y_2=0):   action = cell 4
+    step 3 (y_1=0, y_2=1):   action = cell 3
+  step 2 (y_1 = 1):        action = cell 13
+    step 3 (y_1=1, y_2=0):   action = cell 3
+    step 3 (y_1=1, y_2=1):   action = cell 4
+
+========================================================================
+FINAL COMPARISON
+========================================================================
+
+NARROW regime:
+  V_oracle   = 2.579634 nats
+  V_adaptive = 0.619198 nats
+  V_fixed    = 0.498683 nats
+  E[IG] = V_oracle − V_fixed          = 2.080950 nats (EVPI upper bound)
+  V_adaptive − V_fixed (realized gain) = 0.120515 nats
+  EVPI saturation fraction             = 5.8%
+
+WIDE regime:
+  V_oracle   = 1.923462 nats
+  V_adaptive = 1.699767 nats
+  V_fixed    = 1.410526 nats
+  E[IG] = V_oracle − V_fixed          = 0.512935 nats (EVPI upper bound)
+  V_adaptive − V_fixed (realized gain) = 0.289241 nats
+  EVPI saturation fraction             = 56.4%
+
+Saved to dp_results.jls
