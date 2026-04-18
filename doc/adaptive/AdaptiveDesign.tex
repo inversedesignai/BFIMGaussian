@@ -420,6 +420,7 @@ The full joint problem is
 where $W_1(p_0;\, \bm{c})$ is the Bellman-optimal value \eqref{eq:bellman} at the prior for geometry $\bm{c}$, i.e., the joint problem implicitly solves an inner Bellman recursion for each $\bm{c}$.  The geometry enters through every level of the problem: the Jacobians $\bm{F}_k(\bm{x}, \bm{s}, \bm{c})$, the oracle map $\bm{s}^\star(\bm{x};\, \bm{c})$, the transition of beliefs (via the likelihoods), and the terminal $\Phi(\bm{x}, \bm{s}_{1:N}, \bm{c})$.
 
 \subsection{Envelope theorem for the outer gradient}
+\label{subsec:envelope}
 
 Differentiating \eqref{eq:joint_bellman} naively would require $\partial\pi^\star/\partial\bm{c}$ (how the optimal policy changes with $\bm{c}$)---a formidable object.  The \emph{envelope theorem} (Danskin) says we don't need it:
 \begin{equation}
@@ -652,6 +653,125 @@ The same template covers several other canonical testbeds amenable to exact DP:
   \item \emph{Medical-imaging sequential slicing}: discrete lesion-location hypotheses, actions = scan parameters, observations = quantized intensities; geometry $\bm{c}$ = field-of-view and slice-selection gradients.
 \end{itemize}
 All three share the property that finite state/action/observation spaces plus short horizon keep the Bellman recursion exactly solvable, while nonlinear measurement likelihoods keep $\E[IG] > 0$ and the geometry variable meaningful.
+
+%===============================================================================
+\section{When the joint DP is intractable: a hierarchy of principled relaxations}
+\label{sec:relaxations}
+%===============================================================================
+
+The radar case study of Section~\ref{sec:examples} was engineered to make the exact joint DP tractable: finite state space ($K = 16$), finite observation alphabet ($\{0,1\}$), finite pointing grid ($K$ actions), and short horizon ($N = 4$).  Many sensor-design problems of practical interest---continuous target state, continuous action space, expensive forward models, high-dimensional geometry $\bm{c}$---violate at least one of these assumptions.  When the exact Bellman recursion is beyond reach, the framework of Sections~\ref{sec:bellman}--\ref{sec:joint} remains the correct organizing picture, but it must be instantiated with approximations of the inner optimization.  This section catalogs the principled relaxations, ordered by how much structure they preserve, so that the subsequent photonic case study can be positioned unambiguously within this taxonomy.
+
+\subsection{Sources of intractability}
+
+Three structural barriers recur:
+
+\begin{enumerate}[leftmargin=2em, nosep]
+  \item \textbf{Belief-space size.}  For a $K$-point discrete state, the reachable belief tree from a uniform prior has up to $2^N$ leaves after $N$ binary observations---manageable for $K = 16, N = 4$, infeasible for $K = 10^6$ or continuous $\bm{x}$.  For continuous $\bm{x}$ the belief is an infinite-dimensional density; one must either discretize, project onto a parametric family (e.g., Gaussian), or carry a particle representation.
+  \item \textbf{Action-space size.}  When $\bm{s}_k$ parametrizes a continuous object (beamwidth, amplitude taper, phase profile), the inner $\max_{\bm{s}_k}$ inside each Bellman backup is itself a nonconvex continuous optimization, not an enumerable finite $\argmax$.
+  \item \textbf{Per-step cost.}  A single evaluation of $\Phi(\bm{x}, \bm{s}, \bm{c})$ or $V_{\mathrm{oracle}}(\bm{x})$ in physics-based sensor models typically requires one or more forward electromagnetic solves (FDFD, FDTD, RCWA), turning each Bellman node into a minutes-long computation.  Even a modestly sized belief tree becomes intractable.
+\end{enumerate}
+
+Any one of these collapses the exact DP; in the photonic setting all three bite simultaneously.
+
+\subsection{Relaxation path 1: neural adaptive policies (deep RL)}
+\label{subsec:deep_rl}
+
+Parametrize the adaptive policy by a neural network $\pi_\theta : \mathcal{B} \to \mathcal{S}$ mapping beliefs (or observation histories) to actions, and train $\theta$ jointly with $\bm{c}$ by policy gradient, REINFORCE, differentiable-simulator pathwise gradients, or any combination thereof.  The full joint objective becomes
+\begin{equation}
+  \max_{\bm{c},\,\theta}\; \E_{\bm{x}\sim p_0,\, \bm{y}_{1:N} \sim p(\cdot\mid\bm{x},\bm{c},\pi_\theta)}\bigl[\,\Phi(\bm{x},\bm{s}_{1:N}^{\pi_\theta},\bm{c})\,\bigr],
+  \label{eq:deep_rl_joint}
+\end{equation}
+with $\bm{s}_k^{\pi_\theta} = \pi_\theta(b_k)$ and $b_k$ the online belief.
+
+\paragraph{What this preserves.}  Multi-step reasoning (the NN has access to the full history), arbitrary action geometry, and---if the forward model is differentiable in $\bm{c}$---a direct pathwise gradient $\partial\Phi/\partial\bm{c}$.  Modern end-to-end optical learning (Sitzmann et al., 2018; Chang \& Wetzstein, 2019) fits this template with $\pi_\theta$ collapsed to a one-step reconstruction network.
+
+\paragraph{What this gives up.}  Optimality certificates: $\pi_\theta$ is a function approximator, not a Bellman solver, and the envelope theorem of Section~\ref{subsec:envelope} applies cleanly only at an interior optimum of $\theta$.  In practice one carries both gradients $\partial/\partial\bm{c}$ and $\partial/\partial\theta$, subject to RL's standard sample-complexity and training-stability pathologies.
+
+\subsection{Relaxation path 2: bi-level optimization with a \emph{prescribed} inner policy}
+\label{subsec:bilevel}
+
+A cheaper and more interpretable relaxation prescribes the policy $\pi$ in closed form as an information-theoretic \emph{rule}, then optimizes $\bm{c}$ by the outer loop of Section~\ref{sec:joint} (envelope-theorem gradient + policy iteration) with the prescribed rule standing in for the Bellman-optimal policy.  The outer-level problem becomes
+\begin{equation}
+  \max_{\bm{c}}\; \E\bigl[\,\Phi(\bm{x},\,\bm{s}_{1:N}[b_{\cdot};\bm{c}],\,\bm{c})\,\bigr]
+  \qquad\text{subject to the chosen rule } \bm{s}_k = \mathsf{R}_k(b_k;\bm{c}),
+  \label{eq:bilevel_general}
+\end{equation}
+and the outer gradient propagates to $\bm{c}$ through the \emph{implicit} dependence of the inner $\argmax$ on $\bm{c}$, by the implicit function theorem (IFT)---an exact computation even when the resulting $\bm{s}_k$ is not globally optimal in the Bellman sense.
+
+The choice of rule $\mathsf{R}_k$ determines how much of the original Bellman structure survives.
+
+\subsubsection*{(2a) Oracle certainty-equivalent control}
+
+At step $k$, form a point estimate $\hat{\bm{x}}_k = \argmax_{\bm{x}} b_k(\bm{x})$ or $\hat{\bm{x}}_k = \E[\bm{x}\mid b_k]$, then play the first step of the schedule the clairvoyant oracle would have chosen against $\hat{\bm{x}}_k$:
+\begin{equation}
+  \bm{s}_k^{\mathrm{CE}} = \bigl(\bm{s}^\star(\hat{\bm{x}}_k;\bm{c})\bigr)_1,
+  \qquad
+  \bm{s}^\star(\bm{x};\bm{c}) = \argmax_{\bm{s}_{1:N-k+1}}\,\Phi(\bm{x},\,\bm{s}_{1:N-k+1},\,\bm{c}).
+  \label{eq:ce_rule}
+\end{equation}
+This is \emph{receding-horizon} and therefore non-myopic, but it assumes $\hat{\bm{x}}_k$ is correct and plays the oracle designed for that specific $\bm{x}$.  Under narrow-beam geometries $\bm{s}^\star(\bm{x})$ degenerates to a single pointing (point-and-verify), inducing a textbook exploration deficit: if $\hat{\bm{x}}_k$ is wrong, the policy may deterministically never test the true target.  Computationally, \eqref{eq:ce_rule} still requires an oracle solve per step; if $V_{\mathrm{oracle}}$ was the bottleneck, this relaxation replaces one expensive call with $N$.
+
+\subsubsection*{(2b) Myopic Bayesian D-optimal (one-step mutual-information maximization)}
+
+Choose each $\bm{s}_k$ to maximize the expected posterior entropy reduction from the \emph{next} observation only:
+\begin{equation}
+  \bm{s}_k^{\mathrm{myopic}} \;=\; \argmax_{\bm{s}_k}\; I(\bm{x}; y_k \mid b_k, \bm{s}_k, \bm{c})
+  \;=\; \argmax_{\bm{s}_k}\; \ln\det \E_{\bm{x}\sim b_k}\!\bigl[\bm{J}(\bm{x},\bm{s}_k,\bm{c})\bigr].
+  \label{eq:myopic_rule}
+\end{equation}
+No look-ahead beyond one step; no multi-step value bootstrap.  Greedy information gain is $(1-1/e)$-competitive against the clairvoyant DP optimum for submodular objectives (Krause \& Guestrin, 2008; Golovin \& Krause, 2011), making this the default baseline in sequential design.  Two variants must be distinguished: $\ln\det\E[\bm{J}]$ (Bayesian Fisher) versus $\E[\ln\det\bm{J}]$ (expected log-det); they coincide only when $\bm{J}$ is state-independent.  For tractability the first is preferred; for fidelity to the posterior volume, the second.
+
+\subsubsection*{(2c) Gaussian--trace surrogate with recursive inference}
+
+A further stack of approximations---each justified by a specific operating regime---yields the cheapest member of the family:
+\begin{equation}
+  \bm{s}_k^{\mathrm{BFIM}} \;=\; \argmax_{\bm{s}_k}\;\operatorname{tr}\bm{J}\bigl(\bar{\bm{x}}_k,\,\bm{s}_k,\,\bm{c}\bigr),
+  \qquad
+  \bar{\bm{x}}_k = \E[\bm{x}\mid b_k],
+  \label{eq:bfim_rule}
+\end{equation}
+coupled with an \emph{extended Kalman filter} (EKF) for the recursive belief update.  The three stacked simplifications, relative to (2b), are:
+\begin{enumerate}[label=(\roman*), leftmargin=2em, nosep]
+  \item $\operatorname{tr}$ in place of $\ln\det$ (A-optimal instead of D-optimal).  $\operatorname{tr}$ is cheaper (linear in diagonal entries, no factorization) and admits an analytic adjoint for $\bm{c}$-gradients; it loses scale-invariance and weights all parameter directions equally.
+  \item Evaluate $\bm{J}$ at the posterior \emph{mean} $\bar{\bm{x}}_k$ instead of integrating $\E_{\bm{x}\sim b_k}[\bm{J}(\bm{x},\cdot)]$.  Exact when $\bm{J}$ is constant in $\bm{x}$, first-order accurate when the posterior is narrower than the scale on which $\bm{J}(\bm{x})$ varies.  Analogous to a Laplace approximation.
+  \item EKF for $b_k$---a Gaussian posterior $\mathcal{N}(\bar{\bm{x}}_k, \bm{\Sigma}_k)$ propagated by linearized mean and covariance updates.  Exact in the linear--Gaussian limit; robust when the posterior remains unimodal.
+\end{enumerate}
+Each layer individually is a standard move.  Stacked, they reduce the inner per-step solve from $\max$-of-expectation-of-log-det (path 2b) to an analytic $\max$-of-trace at a single $\bm{x}$-point, and the outer geometry gradient $\partial/\partial\bm{c}$ flows through \eqref{eq:bfim_rule} by IFT in closed form.  The result is an end-to-end bi-level pipeline whose cost is dominated by the outer forward-model solves, not by the inner policy step.
+
+\subsection{The hierarchy and what each entry buys}
+
+\begin{table}[h]
+\centering
+\caption{Tractability hierarchy for adaptive sensor design.  Each row buys the column ``cost'' by giving up something in ``loses.''  The exact DP is the gold standard the radar case study of Section~\ref{sec:examples} exhibits; the deep-RL and bi-level relaxations are the routes when that gold standard is out of reach.}
+\label{tab:hierarchy}
+\small
+\begin{tabular}{@{}lp{3.4cm}p{2.5cm}p{3.1cm}p{2.5cm}@{}}
+\toprule
+& inner step per $\bm{s}_k$ & look-ahead & posterior handling & guarantee \\
+\midrule
+Exact Bellman DP & full belief backup & $N$-step & exact & joint-optimal \\
+Deep RL (\S\ref{subsec:deep_rl}) & one NN forward pass & $\le N$, implicit & NN-internal & approximate, black-box \\
+Oracle CE (2a) & oracle at $\hat{\bm{x}}_k$ & $(N{-}k{+}1)$-step CE & point estimate & none; under-explores \\
+Myopic Bayes-$D$ (2b) & $\argmax \ln\det \E[\bm{J}]$ & 1-step & full posterior & $(1-1/e)$ via submodularity \\
+Gaussian--trace (2c) & $\argmax \operatorname{tr}\bm{J}(\bar{\bm{x}}_k)$ & 1-step & Gaussian / EKF & none; empirically sharp in near-Gaussian regimes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two observations about this ladder.  First, \emph{every row} is a bi-level problem in $\bm{c}$: the inner step is a function of the current belief and of $\bm{c}$, and the geometry gradient flows through it by IFT.  The ``joint optimization of geometry and policy'' developed in Section~\ref{sec:joint} is structurally the same in all five rows; what changes is only the fidelity of the inner optimization.  Second, rows 3--5 (the prescribed-rule family) are not mutually exclusive with row 2 (deep RL): a deep-RL policy can be \emph{initialized} from a prescribed information-theoretic rule, amortizing the rule's structure across a distribution of problem instances---a hybrid design that, in our experience, combines the sample efficiency of (2b)--(2c) with the flexibility of (1).
+
+\subsection{Transition: the photonic sensor problem as an instance of (2c)}
+\label{subsec:transition_photonic}
+
+The remainder of this work develops, in full detail, one worked instance of path (2c) applied to a 2D photonic sensor: a cross-waveguide device whose permittivity distribution is the geometry variable $\bm{c}$, whose sensor parameters $\bm{s} = (\phi_1,\phi_2)$ are input-port phases, and whose observations $\bm{y}$ are port powers.  Each of the three bulleted simplifications (i)--(iii) above is explicitly justified in that context:
+\begin{itemize}[leftmargin=2em, nosep]
+  \item The state $\bm{x}$ is a small refractive-index perturbation (dimensionless range $\Delta n \in [10^{-5}, 10^{-4}]$), so the map $\bm{y} = f(\bm{x},\bm{s},\bm{c}) + \bm{\eta}$ is well-approximated by a Taylor expansion of $f$ in $\bm{x}$, making the EKF posterior a sharp approximation to the true posterior.  This justifies (iii).
+  \item The Fisher information $\bm{J}(\bm{x},\bm{s},\bm{c})$ varies slowly in $\bm{x}$ over the posterior support under standard laser-noise statistics, so evaluation at $\bar{\bm{x}}_k$ in place of $\E[\bm{J}(\bm{x})]$ carries negligible error.  This justifies (ii).
+  \item The $\operatorname{tr}\bm{J}$ surrogate, while not invariant under parameter scaling, agrees closely with $\ln\det\bm{J}$ for the small parameter dimensions of this problem ($\dim\bm{x} \le O(10^2)$), and admits an analytically differentiable inner $\argmax$ with a closed-form IFT adjoint.  This justifies (i).
+  \item The full outer geometry objective $\E[\|\bm{\mu}_N - \bm{x}_0\|^2]$ is differentiable in $\bm{c}$ end-to-end, via a custom FDFD adjoint ($\partial\bm{S}/\partial\varepsilon$), the BFIM inner rule \eqref{eq:bfim_rule} with its IFT-based derivative, and the EKF recursive updates with their own manual matrix adjoints.  This realizes the full Section~\ref{sec:joint} envelope-theorem outer loop in an operating regime where the exact Bellman DP is multiple orders of magnitude beyond laptop reach.
+\end{itemize}
+
+The photonic problem is therefore not an alternative \emph{framework}; it is an instantiation of the joint--$(\bm{c},\pi)$ framework of this paper at row (2c) of the hierarchy in Table~\ref{tab:hierarchy}, with each approximation justified by the physics of the operating regime.  The radar case study of Section~\ref{sec:examples} and the photonic case study that follows are two points on the same methodological spectrum: one where the gold-standard DP is tractable and used as such, one where the gold-standard DP is unattainable and is replaced by the cheapest principled relaxation.  The message of both is the same: \emph{joint} optimization of $(\bm{c},\pi)$ is the correct object; the difference is only in which inner solver is affordable.
 
 %===============================================================================
 \section*{References}
