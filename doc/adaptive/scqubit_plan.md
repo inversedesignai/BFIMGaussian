@@ -6,10 +6,12 @@
 
 **Deliverables (analogs of the radar study outputs):**
 1. Exact `V_oracle(Φ)`, `V_fixed(c)`, `V_adaptive(c)`, and `E[IG](c)` for a baseline `c₀`.
-2. Joint `(c*, π*)` via envelope-theorem gradient descent in `c`, alternated with exact Bellman policy re-solution.
+2. Joint `(c₁*, π₁*)` via envelope-theorem gradient descent in `c`, alternated with exact Bellman policy re-solution.
 3. Within-family sweep over the 1-D slice `c = f_q^max` for direct comparability with the source paper (Fig. 2 of Danilin et al.).
 4. Full-dimensional Adam run over 7-to-15-D `c` with convergence history and final design characterization.
-5. A LaTeX writeup (`doc/adaptive/scqubit_results.tex`) structured like `doc/adaptive/IG_numerics.tex`.
+5. **PCRB-based joint baseline `(c₂*, s_{1:N}^{(2)*}) = argmax_{c, s} log J_P(s, c)`** (single-level, no adaptive policy). Deployed prior-averaged MSE `MSE̅₂` from Monte Carlo with posterior-mean estimator.
+6. **MSE-anchored headline comparison:** `MSE̅₂ / MSE̅₁` where `MSE̅₁` is the deployed MSE under the joint-DP result `(c₁*, π₁*)`. This is the §8.7 headline in `AdaptiveDesign.tex` operationalized for this case study.
+7. A LaTeX writeup (`doc/adaptive/scqubit_results.tex`) structured like `doc/adaptive/IG_numerics.tex`, including the MSE comparison as a headline table.
 
 ---
 
@@ -81,15 +83,19 @@ doc/adaptive/scqubit/
 ├── Bellman.jl               # exact DP via memoized backward induction (Phase 4)
 ├── Gradient.jl              # envelope-theorem ∂W₁/∂c via pathwise MC (Phase 5)
 ├── JointOpt.jl              # outer Adam + policy iteration (Phase 6)
+├── PCRB.jl                  # Fisher info, J_P, PCRB-baseline joint opt, deployed MSE (Phase 7)
 ├── tests/
 │   ├── test_model.jl        # closed-form rate formulas vs hand-computed values
 │   ├── test_belief.jl       # belief update consistency (grid vs count rep)
 │   ├── test_baselines.jl    # V_oracle ≥ V_fixed, symmetry checks
 │   ├── test_bellman.jl      # monotonicity in K, agreement with brute-force at K=2
 │   ├── test_gradient.jl     # gradient check vs finite differences (per c-component)
-│   └── test_joint.jl        # end-to-end sanity: Adam reduces loss monotonically
-├── sweep_fq.jl              # 1-D sweep over f_q_max (paper Fig. 2 analog)
-├── sweep_joint.jl           # full 7-D Adam
+│   ├── test_joint.jl        # end-to-end sanity: Adam reduces loss monotonically
+│   └── test_pcrb.jl         # Fisher-info positivity, J_N additivity, PCRB bound empirical check
+├── sweep_fq.jl              # 1-D sweep over f_q_max (paper Fig. 2 analog) — both Phi and PCRB
+├── sweep_joint.jl           # full 7-D Adam (joint-DP)
+├── sweep_pcrb.jl            # full PCRB-baseline joint optimization
+├── compare_mse.jl           # deploy both designs, compute MSE̅₁ and MSE̅₂, headline ratio
 ├── plot_results.jl          # plotting
 └── results/                 # output .jls, .png, tables
 ```
@@ -442,38 +448,184 @@ Project after each Adam step.
 - `test_joint_monotone_MA50`: a 50-step moving-average of W1 should be monotonically nondecreasing after the first 50 iterations. (Allows for single-step noise from MC gradient but expects overall improvement.)
 - `test_joint_reproduces_paper_at_f_q_max_scan`: run the 1-D sweep over f_q_max = [2, 5, 9, 15, 20] GHz with other c components fixed to paper values; check that the in-family optimum is at f_q_max ≈ 9 GHz and the sensitivity value at (f_q_max = 9, Φ* = 0.442) matches the paper's Fig. 2 to within 20% (close-form sensitivity vs our information-theoretic V_adaptive are not identical, but they should rank geometries consistently).
 
-### Phase 7 — Sweeps (`sweep_fq.jl`, `sweep_joint.jl`)
+### Phase 7 — `PCRB.jl` (PCRB baseline and MSE-anchored comparison)
+
+**Goal:** compute the joint `(c, s_{1:N})` PCRB fixed-design baseline `(c₂*, s_{1:N}^{(2)*})` and deploy both designs to report an MSE-anchored comparison with the joint-DP result of Phase 6. Operationalizes §8.7 of `AdaptiveDesign.tex` for this case study.
+
+**Mathematical setup.**
+
+For continuous flux `Φ ∈ [0, Φ₀/2]` observed through Ramsey shots with likelihood `P_|1⟩(Φ, τ; c)` (Phase 1), the per-shot Fisher information is scalar:
+
+```
+J_F(Φ, τ; c) = (∂P_|1⟩/∂Φ)² / [P_|1⟩ · (1 - P_|1⟩)]
+```
+
+Accumulated Fisher information at true Φ across K decision epochs with n_k shots at delay τ_k:
+
+```
+J_N(Φ, s_{1:N}, c) = Σ_{k=1..K} n_k · J_F(Φ, τ_k; c)
+```
+
+Prior-averaged Bayesian Information Matrix (scalar here since dim(Φ) = 1):
+
+```
+J_P(s_{1:N}, c) = J₀ + E_{Φ ~ Uniform[0, Φ₀/2]}[ J_N(Φ, s_{1:N}, c) ]
+                = J₀ + (2/Φ₀) · ∫₀^{Φ₀/2} J_N(Φ, s_{1:N}, c) dΦ
+```
+
+For the uniform prior on `[0, Φ₀/2]`, `J₀ = 0` in the interior (interior uniform prior has zero Fisher info; the finite-support term vanishes except at the two boundaries). In practice use a small floor `J₀ = ε/Φ₀²` with `ε = 1e-4` to avoid degeneracy when s is uninformative.
+
+The PCRB inequality: `E_{Φ,y}[(Φ̂ - Φ)²] ≥ J_P⁻¹`. The PCRB-baseline joint optimization:
+
+```
+(c₂*, s_{1:N}^{(2)*}) = argmax_{c, s_{1:N}} log J_P(s_{1:N}, c)
+```
+
+This is a **single-level** optimization in `d_c + 2K` real variables (c plus the K pairs (τ_k, n_k), treated as continuous during the outer Adam and snapped to the discrete grid at the end for the sweep comparison). No belief tree, no policy memoization, no Bellman recursion — dramatically cheaper than Phase 6.
+
+**Public API:**
+```julia
+"Per-shot Fisher information J_F(Φ, τ; c), closed form from Bernoulli likelihood."
+function fisher_per_shot(Φ::Real, τ::Real, c::ScqubitParams, Φ_star, ω_d)
+    P = P1_ramsey(Φ, τ, c, Φ_star, ω_d)
+    dPdΦ = ForwardDiff.derivative(Φ_ -> P1_ramsey(Φ_, τ, c, Φ_star, ω_d), Φ)
+    dPdΦ^2 / (P * (1 - P) + 1e-300)
+end
+
+"Accumulated Fisher at Φ: J_N(Φ, s, c) = Σ n_k J_F(Φ, τ_k, c)."
+function fisher_accumulated(Φ, s_schedule::Vector{Tuple{Float64,Int}}, c, Φ_star, ω_d)
+    sum(n * fisher_per_shot(Φ, τ, c, Φ_star, ω_d) for (τ, n) in s_schedule)
+end
+
+"Prior-averaged BIM on uniform prior [0, Φ₀/2] by K_Φ-point quadrature."
+function bim_prior_averaged(s_schedule, c, Φ_star, ω_d, Φ_grid; J_0 = 1e-4)
+    J_0 + mean(fisher_accumulated(Φ, s_schedule, c, Φ_star, ω_d) for Φ in Φ_grid)
+end
+
+"PCRB-baseline joint optimization.  Alternating inner schedule search + outer Adam on c."
+function pcrb_baseline(c_init::ScqubitParams;
+                       K_epochs=4, J=6, L=4, K_Φ=256,
+                       outer_iters=500, outer_lr=1e-3,
+                       enumerate_schedule=true)
+    c = c_init
+    opt_state = Adam(lr=outer_lr)
+    history = (log_JP=Float64[], c_trajectory=[])
+    for iter in 1:outer_iters
+        # inner: find best schedule at current c (enumeration or continuous)
+        if enumerate_schedule
+            s_star = argmax_schedule_by_enumeration(c, J, L, K_epochs, K_Φ)
+        else
+            s_star = argmax_schedule_continuous(c, K_epochs, K_Φ)  # gradient descent on (τ_k, n_k)
+        end
+        log_JP_val = log(bim_prior_averaged(s_star, c, Φ_star(c), ω_d(c), Φ_grid(K_Φ)))
+        push!(history.log_JP, log_JP_val)
+        # outer: gradient step on c (autodiff through bim_prior_averaged at fixed s_star)
+        grad_c = Zygote.gradient(c_ -> log(bim_prior_averaged(s_star, c_, Φ_star(c_), ω_d(c_), Φ_grid(K_Φ))), c)[1]
+        c = adam_step(c, grad_c, opt_state)
+        push!(history.c_trajectory, c)
+    end
+    (c, s_star, history)
+end
+
+"Deploy a fixed schedule at a fixed geometry; return deployed prior-averaged MSE of the posterior-mean estimator."
+function deployed_mse_fixed(c, s_schedule, Φ_star, ω_d; n_mc=10_000, K_Φ=256)
+    Φ_grid = range(0, Φ_0/2, length=K_Φ)
+    # ... MC loop: sample Φ_true ~ uniform, roll out Binomial observations under s_schedule,
+    # compute posterior grid, take posterior-mean, accumulate (Φ_mean - Φ_true)^2.
+end
+
+"Deploy an adaptive policy; return deployed prior-averaged MSE of the posterior-mean estimator."
+function deployed_mse_adaptive(c, π_policy_memo, Φ_star, ω_d; n_mc=10_000, K_Φ=256)
+    # ... MC loop: sample Φ_true, roll out policy π_memo, compute posterior-mean, accumulate sq-err.
+end
+```
+
+**Implementation notes.**
+
+- **Inner schedule search.** Two modes:
+  - `enumerate_schedule=true` (default): for fixed c, enumerate `(J·L)^K = 24⁴ ≈ 3.3×10⁵` discrete schedules. For each, compute `log J_P` (cost: `K_Φ · K` Fisher evaluations). Pick the argmax. Parallelize over schedules with `Threads.@threads` or `pmap`.
+  - `enumerate_schedule=false`: treat `(τ_k, n_k)` as continuous (relaxing the integer n_k to ℝ₊), run gradient descent to find the inner optimum, snap back at the end. Faster but may miss discrete combinatorial structure.
+- **Outer Adam on c.** Because `log J_P` is differentiable in c (closed form, analytic rate formulas in Phase 1), the outer gradient `∂ log J_P / ∂c` flows via Zygote with no envelope-theorem machinery needed: this is a standard single-level gradient-descent on `c` with the inner `s*(c)` held fixed by the (continuous or integer) inner optimization.
+- **Implicit function theorem for continuous inner.** If using continuous relaxation of n, the inner optimum `s*(c)` depends on c. The outer gradient should use the IFT adjoint (or re-solve the inner at each c). For enumeration mode, treat `s*(c)` as piecewise-constant in c and ignore boundary effects (standard bi-level practice for combinatorial inner problems).
+- **Gradient check required.** Same rigor as Phase 5: per-component FD check of `∂ log J_P / ∂c` at baseline c₀, AD vs FD, relative error < 1e-5 (cleaner than Phase 5 because no MC variance here).
+
+**Tests (`tests/test_pcrb.jl`):**
+- `test_fisher_positive`: J_F ≥ 0 for all valid (Φ, τ, c).
+- `test_fisher_vanishes_at_sweet_spot`: at Φ = 0, `∂ω_q/∂Φ = 0`, so J_F = 0 for any τ (per the source paper's Eq. 8). Important sanity check.
+- `test_JN_additivity`: `J_N(Φ, concat(s₁, s₂), c) = J_N(Φ, s₁, c) + J_N(Φ, s₂, c)`.
+- `test_JP_bound_empirical`: at a random (c, s), sample 10⁴ Φ ~ uniform, run fixed-schedule observations, compute posterior-mean estimator, average `(Φ̂ - Φ)²` over samples. Expect empirical MSE ≥ 1/J_P (PCRB bound holds). The bound may be loose (posterior-mean is biased at finite N; shrinkage typically reduces pointwise MSE at boundary).
+- `test_log_JP_differentiable_c`: gradient check on `∂ log J_P/∂c` via FD. **Print AD value, FD value, relative error with full precision.**
+- `test_pcrb_vs_joint_DP_radar_sanity`: not applicable here (radar has discrete state, no PCRB). Note in the test comment that this test exists only for the scqubit pipeline.
+
+### Phase 7.1 — MSE-anchored comparison (`compare_mse.jl`)
+
+After both Phase 6 (joint DP → `(c₁*, π₁*)`) and Phase 7 (PCRB baseline → `(c₂*, s₂*)`) complete:
+
+```julia
+# Load checkpointed results
+(c_1_star, π_1_star) = deserialize("results/joint/ckpt_final.jls")
+(c_2_star, s_2_star) = deserialize("results/pcrb/ckpt_final.jls")
+
+# Deploy both: prior-averaged MSE under posterior-mean estimator, 10⁵ MC trials
+MSE_1 = deployed_mse_adaptive(c_1_star, π_1_star, Φ_star(c_1_star), ω_d(c_1_star); n_mc=100_000)
+MSE_2 = deployed_mse_fixed(c_2_star, s_2_star, Φ_star(c_2_star), ω_d(c_2_star); n_mc=100_000)
+
+# Headline
+println("MSE̅₁ (joint DP):      $(MSE_1)")
+println("MSE̅₂ (PCRB baseline): $(MSE_2)")
+println("MSE gain MSE̅₂/MSE̅₁:   $(MSE_2/MSE_1)")
+
+# Sanity cross-check: MSE̅₂ ≥ 1/J_P(c_2_star, s_2_star) (PCRB bound)
+J_P_val = bim_prior_averaged(s_2_star, c_2_star, Φ_star(c_2_star), ω_d(c_2_star), Φ_grid(K_Φ))
+println("PCRB bound 1/J_P:     $(1/J_P_val)")
+@assert MSE_2 ≥ 1/J_P_val - 1e-10 "PCRB bound violated — check bias model"
+```
+
+**Expected:** `MSE̅₂/MSE̅₁ > 1` — the joint-DP beats the PCRB baseline on deployed MSE, quantitatively endorsing the framework of the paper.
+
+**Not guaranteed:** if `MSE̅₂/MSE̅₁ ≤ 1` at the chosen K, J, L, and c_tier, the joint-DP machinery does not pay for itself in this regime. Report honestly in the writeup. Possible causes: K_epochs = 4 is too short for adaptation to overcome PCRB's more careful geometric optimization; the PCRB baseline is within the convex hull of joint-DP-reachable designs; the tier-1 c has insufficient degrees of freedom to give the adaptive policy room to reshape. Expand c_tier or K_epochs as diagnostic.
+
+### Phase 8 — Sweeps (`sweep_fq.jl`, `sweep_joint.jl`, `sweep_pcrb.jl`)
 
 **`sweep_fq.jl`:** 1-D sweep over `f_q_max ∈ {2, 3, 4, ..., 20} GHz`, all other c components at paper values. For each:
 - Solve for Φ* (1-D max of |∂P_|1⟩/∂Φ|).
-- Compute V_oracle_mean, V_fixed, V_adaptive, E[IG], saturation.
+- Compute `V_oracle_mean, V_fixed, V_adaptive, E[IG], saturation` (Φ framework).
+- Compute `log J_P^*(c) = max_s log J_P(s, c)` (PCRB framework).
+- Compute `1/J_P^*` (PCRB MSE lower bound).
 - Tabulate and save to `results/sweep_fq.jls`.
 
-Expected: within-family optimum at f_q_max ≈ 9 GHz (consistent with paper), with V_adaptive showing U-shape analogous to the radar top-hat sweep.
+Expected: both frameworks should identify `f_q_max ≈ 9 GHz` as favorable (consistent with paper), but the exact in-family optima may differ — the Φ framework picks the `f_q_max` that maximizes `V_adaptive`, the PCRB framework picks the one that maximizes `log J_P^*`. Reporting both columns gives the reader a direct side-by-side.
 
-**`sweep_joint.jl`:** full 7-D Adam from a range of c₀ starts (paper values + random perturbations). 500–2000 Adam steps each. Compare final V_adaptive across starts. Best-of-N picks the global joint optimum estimate.
+**`sweep_joint.jl`:** full 7-D Adam for joint DP from a range of c₀ starts. 500–2000 Adam steps each. Returns `(c₁*, π₁*)`.
 
-### Phase 8 — Plots (`plot_results.jl`)
+**`sweep_pcrb.jl`:** full 7-D Adam for PCRB baseline from the same c₀ starts. 500 iterations each (cheaper per iteration; no Bellman solve). Returns `(c₂*, s₂*)`.
+
+### Phase 9 — Plots (`plot_results.jl`)
 
 Using `Plots.jl` or `Makie.jl`:
-- `plot_sweep_fq.png`: four panels — V_adaptive, V_fixed, V_oracle_mean, E[IG] vs f_q_max. Highlight in-family optimum.
-- `plot_adam_history.png`: convergence curves for V_adaptive, grad_norm, V_fixed.
-- `plot_belief_evolution.png`: typical belief b_k(Φ) at each epoch k for optimal policy at c*.
+- `plot_sweep_fq.png`: six panels — V_adaptive, V_fixed, V_oracle_mean, E[IG], log J_P*, 1/J_P* vs f_q_max. Highlight in-family optimum for each.
+- `plot_adam_history_joint.png`: convergence curves for V_adaptive, grad_norm during joint-DP Adam.
+- `plot_adam_history_pcrb.png`: convergence curves for log J_P during PCRB-baseline Adam.
+- `plot_belief_evolution.png`: typical belief b_k(Φ) at each epoch k for optimal policy at c₁*.
 - `plot_policy_tree.png`: first two levels of the optimal policy (action at each observation history).
-- Table generation: LaTeX-formatted tables analogous to IG_numerics Table 1.
+- `plot_mse_comparison.png`: bar chart of MSE̅₁ vs MSE̅₂ vs PCRB bound 1/J_P(c₂*, s₂*). Annotate ratio.
+- Table generation: LaTeX-formatted tables analogous to IG_numerics Table 1, plus an MSE-comparison table (joint-DP vs PCRB baseline, absolute MSE and ratio).
 
-### Phase 9 — Writeup (`doc/adaptive/scqubit_results.tex`)
+### Phase 10 — Writeup (`doc/adaptive/scqubit_results.tex`)
 
-Mirror `doc/adaptive/IG_numerics.tex` structure:
+Mirror `doc/adaptive/IG_numerics.tex` structure, with the MSE-anchored comparison as the headline operational claim:
+
 1. Problem recap (reference scqubit_model.tex).
 2. Numerical setup (Φ-grid, τ-grid, n-grid, horizon).
-3. V_oracle, V_fixed enumeration results.
+3. V_oracle, V_fixed enumeration results (Φ framework).
 4. Bellman DP results (tree size, runtime, memoization statistics).
-5. Within-family sweep over f_q_max (results table, plot). Compare to paper Fig. 2.
-6. Joint 7-D optimization: Adam trajectory, final c*, V_adaptive* vs baseline.
-7. Within-family boxed three-way comparison (analog of IG_numerics §8.6).
-8. Position in the relaxation hierarchy: this is the exact-DP counterpart to the photonic BFIM path-(2c) instance.
-9. Caveats and limitations.
+5. Within-family sweep over f_q_max: side-by-side Φ-framework and PCRB-framework columns (results table, plot). Compare to paper Fig. 2.
+6. Joint 7-D optimization (joint DP): Adam trajectory, final c₁*, V_adaptive* vs baseline.
+7. PCRB-baseline joint optimization: Adam trajectory, final (c₂*, s₂*), log J_P* vs baseline.
+8. **Headline MSE-anchored comparison:** table of MSE̅₁ vs MSE̅₂ vs PCRB bound 1/J_P; ratio MSE̅₂/MSE̅₁. This is the operational §8.7 claim.
+9. Within-family boxed three-way comparison (analog of IG_numerics §8.6).
+10. Position in the relaxation hierarchy: this is the exact-DP counterpart to the photonic BFIM path-(2c) instance.
+11. Caveats and limitations (finite K, potential PCRB bound slack, biased estimator, boundary effects of uniform prior).
 
 ---
 
@@ -507,13 +659,20 @@ Mirror `doc/adaptive/IG_numerics.tex` structure:
 | V_fixed(c) at one c | 10 s | 24⁴ = 332k schedules, parallel |
 | Bellman DP at one c (K=4) | 20 s | 10⁶ belief memoization |
 | grad_c at one c, 10⁶ trajectories across 10 GPUs | 5 s | batched GPU rollouts |
-| one outer Adam step (incl. grad only, reuse policy) | 6 s | |
+| one outer Adam step (incl. grad only, reuse policy) | 6 s | joint-DP loop |
 | one policy-iteration step (full DP re-solve + grad) | 25 s | every 10 steps |
-| 1000 outer Adam steps (policy re-opt every 10) | ~2 hours | |
-| `sweep_fq.jl` (19 values of f_q_max, full Bellman each) | ~10 min | |
+| 1000 outer Adam steps (joint-DP, policy re-opt every 10) | ~2 hours | |
+| `J_P(s, c)` at one (s, c), parallel over K_Φ Φ values | 0.1 s | closed-form Fisher, cheap |
+| inner schedule enumeration `argmax_s log J_P` at one c | 30 s | 3.3×10⁵ schedules, 256-way parallel |
+| one outer Adam step (PCRB baseline: inner enum + Zygote grad) | 30 s | dominated by inner enum |
+| 500 outer Adam steps (PCRB baseline) | ~4 hours | |
+| deployed MSE (100k MC trials, adaptive or fixed) | 5 min | parallelized over trials |
+| `sweep_fq.jl` (19 values of f_q_max, both frameworks) | ~15 min | joint-DP dominates |
 | `sweep_joint.jl` (10 random starts × 1000 steps each) | ~20 hours | |
+| `sweep_pcrb.jl` (10 random starts × 500 steps each) | ~40 hours | could parallelize across starts |
+| `compare_mse.jl` (deploy both, 10⁵ MC each) | ~15 min | |
 
-All comfortably within overnight.
+All comfortably within overnight or a weekend run.
 
 ---
 
@@ -549,10 +708,14 @@ If gradient check fails: halt, diagnose (likely cause: Zygote incompatibility wi
 
 **Must have:**
 - [ ] All tests in `tests/` pass.
-- [ ] Gradient check: relative error < 1e-3 per component at baseline c₀.
-- [ ] `sweep_fq.jl` reproduces the paper's finding that f_q_max ≈ 9 GHz is the in-family-optimum at paper values of the other c-components.
-- [ ] `sweep_joint.jl` produces a c* with V_adaptive(c*) > V_adaptive(c₀).
-- [ ] `doc/adaptive/scqubit_results.tex` compiles to PDF with all tables and plots.
+- [ ] Gradient check (joint DP): relative error < 1e-3 per component at baseline c₀.
+- [ ] Gradient check (PCRB baseline): relative error < 1e-5 per component at baseline c₀ (cleaner because no MC variance).
+- [ ] `sweep_fq.jl` reproduces the paper's finding that f_q_max ≈ 9 GHz is the in-family-optimum at paper values of the other c-components — for both Φ framework and PCRB framework.
+- [ ] `sweep_joint.jl` produces a c₁* with V_adaptive(c₁*) > V_adaptive(c₀).
+- [ ] `sweep_pcrb.jl` produces a (c₂*, s₂*) with log J_P(c₂*, s₂*) > log J_P(c₀, s_random).
+- [ ] `compare_mse.jl` reports MSE̅₁, MSE̅₂, and the ratio MSE̅₂/MSE̅₁ with absolute MSE values (not just ratios) at n_mc ≥ 10⁵.
+- [ ] PCRB bound sanity check: MSE̅₂ ≥ 1/J_P(c₂*, s₂*) (empirical PCRB not violated).
+- [ ] `doc/adaptive/scqubit_results.tex` compiles to PDF with all tables and plots including the MSE-anchored comparison as the headline table.
 - [ ] All .jls results are serialized to `results/` for reproducibility.
 - [ ] `git commit -m "scqubit joint (c, π) Bellman DP + envelope-theorem gradient results"` and push.
 
