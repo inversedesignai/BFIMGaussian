@@ -301,11 +301,23 @@ This baseline has three operational uses in reporting joint-$(\bm{c}, \pi)$ DP r
 Evaluating $V_{\mathrm{adaptive}}$ at $\bm{c}_{\mathrm{PCRB}}^\star$ (the baseline geometry) isolates the policy contribution: if the adaptive policy at the PCRB-optimal geometry already substantially beats the fixed $\bm{s}^\star_{\mathrm{PCRB}}$, we learn that adaptation pays off even on a geometry designed for the non-adaptive setting.  If not, the case for joint-policy optimization is weak at this geometry, independent of whether a better $\bm{c}$ exists.
 
 \paragraph{MSE-anchored quantitative claim.}
-The comparison
+Let
 \begin{equation}
-  \text{MSE ratio} \;=\; \frac{\tr \bm{\Sigma}_N^{\mathrm{adaptive}}(\bm{c}^\star)}{\tr \bm{J}_P(\bm{s}^\star_{\mathrm{PCRB}}, \bm{c}_{\mathrm{PCRB}}^\star)^{-1}}
+  (\bm{c}_1^\star,\, \pi_1^\star) \;=\; \argmax_{\bm{c},\,\pi}\; W_1(p_0;\, \bm{c}) \qquad\text{(joint }\bm{c}+\text{DP result of Section~\ref{sec:joint})}
 \end{equation}
-gives a reviewer-friendly quantitative statement of the combined joint-geometry-and-adaptive-policy gain, in concrete prior-averaged MSE units.  Unlike an information-gain ratio, which invites the question ``but what does this buy me in MSE?'', the PCRB-anchored ratio answers that question directly.
+and
+\begin{equation}
+  (\bm{c}_2^\star,\, \bm{s}_{1:N}^{(2)\star}) \;=\; \argmax_{\bm{c},\,\bm{s}_{1:N}}\; \ln\det \bm{J}_P(\bm{s}_{1:N}, \bm{c}) \qquad\text{(PCRB-baseline result \eqref{eq:pcrb_baseline})}.
+\end{equation}
+Denote by $\overline{\mathrm{MSE}}_1$ and $\overline{\mathrm{MSE}}_2$ the respective prior-averaged mean-square errors achieved in deployment---the first under the adaptive policy $\pi_1^\star$ at geometry $\bm{c}_1^\star$, the second under the fixed schedule $\bm{s}_{1:N}^{(2)\star}$ at geometry $\bm{c}_2^\star$.  Both are concrete operational quantities measurable from Monte Carlo simulation or from deployed data.
+
+The ratio
+\begin{equation}
+  \mathrm{MSE\ gain} \;=\; \frac{\overline{\mathrm{MSE}}_2}{\overline{\mathrm{MSE}}_1}
+\end{equation}
+gives a reviewer-friendly, estimator-level, MSE-denominated statement of how much the joint-$(\bm{c}, \pi)$ DP formulation buys over the classical PCRB-optimal fixed design.  Unlike an information-gain ratio---which invites the reviewer's ``but what does this buy me in MSE?''---the PCRB-anchored ratio answers that question directly, in the same units in which the sensor's deployed performance will be reported.
+
+Note that $\overline{\mathrm{MSE}}_1 < \overline{\mathrm{MSE}}_2$ is \emph{not} guaranteed by theory: the PCRB baseline solves a different (prior-averaged) problem from the Bellman DP (pointwise-Bellman-expected), and the two objectives can disagree on which $\bm{c}$ is best even within the Gaussian regime where they are closest.  Empirically checking that $\overline{\mathrm{MSE}}_1 < \overline{\mathrm{MSE}}_2$ is therefore a meaningful test---not a tautology---and a passing result is a quantitative endorsement of the joint-DP framework in the currency that matters for deployment.
 
 \paragraph{Null hypothesis for the whole framework.}
 If $V_{\mathrm{adaptive}}(\bm{c}^\star)$ does not exceed $V^{\mathrm{PCRB}}_{\mathrm{fixed}}(\bm{c}_{\mathrm{PCRB}}^\star)$ after the Gaussian-regime translation of \eqref{eq:vfixed_gaussian}, then the joint-$(\bm{c}, \pi)$ DP machinery does not pay for itself relative to classical Bayesian D-optimal design.  In that case, one should report the PCRB-optimal $\bm{c}_{\mathrm{PCRB}}^\star$ with its fixed schedule and stop.  This is the quantitative analog of Corollary~\ref{cor:useless_adapt}, operationalized in MSE units.
