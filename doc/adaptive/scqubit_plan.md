@@ -17,14 +17,15 @@
 
 Before writing any code, read these files in order. They fully define the problem:
 
-1. `doc/adaptive/AdaptiveDesign.tex` — the theoretical framework. §5 (ignorance gap), §7 (joint optimization + envelope theorem + policy iteration), §9 (radar case study — the template to follow), §10 (relaxation hierarchy — scqubit is the exact-DP counterpart to the photonic BFIM which is path 2c).
-2. `doc/adaptive/scqubit_model.tex` — the complete measurement model for this problem: the Ramsey likelihood `P_|1⟩(Φ, τ; c)`, all rate formulas, full delineation of `c` and `s` parameters.
-3. `doc/adaptive/IG_numerics.tex` — the numerical writeup of the radar case study. Write `scqubit_results.tex` in this exact structure.
-4. `doc/adaptive/compute_ig.jl` — radar V_oracle + V_fixed enumeration. Study the symmetry reductions.
-5. `doc/adaptive/compute_dp.jl` — radar exact Bellman DP via backward induction on reachable beliefs. Study the memoization pattern.
-6. `doc/adaptive/compute_joint.jl` — radar joint sweep + policy iteration.
-7. `BFIMGaussian.jl` and `PhEnd2End.jl` — the photonic path (2c) codebase. Reuse the custom-rrule patterns for `ekf_update`-style manual adjoints if needed.
-8. `CLAUDE.md` (both root and `~/.claude/CLAUDE.md`) — style and workflow rules. Julia, iteration-driven, correctness-first, concise. **Do not** use mutating operations inside Zygote-traced code. **Do** verify every gradient with finite differences before claiming success.
+1. `doc/adaptive/scqubit.pdf` — the source paper (Danilin, Nugent & Weides, arXiv:2211.08344v4, 2024). Authoritative reference for all rate formulas, geometry values, noise amplitudes, and the Kitaev-PEA protocol. Cross-check any formula against this PDF before implementing.
+2. `doc/adaptive/AdaptiveDesign.tex` — the theoretical framework. §5 (ignorance gap), §7 (joint optimization + envelope theorem + policy iteration), §9 (radar case study — the template to follow), §10 (relaxation hierarchy — scqubit is the exact-DP counterpart to the photonic BFIM which is path 2c).
+3. `doc/adaptive/scqubit_model.tex` — distilled measurement model for this problem: the Ramsey likelihood `P_|1⟩(Φ, τ; c)`, all rate formulas, full delineation of `c` and `s` parameters. Derived from scqubit.pdf; use it as a fast-access summary but defer to the PDF for any ambiguity.
+4. `doc/adaptive/IG_numerics.tex` — the numerical writeup of the radar case study. Write `scqubit_results.tex` in this exact structure.
+5. `doc/adaptive/compute_ig.jl` — radar V_oracle + V_fixed enumeration. Study the symmetry reductions.
+6. `doc/adaptive/compute_dp.jl` — radar exact Bellman DP via backward induction on reachable beliefs. Study the memoization pattern.
+7. `doc/adaptive/compute_joint.jl` — radar joint sweep + policy iteration.
+8. `BFIMGaussian.jl` and `PhEnd2End.jl` — the photonic path (2c) codebase. Reuse the custom-rrule patterns for `ekf_update`-style manual adjoints if needed.
+9. `CLAUDE.md` (both root and `~/.claude/CLAUDE.md`) — style and workflow rules. Julia, iteration-driven, correctness-first, concise. **Do not** use mutating operations inside Zygote-traced code. **Do** verify every gradient with finite differences before claiming success.
 
 ---
 
