@@ -13,7 +13,6 @@ autotune_cron.log
 autotune_dopt_cron.log
 autotune_alerts.log
 
-# legacy / non-dopt nohup logs (big, local only)
+# legacy nohup logs (big, local only)
 nohup.out
 nohup.out.pre-autotune.*
-nohup_fi_baseline.out
