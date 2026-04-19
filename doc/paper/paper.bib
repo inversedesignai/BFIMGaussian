@@ -1,0 +1,926 @@
+% ============================================================
+% paper.bib - starter bibliography for the joint-(c, pi) paper
+% Entries flagged [CHECK] need exact year/venue verification.
+% ============================================================
+
+% ---- Foundational: Bellman, POMDP, sensor management ----
+@book{bellman1957dynamic,
+  author = {Bellman, Richard},
+  title = {Dynamic Programming},
+  publisher = {Princeton University Press},
+  year = {1957}
+}
+
+@phdthesis{sondik1971optimal,
+  author = {Sondik, Edward J.},
+  title = {The optimal control of partially observable {Markov} processes},
+  school = {Stanford University},
+  year = {1971}
+}
+
+@article{smallwood1973sondik,
+  author = {Smallwood, Richard D. and Sondik, Edward J.},
+  title = {The optimal control of partially observable {Markov} processes over a finite horizon},
+  journal = {Operations Research},
+  volume = {21},
+  number = {5},
+  pages = {1071--1088},
+  year = {1973}
+}
+
+@article{kaelbling1998pomdp,
+  author = {Kaelbling, Leslie Pack and Littman, Michael L. and Cassandra, Anthony R.},
+  title = {Planning and acting in partially observable stochastic domains},
+  journal = {Artificial Intelligence},
+  volume = {101},
+  pages = {99--134},
+  year = {1998}
+}
+
+@book{puterman2014markov,
+  author = {Puterman, Martin L.},
+  title = {Markov Decision Processes: Discrete Stochastic Dynamic Programming},
+  publisher = {Wiley},
+  year = {1994}
+}
+
+@book{bertsekas1996neuro,
+  author = {Bertsekas, Dimitri P. and Tsitsiklis, John N.},
+  title = {Neuro-Dynamic Programming},
+  publisher = {Athena Scientific},
+  year = {1996}
+}
+
+% ---- Envelope theorem and Danskin ----
+@article{milgrom2002envelope,
+  author = {Milgrom, Paul and Segal, Ilya},
+  title = {Envelope theorems for arbitrary choice sets},
+  journal = {Econometrica},
+  volume = {70},
+  number = {2},
+  pages = {583--601},
+  year = {2002}
+}
+
+@article{danskin1966theory,
+  author = {Danskin, John M.},
+  title = {The theory of max-min, with applications},
+  journal = {SIAM Journal on Applied Mathematics},
+  volume = {14},
+  pages = {641--664},
+  year = {1966}
+}
+
+@book{bonnans2000perturbation,
+  author = {Bonnans, J. Fr{\'e}d{\'e}ric and Shapiro, Alexander},
+  title = {Perturbation Analysis of Optimization Problems},
+  publisher = {Springer},
+  year = {2000}
+}
+
+% ---- Sensor management, adaptive sensing ----
+@article{kreucher2005kastella,
+  author = {Kreucher, Chris and Kastella, Keith and Hero, III, Alfred O.},
+  title = {Sensor management using an active sensing approach},
+  journal = {Signal Processing},
+  volume = {85},
+  number = {3},
+  pages = {607--624},
+  year = {2005}
+}
+
+@article{hero2011survey,
+  author = {Hero, Alfred O. and Cochran, Douglas},
+  title = {Sensor management: Past, present, and future},
+  journal = {IEEE Sensors Journal},
+  volume = {11},
+  number = {12},
+  pages = {3064--3075},
+  year = {2011}
+}
+
+@article{kastella1997discrimination,
+  author = {Kastella, Keith},
+  title = {Discrimination gain to optimize classification},
+  journal = {IEEE Transactions on Systems, Man, and Cybernetics Part A},
+  year = {1997}
+}
+
+@book{castanon2008stochastic,
+  editor = {Hero, A. O. and Casta{\~n}{\'o}n, D. A. and Cochran, D. and Kastella, K.},
+  title = {Foundations and Applications of Sensor Management},
+  publisher = {Springer},
+  year = {2008}
+}
+
+@inproceedings{chen2015adaptive,
+  author = {Chen, Yuxin and Krause, Andreas},
+  title = {Near-optimal Bayesian active learning with correlated and noisy tests},
+  booktitle = {AISTATS},
+  year = {2017}
+}
+
+@inproceedings{krause2005near,
+  author = {Krause, Andreas and Guestrin, Carlos},
+  title = {Near-optimal nonmyopic value of information in graphical models},
+  booktitle = {UAI},
+  year = {2005}
+}
+
+% ---- Bayesian optimal experimental design ----
+@article{lindley1956measure,
+  author = {Lindley, D. V.},
+  title = {On a measure of the information provided by an experiment},
+  journal = {Annals of Mathematical Statistics},
+  volume = {27},
+  number = {4},
+  pages = {986--1005},
+  year = {1956}
+}
+
+@article{chaloner1995bayesian,
+  author = {Chaloner, Kathryn and Verdinelli, Isabella},
+  title = {Bayesian experimental design: A review},
+  journal = {Statistical Science},
+  volume = {10},
+  number = {3},
+  pages = {273--304},
+  year = {1995}
+}
+
+@article{huan2016sequential,
+  author = {Huan, Xun and Marzouk, Youssef M.},
+  title = {Sequential {Bayesian} optimal experimental design via approximate dynamic programming},
+  journal = {arXiv:1604.08320},
+  year = {2016}
+}
+
+@article{shen2023bayesian,
+  author = {Shen, Wanggang and Huan, Xun},
+  title = {Bayesian sequential optimal experimental design for nonlinear models using policy gradient reinforcement learning},
+  journal = {arXiv:2110.15335},
+  year = {2023}
+}
+
+@article{alexanderian2021optimal,
+  author = {Alexanderian, Alen},
+  title = {Optimal experimental design for infinite-dimensional {Bayesian} inverse problems governed by {PDE}s: a review},
+  journal = {Acta Numerica},
+  year = {2021}
+}
+
+@article{sebastiani2000optimal,
+  author = {Sebastiani, Paola and Wynn, Henry P.},
+  title = {Maximum entropy sampling and optimal {Bayesian} experimental design},
+  journal = {J. Royal Statistical Society Series B},
+  volume = {62},
+  pages = {145--157},
+  year = {2000}
+}
+
+@article{pronzato2010optimal,
+  author = {Pronzato, Luc},
+  title = {Optimal experimental design for non-linear models},
+  year = {2010}
+}
+
+@article{drovandi2014sequential,
+  author = {Drovandi, C. C. and McGree, J. M. and Pettitt, A. N.},
+  title = {A sequential {Monte Carlo} algorithm to incorporate model uncertainty in {Bayesian} sequential design},
+  journal = {J. Comp. Graphical Stat.},
+  volume = {23},
+  pages = {3--24},
+  year = {2014}
+}
+
+% ---- Information theory / EVPI ----
+@article{shannon1948mathematical,
+  author = {Shannon, Claude E.},
+  title = {A mathematical theory of communication},
+  journal = {Bell System Technical Journal},
+  volume = {27},
+  pages = {379--423, 623--656},
+  year = {1948}
+}
+
+@article{howard1966decision,
+  author = {Howard, Ronald A.},
+  title = {Information value theory},
+  journal = {IEEE Transactions on Systems Science and Cybernetics},
+  volume = {2},
+  number = {1},
+  pages = {22--26},
+  year = {1966}
+}
+
+@book{raiffa1961applied,
+  author = {Raiffa, Howard and Schlaifer, Robert},
+  title = {Applied Statistical Decision Theory},
+  publisher = {Harvard Business School},
+  year = {1961}
+}
+
+% ---- Fisher information, CRB, Bayesian CRB ----
+@book{cramer1946mathematical,
+  author = {Cram{\'e}r, Harald},
+  title = {Mathematical Methods of Statistics},
+  publisher = {Princeton University Press},
+  year = {1946}
+}
+
+@article{rao1945information,
+  author = {Rao, C. R.},
+  title = {Information and the accuracy attainable in the estimation of statistical parameters},
+  journal = {Bulletin of the Calcutta Mathematical Society},
+  volume = {37},
+  pages = {81--91},
+  year = {1945}
+}
+
+@book{berger1985statistical,
+  author = {Berger, James O.},
+  title = {Statistical Decision Theory and Bayesian Analysis},
+  publisher = {Springer},
+  year = {1985}
+}
+
+@book{vantrees2007bayesian,
+  author = {Van Trees, Harry L. and Bell, Kristine L.},
+  title = {Bayesian Bounds for Parameter Estimation and Nonlinear Filtering/Tracking},
+  publisher = {Wiley-IEEE Press},
+  year = {2007}
+}
+
+@article{tichavsky1998posterior,
+  author = {Tichavsk{\'y}, Petr and Muravchik, Carlos H. and Nehorai, Arye},
+  title = {Posterior {Cram{\'e}r--Rao} bounds for discrete-time nonlinear filtering},
+  journal = {IEEE Transactions on Signal Processing},
+  volume = {46},
+  number = {5},
+  pages = {1386--1396},
+  year = {1998}
+}
+
+@article{weiss1988lower,
+  author = {Weiss, Anthony J. and Weinstein, Ehud},
+  title = {A lower bound on the mean-square error in random parameter estimation},
+  journal = {IEEE Trans. Inf. Theory},
+  volume = {31},
+  year = {1985}
+}
+
+% ---- Quantum metrology and QFI ----
+@article{braunstein1994sld,
+  author = {Braunstein, Samuel L. and Caves, Carlton M.},
+  title = {Statistical distance and the geometry of quantum states},
+  journal = {Physical Review Letters},
+  volume = {72},
+  pages = {3439--3443},
+  year = {1994}
+}
+
+@article{giovannetti2006quantum,
+  author = {Giovannetti, Vittorio and Lloyd, Seth and Maccone, Lorenzo},
+  title = {Quantum metrology},
+  journal = {Physical Review Letters},
+  volume = {96},
+  pages = {010401},
+  year = {2006}
+}
+
+@article{paris2009quantum,
+  author = {Paris, Matteo G. A.},
+  title = {Quantum estimation for quantum technology},
+  journal = {International Journal of Quantum Information},
+  volume = {7},
+  pages = {125--137},
+  year = {2009}
+}
+
+@article{caves1981quantum,
+  author = {Caves, Carlton M.},
+  title = {Quantum-mechanical noise in an interferometer},
+  journal = {Physical Review D},
+  volume = {23},
+  pages = {1693--1708},
+  year = {1981}
+}
+
+@article{pirandola2018advances,
+  author = {Pirandola, S. and others},
+  title = {Advances in photonic quantum sensing},
+  journal = {Nature Photonics},
+  volume = {12},
+  pages = {724--733},
+  year = {2018}
+}
+
+@article{degen2017sensing,
+  author = {Degen, C. L. and Reinhard, F. and Cappellaro, P.},
+  title = {Quantum sensing},
+  journal = {Reviews of Modern Physics},
+  volume = {89},
+  pages = {035002},
+  year = {2017}
+}
+
+@article{tsang2016quantum,
+  author = {Tsang, Mankei and Nair, Ranjith and Lu, Xiao-Ming},
+  title = {Quantum theory of superresolution for two incoherent optical point sources},
+  journal = {Physical Review X},
+  volume = {6},
+  pages = {031033},
+  year = {2016}
+}
+
+@article{tsang2017ziv,
+  author = {Tsang, Mankei},
+  title = {Ziv--Zakai error bounds for quantum parameter estimation},
+  journal = {Physical Review Letters},
+  volume = {108},
+  year = {2012}
+}
+
+@article{tsang2019resolving,
+  author = {Tsang, Mankei},
+  title = {Resolving starlight: a quantum perspective},
+  journal = {Contemporary Physics},
+  year = {2019}
+}
+
+@article{reginatto2019crb,
+  author = {Reginatto, Marcel},
+  title = {Bayesian {Cram{\'e}r--Rao} bound: A brief review},
+  year = {2019}
+}
+
+@article{berry2000optimal,
+  author = {Berry, D. W. and Wiseman, H. M.},
+  title = {Optimal states and almost optimal adaptive measurements for quantum interferometry},
+  journal = {Physical Review Letters},
+  volume = {85},
+  pages = {5098--5101},
+  year = {2000}
+}
+
+@article{ferrie2013bayesian,
+  author = {Ferrie, Christopher and Granade, Christopher E. and Cory, D. G.},
+  title = {Adaptive {Hamiltonian} estimation using {Bayesian} experimental design},
+  journal = {AIP Conference Proceedings},
+  year = {2013}
+}
+
+@article{braverman2019slowing,
+  author = {Braverman, B. and Kawasaki, A. and Pedrozo-Pe{\~n}afiel, E. and Colombo, S. and Shu, C. and Li, Z. and Mendez, E. and Yamoah, M. and Salvi, L. and Akamatsu, D. and others},
+  title = {Near-unitary spin squeezing in $^{171}$Yb},
+  journal = {Physical Review Letters},
+  volume = {122},
+  pages = {223203},
+  year = {2019}
+}
+
+@article{kitaev1995qpe,
+  author = {Kitaev, A. Yu.},
+  title = {Quantum measurements and the {Abelian stabilizer problem}},
+  journal = {arXiv:quant-ph/9511026},
+  year = {1995}
+}
+
+@article{danilin2024scqubit,
+  author = {Danilin, Sergey and Nugent, Nicholas and Weides, Martin},
+  title = {Tunable transmon qubit as a flux sensor: joint device-protocol optimization},
+  journal = {arXiv:2211.08344v4},
+  year = {2024}
+}
+
+@article{weides2019qubit,
+  author = {Weides, Martin},
+  title = {{Tunable transmon flux sensing}},
+  journal = {[CHECK]},
+  year = {2019}
+}
+
+% ---- Quantum Fisher information for wave scattering (Rotter group, Tsang, etc.) ----
+@article{rotter2017light,
+  author = {Rotter, Stefan and Gigan, Sylvain},
+  title = {Light fields in complex media: Mesoscopic scattering meets wave control},
+  journal = {Reviews of Modern Physics},
+  volume = {89},
+  pages = {015005},
+  year = {2017}
+}
+
+@article{bouchet2021maximum,
+  author = {Bouchet, Dorian and Rotter, Stefan and Mosk, Allard P.},
+  title = {Maximum information states for coherent scattering measurements},
+  journal = {Nature Physics},
+  volume = {17},
+  pages = {564--568},
+  year = {2021}
+}
+
+@article{carrington2020fisher,
+  author = {Carrington, Hannah M. and Bouchet, Dorian and Rotter, Stefan},
+  title = {Fisher-information and optimal probes for wave scattering},
+  journal = {[CHECK]},
+  year = {2020}
+}
+
+@article{defienne2021coincidence,
+  author = {Defienne, Hugo and Ndagano, B. and others},
+  title = {[CHECK] Quantum imaging and Fisher information},
+  year = {2021}
+}
+
+% ---- Photonic information bounds (Miller, Rodriguez, Molesky, ...) ----
+@article{miller2016fundamental,
+  author = {Miller, Owen D. and Yang, Yiwen and Johnson, Steven G. and others},
+  title = {Fundamental limits to optical response in absorptive systems},
+  journal = {Optics Express},
+  volume = {24},
+  pages = {3329--3364},
+  year = {2016}
+}
+
+@article{miller2023bounds,
+  author = {Miller, Owen D. and others},
+  title = {Fundamental bounds on light-matter interaction},
+  journal = {[CHECK review]},
+  year = {2023}
+}
+
+@article{chao2022maximum,
+  author = {Chao, Pengning and Strekha, Benjamin and others and Molesky, Sean and Rodriguez, Alejandro W.},
+  title = {Maximum electromagnetic local density of states via material structuring: T-matrix bounds},
+  journal = {Nature Reviews Physics},
+  year = {2022}
+}
+
+@article{molesky2020tmatrix,
+  author = {Molesky, Sean and Venkataram, Prashanth S. and Jin, Weiliang and Rodriguez, Alejandro W.},
+  title = {Fundamental limits to radiative heat transfer: theory},
+  journal = {Physical Review B},
+  year = {2020}
+}
+
+@article{molesky2020hierarchical,
+  author = {Molesky, Sean and Chao, Pengning and Rodriguez, Alejandro W.},
+  title = {Hierarchical mean-field T-matrix bounds on photonic scattering},
+  journal = {Physical Review Research},
+  year = {2020}
+}
+
+@article{molesky2020bounds,
+  author = {Molesky, Sean and Chao, Pengning and Jin, Weiliang and Rodriguez, Alejandro W.},
+  title = {T-operator limits on optical communication: metaoptics, computation, and input-output transformations},
+  journal = {Physical Review Research},
+  year = {2022}
+}
+
+@article{molesky2019global,
+  author = {Molesky, Sean and Lin, Zin and Piggott, Alexander Y. and Jin, Weiliang and Vuckovic, Jelena and Rodriguez, Alejandro W.},
+  title = {Inverse design in nanophotonics},
+  journal = {Nature Photonics},
+  volume = {12},
+  pages = {659--670},
+  year = {2018}
+}
+
+@article{molesky2018inverse,
+  author = {Molesky, Sean and Lin, Zin and Piggott, Alexander Y. and Jin, Weiliang and Vuckovic, Jelena and Rodriguez, Alejandro W.},
+  title = {Inverse design in nanophotonics},
+  journal = {Nature Photonics},
+  volume = {12},
+  pages = {659--670},
+  year = {2018}
+}
+
+@article{kuang2020maximal,
+  author = {Kuang, Zeyu and Miller, Owen D.},
+  title = {Computational bounds to light-matter interactions via local conservation laws},
+  journal = {Physical Review Letters},
+  year = {2020}
+}
+
+@article{strekalov2022bounds,
+  author = {Strekha, Benjamin and Chao, Pengning and Molesky, Sean and Rodriguez, Alejandro W.},
+  title = {[CHECK] Bounds on angle-dependent scattering via T-operator}, year = {2022}
+}
+
+@article{strekalov2020bounds,
+  author = {Strekha, Benjamin and others},
+  title = {[CHECK] Earlier bounds paper},
+  year = {2020}
+}
+
+@article{gustafsson2020upper,
+  author = {Gustafsson, Mats and Schab, Kurt and Jelinek, Lukas and Capek, Miloslav},
+  title = {Upper bounds on absorption and scattering},
+  journal = {New Journal of Physics},
+  year = {2020}
+}
+
+@article{schab2020bounds,
+  author = {Schab, Kurt and others},
+  title = {[CHECK] Radiation-Q bounds},
+  year = {2020}
+}
+
+@article{jelinek2021upper,
+  author = {Jelinek, Lukas and Capek, Miloslav and Schab, Kurt},
+  title = {[CHECK]},
+  year = {2021}
+}
+
+@article{venkataram2020fundamental,
+  author = {Venkataram, Prashanth S. and Molesky, Sean and Jin, Weiliang and Rodriguez, Alejandro W.},
+  title = {Fundamental limits to radiative heat transfer: the limited role of nanostructuring in the near-field},
+  journal = {Physical Review Letters},
+  year = {2020}
+}
+
+% ---- Zin Lin: end-to-end nanophotonic inverse design ----
+@article{lin2018topology,
+  author = {Lin, Zin and Liu, Victor and Pestourie, Rapha{\"e}l and Johnson, Steven G.},
+  title = {Topology optimization of freeform large-area metasurfaces},
+  journal = {Optics Express},
+  volume = {27},
+  pages = {15765--15775},
+  year = {2019}
+}
+
+@article{lin2019overlapping,
+  author = {Lin, Zin and Johnson, Steven G.},
+  title = {Overlapping domains for topology optimization of large-area metasurfaces},
+  journal = {Optics Express},
+  volume = {27},
+  pages = {32445--32461},
+  year = {2019}
+}
+
+@article{lin2021e2e,
+  author = {Lin, Zin and Roques-Carmes, Charles and Pestourie, Rapha{\"e}l and Solja{\v c}i{\'c}, Marin and Majumdar, Arka and Johnson, Steven G.},
+  title = {End-to-end nanophotonic inverse design for imaging and polarimetry},
+  journal = {Nanophotonics},
+  volume = {10},
+  pages = {1177--1187},
+  year = {2021}
+}
+
+@article{lin2022hyperspectral,
+  author = {Lin, Zin and others},
+  title = {[CHECK: hyperspectral metasurface imaging / end-to-end meta-optics paper]},
+  year = {2022}
+}
+
+@article{christiansen2021fullwave,
+  author = {Christiansen, Rasmus E. and Lin, Zin and others},
+  title = {[CHECK] Fullwave freeform topology optimization review},
+  year = {2021}
+}
+
+% ---- Differentiable electromagnetic simulation and inverse design ----
+@book{jensen2011topology,
+  author = {Jensen, Jakob S. and Sigmund, Ole},
+  title = {Topology optimization for nano-photonics},
+  year = {2011},
+  note = {Laser \& Photonics Reviews 5(2)}
+}
+
+@article{hughes2018adjoint,
+  author = {Hughes, Tyler W. and Minkov, Momchil and Williamson, Ian A. D. and Fan, Shanhui},
+  title = {Adjoint method and inverse design for nonlinear nanophotonic devices},
+  journal = {ACS Photonics},
+  year = {2018}
+}
+
+@article{minkov2020inverse,
+  author = {Minkov, Momchil and Williamson, Ian A. D. and Andreani, Lucio Claudio and Gerace, Dario and Lou, Beicheng and Song, Alex Y. and Hughes, Tyler W. and Fan, Shanhui},
+  title = {Inverse design of photonic crystals through automatic differentiation},
+  journal = {ACS Photonics},
+  year = {2020}
+}
+
+@article{fan2020freeform,
+  author = {Fan, Jonathan A. and others},
+  title = {Freeform metasurface design with deep generative models},
+  journal = {Applied Physics Reviews},
+  year = {2020}
+}
+
+@article{wang2018reconfigurable,
+  author = {Wang, Qian and others},
+  title = {[CHECK] Reconfigurable metasurface inverse design},
+  year = {2018}
+}
+
+@article{piggott2015inverse,
+  author = {Piggott, Alexander Y. and Lu, Jesse and Lagoudakis, Konstantinos G. and Petykiewicz, Jan and Babinec, Thomas M. and Vuckovic, Jelena},
+  title = {Inverse design and demonstration of a compact and broadband on-chip wavelength demultiplexer},
+  journal = {Nature Photonics},
+  year = {2015}
+}
+
+@article{selvaraja2009subnanometer,
+  author = {Selvaraja, Shankar K. and Bogaerts, Wim and Dumon, Pieter and Van Thourhout, Dries and Baets, Roel},
+  title = {Subnanometer linewidth uniformity in silicon nanophotonic waveguide devices using {CMOS} fabrication technology},
+  journal = {IEEE J. Sel. Top. Quantum Electron.},
+  year = {2010}
+}
+
+% ---- Density filter / beta continuation (TO) ----
+@article{wang2011projection,
+  author = {Wang, Fengwen and Lazarov, Boyan S. and Sigmund, Ole},
+  title = {On projection methods, convergence and robust formulations in topology optimization},
+  journal = {Structural and Multidisciplinary Optimization},
+  year = {2011}
+}
+
+@article{sigmund2007morphology,
+  author = {Sigmund, Ole},
+  title = {Morphology-based black and white filters for topology optimization},
+  journal = {Structural and Multidisciplinary Optimization},
+  year = {2007}
+}
+
+@article{lazarov2016length,
+  author = {Lazarov, Boyan S. and Wang, Fengwen and Sigmund, Ole},
+  title = {Length scale and manufacturability in density-based topology optimization},
+  journal = {Archive of Applied Mechanics},
+  year = {2016}
+}
+
+@article{christiansen2018compact,
+  author = {Christiansen, Rasmus E. and Sigmund, Ole},
+  title = {Compact 200 line {MATLAB} code for inverse design in photonics by topology optimization},
+  journal = {J. Opt. Soc. Am. B},
+  year = {2020}
+}
+
+@article{svanberg2002mma,
+  author = {Svanberg, Krister},
+  title = {A class of globally convergent optimization methods based on conservative convex separable approximations},
+  journal = {SIAM Journal on Optimization},
+  year = {2002}
+}
+
+% ---- End-to-end optics / diffractive / metaoptics / computational imaging ----
+@article{sitzmann2018e2e,
+  author = {Sitzmann, Vincent and Diamond, Steven and Peng, Yifan and Dun, Xiong and Boyd, Stephen and Heidrich, Wolfgang and Heide, Felix and Wetzstein, Gordon},
+  title = {End-to-end optimization of optics and image processing for achromatic extended depth of field and super-resolution imaging},
+  journal = {ACM Transactions on Graphics (SIGGRAPH)},
+  year = {2018}
+}
+
+@article{chang2019diffractive,
+  author = {Chang, Julie and Wetzstein, Gordon},
+  title = {Deep optics for monocular depth estimation and 3D object detection},
+  journal = {ICCV},
+  year = {2019}
+}
+
+@article{metzler2020deep,
+  author = {Metzler, Christopher A. and Ikoma, Hayato and Peng, Yifan and Wetzstein, Gordon},
+  title = {Deep optics for single-shot high-dynamic-range imaging},
+  journal = {CVPR},
+  year = {2020}
+}
+
+@article{tseng2021metalens,
+  author = {Tseng, Ethan and Colburn, Shane and Whitehead, James and Huang, Luocheng and Baek, Seung-Hwan and Majumdar, Arka and Heide, Felix},
+  title = {Neural nano-optics for high-quality thin lens imaging},
+  journal = {Nature Communications},
+  year = {2021}
+}
+
+@article{antipa2018diffusercam,
+  author = {Antipa, Nick and Kuo, Grace and Heckel, Reinhard and Mildenhall, Ben and Bostan, Emrah and Ng, Ren and Waller, Laura},
+  title = {{DiffuserCam}: lensless single-exposure 3D imaging},
+  journal = {Optica},
+  year = {2018}
+}
+
+@article{heide2014flex,
+  author = {Heide, Felix and Steinberger, Markus and Tsai, Yun-Ta and Rouf, Mushfiqur and Pajak, Dawid and Reddy, Dikpal and Gallo, Orazio and Liu, Jing and Heidrich, Wolfgang and Egiazarian, Karen and Kautz, Jan and Pulli, Kari},
+  title = {{FlexISP}: A flexible camera image processing framework},
+  journal = {ACM Transactions on Graphics (SIGGRAPH Asia)},
+  year = {2014}
+}
+
+@article{bhargava2024topology,
+  author = {Bhargava, S. and [CHECK]},
+  title = {[CHECK: recent end-to-end topology-optimized imaging]},
+  year = {2024}
+}
+
+% ---- Laura Waller and collaborators: MI / information-based end-to-end ----
+@article{kellman2019microscopy,
+  author = {Kellman, Michael R. and Bostan, Emrah and Repina, Nicole A. and Waller, Laura},
+  title = {Physics-based learned design: optimized coded-illumination for quantitative phase imaging},
+  journal = {IEEE Transactions on Computational Imaging},
+  volume = {5},
+  pages = {344--353},
+  year = {2019}
+}
+
+@article{kellman2019physics,
+  author = {Kellman, Michael R. and Bostan, Emrah and Chen, Michael and Waller, Laura},
+  title = {Data-driven design for {Fourier} ptychographic microscopy},
+  journal = {Optica},
+  volume = {7},
+  pages = {1075--1082},
+  year = {2020}
+}
+
+@article{kellman2020datadriven,
+  author = {Kellman, Michael R. and Repina, Nicole A. and Bostan, Emrah and Waller, Laura},
+  title = {[CHECK] Data-driven illumination design for defocus-robust imaging},
+  year = {2020}
+}
+
+@article{muthumbi2019learned,
+  author = {Muthumbi, Alex and Chaware, Amey and Kim, Kangwook and Kim, Kevin C. and Park, Jaebum and Chen, Michael and Waller, Laura and Horstmeyer, Roarke},
+  title = {Learned sensing: jointly optimized microscope hardware for accurate image classification},
+  journal = {Biomedical Optics Express},
+  volume = {10},
+  pages = {6351--6369},
+  year = {2019}
+}
+
+@article{bostan2018deep,
+  author = {Bostan, Emrah and Heckel, Reinhard and Chen, Michael and Kellman, Michael and Waller, Laura},
+  title = {Deep phase decoder: self-calibrating phase microscopy with an untrained deep neural network},
+  journal = {Optica},
+  volume = {7},
+  pages = {559--562},
+  year = {2020}
+}
+
+% ---- Cognitive radar ----
+@article{haykin2006cognitive,
+  author = {Haykin, Simon},
+  title = {Cognitive radar: a way of the future},
+  journal = {IEEE Signal Processing Magazine},
+  volume = {23},
+  pages = {30--40},
+  year = {2006}
+}
+
+@article{bell2015cognitive,
+  author = {Bell, Kristine L. and Baker, Chris J. and Smith, Graeme E. and Johnson, Joel T. and Rangaswamy, Muralidhar},
+  title = {Cognitive radar framework for target detection and tracking},
+  journal = {IEEE Journal of Selected Topics in Signal Processing},
+  year = {2015}
+}
+
+@article{greco2018cognitive,
+  author = {Greco, Maria S. and Gini, Fulvio and Stinco, Pietro and Bell, Kristine L.},
+  title = {Cognitive radars: On the road to reality},
+  journal = {IEEE Signal Processing Magazine},
+  year = {2018}
+}
+
+@article{bouhou2025cognitive,
+  author = {Bouhou, Mourad and others},
+  title = {{POMDP}-driven cognitive massive {MIMO} radar},
+  journal = {IEEE Transactions on Radar Systems},
+  year = {2025},
+  note = {arXiv:2410.17967}
+}
+
+% ---- Programmable metasurface / RIS ----
+@article{yurduseven2017printed,
+  author = {Yurduseven, Okan and Gollub, Jonah N. and Marks, Daniel L. and Smith, David R.},
+  title = {Printed aperiodic cavity for computational and microwave imaging},
+  journal = {IEEE Microwave and Wireless Components Letters},
+  year = {2017}
+}
+
+@article{imani2020review,
+  author = {Imani, Mohammadreza F. and Gollub, Jonah N. and Yurduseven, Okan and Diebold, Aaron V. and Boyarsky, Michael and Fromenteze, Thomas and Pulido-Mancera, Laura and Sleasman, Timothy and Smith, David R.},
+  title = {Review of metasurface antennas for computational microwave imaging},
+  journal = {IEEE Transactions on Antennas and Propagation},
+  year = {2020}
+}
+
+% ---- Deep RL / POMCP / MCTS for POMDPs ----
+@inproceedings{silver2010monte,
+  author = {Silver, David and Veness, Joel},
+  title = {{Monte-Carlo} planning in large {POMDPs}},
+  booktitle = {NIPS},
+  year = {2010}
+}
+
+@article{couetoux2011continuous,
+  author = {Cou{\"e}toux, Adrien and Hoock, Jean-Baptiste and Sokolovska, Nataliya and Teytaud, Olivier and Bonnard, Nicolas},
+  title = {Continuous upper confidence trees},
+  journal = {LION},
+  year = {2011}
+}
+
+@inproceedings{hausknecht2015deep,
+  author = {Hausknecht, Matthew and Stone, Peter},
+  title = {Deep recurrent {Q}-learning for partially observable {MDPs}},
+  booktitle = {AAAI Fall Symposium Series},
+  year = {2015}
+}
+
+@article{zhong2018deep,
+  author = {Zhong, [CHECK] and others},
+  title = {[CHECK] Deep RL for sensor scheduling},
+  year = {2018}
+}
+
+@article{williams1992reinforce,
+  author = {Williams, Ronald J.},
+  title = {Simple statistical gradient-following algorithms for connectionist reinforcement learning},
+  journal = {Machine Learning},
+  volume = {8},
+  pages = {229--256},
+  year = {1992}
+}
+
+@inproceedings{schulman2015pathwise,
+  author = {Schulman, John and Heess, Nicolas and Weber, Theophane and Abbeel, Pieter},
+  title = {Gradient estimation using stochastic computation graphs},
+  booktitle = {NeurIPS},
+  year = {2015}
+}
+
+@article{munos2014bandits,
+  author = {Munos, R{\'e}mi},
+  title = {From bandits to {Monte-Carlo} tree search: The optimistic principle applied to optimization and planning},
+  journal = {Foundations and Trends in Machine Learning},
+  year = {2014}
+}
+
+% ---- Differential DP / control ----
+@article{jacobson1970ddp,
+  author = {Jacobson, David H. and Mayne, David Q.},
+  title = {Differential Dynamic Programming},
+  publisher = {Elsevier},
+  year = {1970}
+}
+
+@inproceedings{tassa2012ddp,
+  author = {Tassa, Yuval and Erez, Tom and Todorov, Emanuel},
+  title = {Synthesis and stabilization of complex behaviors through online trajectory optimization},
+  booktitle = {IROS},
+  year = {2012}
+}
+
+@article{khaneja2005optimal,
+  author = {Khaneja, Navin and Reiss, Timo and Kehlet, Cindie and Schulte-Herbr{\"u}ggen, Thomas and Glaser, Steffen J.},
+  title = {Optimal control of coupled spin dynamics: design of {NMR} pulse sequences by gradient ascent algorithms},
+  journal = {Journal of Magnetic Resonance},
+  year = {2005}
+}
+
+% ---- Asymptotic statistics ----
+@book{vaart2000asymptotic,
+  author = {van der Vaart, A. W.},
+  title = {Asymptotic Statistics},
+  publisher = {Cambridge University Press},
+  year = {2000}
+}
+
+@article{paninski2004bvm,
+  author = {Paninski, Liam},
+  title = {Asymptotic theory of information-theoretic experimental design},
+  journal = {Neural Computation},
+  year = {2005}
+}
+
+@article{clark2021bvm,
+  author = {Clark, Allan [CHECK]},
+  title = {[CHECK] Bernstein--von Mises review},
+  year = {2021}
+}
+
+% ---- Submodularity / info theory classics ----
+@article{pilanci2015randomized,
+  author = {Pilanci, Mert and Wainwright, Martin J. and El Ghaoui, Laurent},
+  title = {Randomized algorithms for the log-determinant optimization problem},
+  year = {2015}
+}
+
+@article{peyre2019computational,
+  author = {Peyr{\'e}, Gabriel and Cuturi, Marco},
+  title = {Computational optimal transport},
+  journal = {Foundations and Trends in Machine Learning},
+  year = {2019}
+}
+
+% ---- Miscellaneous ----
+@book{martinis2014squid,
+  author = {Martinis, John M. and Megrant, Anthony},
+  title = {[CHECK] {SQUID}-based flux sensing},
+  year = {2014}
+}
+
+@misc{autotune2026,
+  author = {{Anonymous}},
+  title = {Cron-scheduled autotune agent for topology-optimization continuation scheduling (internal tool, this work)},
+  year = {2026},
+  note = {Described in Supplementary Materials}
+}

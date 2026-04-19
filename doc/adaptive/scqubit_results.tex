@@ -410,25 +410,43 @@ Restricting the optimization to the 4 geometric dimensions produces \emph{qualit
 \paragraph{What would flip the ratio?}  The two most actionable interventions — neither attempted here — are (i)~\textbf{longer horizon}: $K \ge 6$ gives the adaptive policy enough measurement steps that MI-optimality approaches MSE-optimality (Bernstein--von Mises regime), at the cost of a $\sim 10\!\times$--$100\!\times$ Bellman-memo blow-up requiring the planned parallel stack; (ii)~\textbf{tier-2 $\bm c$}: $+5$ SQUID-loop geometric dimensions via analytically differentiable Biot--Savart $M, M'$.  A third — cheaper — path is to \textbf{change the terminal reward}; we explore it next.
 
 %====================================================================
-\section{Switching joint-DP's terminal reward to $-\mathrm{Var}(b_K)$}
+\section{$\Phi$-flexibility: the scalar reward is a modeling choice}
 \label{sec:mse_terminal}
 %====================================================================
 
-\subsection{Motivation and derivation}
+\subsection{Three natural candidates for $\Phi$}
 
-The Bayesian MSE of the posterior-mean estimator satisfies the tower-law identity
+The joint-DP machinery is agnostic to the specific scalar reward at the leaf.  At least three pointwise functionals are natural, each with a distinct operational interpretation:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+reward & leaf value $W_K(b_K)$ & tied to pointwise MSE?  \\
+\midrule
+$\Phi_{\text{MI}}$ (Lindley)     & $\ln|\text{support}| - H(b_K)$               & asymptotic only (BvM regime) \\
+$\Phi_{\text{Var}}$ (Bayesian MMSE)  & $-\mathrm{Var}(\Phi \mid b_K)$              & \textbf{directly}, by tower law \\
+$\Phi_{\log J}$ (Fisher / PCRB) & $\tfrac{1}{2}\log\det J_N(x, \bm s, \bm c)$ & asymptotic only (frequentist CRB) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The paper's plan committed to $\Phi_{\text{MI}}$ (matching \texttt{AdaptiveDesign.tex} and the radar case study).  The discrete-state radar problem is well-served by $\Phi_{\text{MI}}$ because the deployment metric is cell-ID classification error and no continuous MSE exists.  The continuous-state scqubit problem has an explicit MSE deployment metric, and as we show below this makes $\Phi_{\text{Var}}$ the MSE-aligned choice.  The Fisher-based $\Phi_{\log J}$ is the natural candidate for Gaussian-posterior surrogates (photonic BFIM path); it is the pointwise analog of PCRB, but does not give a non-asymptotic pointwise MSE bound for biased Bayesian estimators.
+
+\subsection{Motivation for switching at $K=3$: Bayesian MSE via tower law}
+
+The Bayesian MSE of the posterior-mean estimator satisfies
 \begin{equation}
   \E_{\Phi, \bm y}\!\left[(\hat\Phi_{\text{pm}} - \Phi)^2\right]
-  \;=\; \E_{\bm y}\!\left[\mathrm{Var}(\Phi \mid \bm y)\right],
+  \;=\; \E_{\bm y}\!\left[\mathrm{Var}(\Phi \mid \bm y)\right].
 \end{equation}
-i.e., the deployment-time MSE equals the expected posterior variance at the terminal belief.  The plan's MI-based terminal reward $W_K(b_K) = -H(b_K)$ (plus additive constant) is \emph{asymptotically} MSE-equivalent (under Gaussian-posterior BvM), but at $K = 3$ on a bounded-support uniform prior the gap is first-order.
+If the joint-DP's outer objective equals $\E[-\mathrm{Var}(b_K)]$, i.e. $-1\times$ the deployed Bayesian MSE, then the adaptive policy returned by the Bellman DP is \emph{literally} the MSE-optimal adaptive policy at fixed $\bm c$.  $\Phi_{\text{MI}}$ shares this property asymptotically (Gaussian-posterior BvM regime) but diverges from MSE at $K = 3$ on a bounded-support prior.
 
-The fix is one line of code: replace the leaf reward with
+The fix is one-line-of-code:
 \begin{equation}
-  W_K^{\text{MSE}}(b_K) \;=\; -\mathrm{Var}(\Phi \mid b_K)
-  \;=\; -\!\!\int (\Phi - \mu_{b_K})^2\, b_K(\Phi)\,d\Phi,
+  W_K^{\text{Var}}(b_K) \;=\; -\mathrm{Var}(\Phi \mid b_K)
+  \;=\; -\!\!\int (\Phi - \mu_{b_K})^2\, b_K(\Phi)\,d\Phi.
 \end{equation}
-so that $V_{\text{adaptive}}(\bm c) = \E[-\mathrm{Var}(b_K)]$ is $-1\times$ the deployed Bayesian MSE at the \emph{joint-DP-optimal} policy.  The envelope-theorem gradient $\partial V / \partial \bm c$ is unchanged in structure — only the leaf value changes.  We implemented this with a new \texttt{terminal::Symbol} keyword (\texttt{:mi} vs \texttt{:mse}) threading through \texttt{Bellman.jl}, \texttt{Gradient.jl}, and \texttt{JointOpt.jl}; the MI path is the default and unchanged.
+The envelope-theorem gradient $\partial V / \partial \bm c$ is unchanged in structure — only the leaf value changes.  We implemented it with a \texttt{terminal::Symbol} keyword (\texttt{:mi} vs \texttt{:mse}) threading through \texttt{Bellman.jl}, \texttt{Gradient.jl}, and \texttt{JointOpt.jl}; the MI path is the default and unchanged.  $\Phi_{\log J}$ is not wired into the scqubit code because at $K = 3$ on a bounded prior it is not expected to beat $\Phi_{\text{Var}}$; it is the natural choice for the photonic BFIM (Gaussian-posterior) case study in a companion note.
 
 \subsection{Implementation validation}
 
