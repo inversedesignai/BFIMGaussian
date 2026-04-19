@@ -92,7 +92,7 @@ A \emph{joint co-design objective} is any scalar functional of the hardware-poli
   V(\bc, \pi) \;=\; \E_{\bx \sim p_0}\, \E_{\by_{1:K} \mid \bx, \pi, \bc}\!\bigl[\, \Phi(\bx, \bs_{1:K}^{\pi}, \bc) \,\bigr],
   \label{eq:V_def}
 \end{equation}
-where $\Phi: \mathcal{X} \times \mathcal{S}^K \times \mathcal{C} \to \R$ is a user-specified \emph{pointwise reward}.  The joint hardware--policy optimization solves
+where $\Phi: \mathcal{X} \times \mathcal{S}^K \times \mathcal{C} \to \R$ is a user-specified \emph{pointwise reward}: ``pointwise'' in the sense that $\Phi$ is evaluated at each realization of the true state $\bx$, action sequence $\bs_{1:K}$, and hardware $\bc$ separately, before any averaging over the prior.  Aggregate objectives (Bayesian mean-squared error, mutual information, log-determinant of an expected Fisher matrix) are recovered by taking the expectations in Equation~\eqref{eq:V_def}.  We correspondingly use ``pointwise MSE'' for the state-conditional mean-squared error $\E_{\by \mid \bx}[(\hat\bx - \bx)^2]$, which is an $\bx$-dependent scalar, as opposed to the aggregate Bayesian MSE which is its prior average.  The joint hardware--policy optimization solves
 \begin{equation}
   (\bc^\star, \pi^\star) \;=\; \argmax_{\bc \in \mathcal{C},\; \pi \in \Pi}\; V(\bc, \pi).
   \label{eq:joint_opt}
@@ -105,20 +105,13 @@ For the posterior-mean estimator on continuous $\bx$, the tower-law identity $\E
 \subsection{The scalar-reward family $\Phi$}
 \label{sec:phi_family}
 
-All joint-$(\bc, \pi)$ formulations reduce to maximizing an outer expectation of some scalar terminal functional of the belief:
-\begin{equation}
-  V(\bc, \pi) \;=\; \E_{\bx, \by_{1:K}}[\, W_K(\bb_K; \bx, \bc) \,].
-  \label{eq:V_from_W}
-\end{equation}
-The terminal functional $W_K$ is a modeling choice.  Three canonical functionals emerge naturally from three different bodies of theory:
+Three canonical choices for $\Phi$ emerge naturally from three different bodies of theory.  In each case $\Phi$ is a deterministic function of $(\bx, \bs_{1:K}, \bc)$; any expectation over the measurement trajectory $\by_{1:K}$ that appears in the definition is baked in, so that the outer objective $V(\bc, \pi) = \E_{\bx, \by}[\Phi]$ of Equation~\eqref{eq:V_def} is a single expectation over the prior and the data.
 
 \paragraph{Mutual-information-aligned reward $\Phi_{\text{MI}}$.}  Following the Shannon--Lindley line~\cite{shannon1948mathematical, lindley1956measure} through Chaloner--Verdinelli~\cite{chaloner1995bayesian}, Sebastiani--Wynn~\cite{sebastiani2000optimal}, and the adaptive sensor-management literature~\cite{kreucher2005kastella, hero2011survey},
 \begin{equation}
-  W_K^{\text{MI}}(\bb_K) \;=\; \ln|\mathrm{supp}(\bb_K)| - H(\bb_K),
-  \qquad
-  \Phi_{\text{MI}}(\bx, \bs, \bc) \;=\; \E_{\by\mid\bx, \bs, \bc}[\, W_K^{\text{MI}}(\bb_K) \,].
+  \Phi_{\text{MI}}(\bx, \bs, \bc) \;=\; \E_{\by\mid\bx, \bs, \bc}\!\bigl[\ln|\mathrm{supp}(\bb_K)| - H(\bb_K)\bigr],
 \end{equation}
-Summing over $\bx$ under the prior gives $\E_{\bx}[\Phi_{\text{MI}}] = I(\bx; \by_{1:K} \mid \bs, \bc)$, the mutual information.  This is the reward of choice for discrete-state problems where MSE is undefined or dominated by 0/1 classification loss~\cite{castanon2008stochastic}, and for any problem in the large-$K$ Bernstein--von Mises regime~\cite{vaart2000asymptotic, clark2021bvm} where the Gaussian-posterior approximation makes MI monotone in MSE.  The photonic and quantum-sensing communities have developed extensive machinery for \emph{upper bounds} on achievable mutual information given physical constraints (reciprocity, passivity, energy); our framework consumes those bounds as constraints on the feasible set $\{\Phi_{\text{MI}}(\cdot, \cdot, \bc) : \bc \in \mathcal{C}\}$ rather than re-deriving them.
+the expected negative entropy of the terminal belief $\bb_K$ at state $\bx$.  Averaging over the prior gives $\E_{\bx}[\Phi_{\text{MI}}] = I(\bx; \by_{1:K} \mid \bs, \bc)$, the mutual information.  This is the reward of choice for discrete-state problems where MSE is undefined or dominated by 0/1 classification loss~\cite{castanon2008stochastic}, and for any problem in the large-$K$ Bernstein--von Mises regime~\cite{vaart2000asymptotic, clark2021bvm} where the Gaussian-posterior approximation makes MI monotone in MSE.  The photonic and quantum-sensing communities have developed extensive machinery for \emph{upper bounds} on achievable mutual information given physical constraints (reciprocity, passivity, energy); our framework consumes those bounds as constraints on the feasible set $\{\Phi_{\text{MI}}(\cdot, \cdot, \bc) : \bc \in \mathcal{C}\}$ rather than re-deriving them.
 
 \paragraph{Bayesian-MSE-aligned reward $\Phi_{\text{Var}}$.}  Inheriting from the Bayesian Cram\'er--Rao tradition~\cite{vantrees2007bayesian} and the posterior-variance-minimization line of Bayesian optimal experimental design~\cite{chaloner1995bayesian, pronzato2010optimal}, the tower law of variance
 \begin{equation}
@@ -127,13 +120,13 @@ Summing over $\bx$ under the prior gives $\E_{\bx}[\Phi_{\text{MI}}] = I(\bx; \b
 \end{equation}
 (with $\hat\bx_{\text{pm}}$ the posterior mean) motivates
 \begin{equation}
-  W_K^{\text{Var}}(\bb_K) \;=\; -\mathrm{Var}(\bx \mid \bb_K),
+  \Phi_{\text{Var}}(\bx, \bs, \bc) \;=\; \E_{\by\mid\bx, \bs, \bc}\!\bigl[-\mathrm{Var}(\bx \mid \bb_K)\bigr],
 \end{equation}
 for which the outer objective $V(\bc, \pi)$ equals $-1\times$ the deployed Bayesian MSE exactly.  The joint-DP optimum of this reward is literally the \emph{MSE-optimal} adaptive policy at fixed $\bc$, without any asymptotic approximation.  For continuous-state, finite-$K$ problems with bounded-support priors, where the Bernstein--von Mises regime is not reached, $\Phi_{\text{Var}}$ strictly dominates $\Phi_{\text{MI}}$ as an MSE anchor.  The tower-law identity is textbook; its use as a joint-DP terminal reward in the present hardware-policy setting is new.
 
 \paragraph{Fisher-information-aligned reward $\Phi_{\log J}$.}  Inheriting from the classical Fisher-information-matrix tradition~\cite{cramer1946mathematical, rao1945information, berger1985statistical} and its Bayesian extension~\cite{vantrees2007bayesian, tichavsky1998posterior}, and applicable to continuous $\bx$ with a Gaussian-posterior surrogate,
 \begin{equation}
-  W_K^{\log J}(\bb_K, \bx) \;=\; \tfrac{1}{2} \log\det J_N(\bx, \bs_{1:K}, \bc),
+  \Phi_{\log J}(\bx, \bs, \bc) \;=\; \tfrac{1}{2} \log\det J_N(\bx, \bs_{1:K}, \bc),
 \end{equation}
 where $J_N$ is the accumulated Fisher information matrix at true $\bx$.  The outer expectation is the log-determinant of the Bayesian Fisher information matrix~\cite{pilanci2015randomized, chaloner1995bayesian}, with $J_N^{-1}$ the Bayesian CRB.  In the Gaussian-posterior regime $\Phi_{\log J}$ agrees with $\Phi_{\text{Var}}$ up to log-transforms.  Outside that regime (biased estimators, bounded priors, small $K$), $\Phi_{\log J}$ retains an asymptotic CRB interpretation while losing its direct link to finite-sample MSE.  It is the natural reward for high-dimensional continuous problems where the full Bellman DP is intractable and the Gaussian surrogate is the cheapest defensible relaxation.  The quantum-Fisher-information program on wave and photon scattering~\cite{bouchet2021maximum, tsang2016quantum, rotter2017light, carrington2020fisher} and the photonic information-bound program on scattering-matrix extremization~\cite{miller2016fundamental, miller2023bounds, chao2022maximum, molesky2020tmatrix, molesky2020hierarchical} establish upper bounds on $\det J_N$ over admissible $\bc$; they tell us what $\sup_{\bc} \det J_N$ is, and our framework tells us which $\bc$ and which policy realize it jointly.
 
@@ -146,9 +139,9 @@ where $J_N$ is the accumulated Fisher information matrix at true $\bx$.  The out
 \label{tab:phi_family}
 \begin{tabular}{@{}llll@{}}
 \toprule
-reward & leaf value $W_K$ & community & tied to pointwise MSE? \\
+reward & terminal expression & community & tied to pointwise MSE? \\
 \midrule
-$\Phi_{\text{MI}}$  & $\ln|\mathrm{supp}| - H(\bb_K)$                   & sensor management, sOED & asymptotic only \\
+$\Phi_{\text{MI}}$  & $\ln|\mathrm{supp}(\bb_K)| - H(\bb_K)$            & sensor management, sOED & asymptotic only \\
 $\Phi_{\text{Var}}$ & $-\mathrm{Var}(\bx \mid \bb_K)$                   & Bayesian estimation     & \textbf{directly, by tower law} \\
 $\Phi_{\log J}$     & $\tfrac{1}{2}\log\det J_N(\bx, \bs, \bc)$         & Fisher info, PCRB       & asymptotic only \\
 \bottomrule
@@ -165,6 +158,7 @@ The three rewards agree asymptotically under Bernstein--von Mises but diverge at
 For any choice of $\Phi$, the outer objective $V(\bc, \pi)$ admits a four-functional decomposition that is useful for both intuition and diagnostics.  The decomposition is standard in sequential Bayesian experimental design~\cite{huan2016sequential, shen2023bayesian} and was used in the radar sensor-management literature under the name ``oracle value'' of perfect information~\cite{kreucher2005kastella, kastella1997discrimination}; we restate it in the $\Phi$-agnostic form used in the rest of the paper.
 
 \subsection{Four functionals}
+\label{sec:four_functionals}
 
 \begin{align}
 V_{\text{oracle}}(\bx, \bc) &= \max_{\bs_{1:K}} \Phi(\bx, \bs_{1:K}, \bc), \label{eq:Voracle}\\
@@ -175,39 +169,47 @@ V_{\text{adaptive}}(\bc)    &= \max_{\pi \in \Pi} \E_{\bx} \E_{\by\mid\bx, \pi, 
 
 The functional $V_{\text{oracle}}(\bx, \bc)$ is the value attained by a \emph{clairvoyant} sensor that knows the true $\bx$ and picks the best fixed schedule for it; its prior average is an oracle upper bound.  $V_{\text{fixed}}(\bc)$ is the best non-adaptive schedule.  $V_{\text{adaptive}}(\bc)$ is the best adaptive policy, which is the quantity the user ultimately deploys.  $\E[\mathrm{IG}](\bc)$, the \emph{expected ignorance gap} or \emph{expected value of perfect information} (EVPI)~\cite{howard1966decision, raiffa1961applied}, is a well-defined scalar functional of $\bc$ that measures how much adaptive slack exists at that geometry.
 
-\subsection{Chain of inequalities}
+\subsection{The case for joint hardware--policy co-design}
+\label{sec:codesign_case}
 
-For any $\bc$,
+The quantity the user deploys is $V_{\text{adaptive}}(\bc)$: the value attained by the best adaptive policy at the chosen hardware.  Two facts make it a function of $\bc$ that cannot be maximized piecewise.
+
+\paragraph{Fact 1: adaptation extracts real value at most geometries.}  A fixed schedule commits all $K$ measurements in advance, before any data has arrived.  An adaptive policy sees each outcome as it happens and re-routes subsequent measurements accordingly: effort that would have been wasted confirming something the data has already settled gets redirected toward parts of the state space that remain ambiguous.  In an imaging problem this is the difference between a fixed raster scan and one that zooms in on the suspected region; in a qubit-flux sensor it is the difference between a fixed Ramsey delay ladder and one that shortens $\tau$ when the posterior is broad (to avoid phase-wrapping ambiguity) and lengthens $\tau$ once the flux is roughly localized.  The resulting \emph{adaptive gain} $V_{\text{adaptive}}(\bc) - V_{\text{fixed}}(\bc)$ is typically strictly positive and often sizable.
+
+\paragraph{Fact 2: the adaptive gain depends nontrivially on $\bc$.}  A hardware configuration that maximizes $V_{\text{fixed}}$ is not in general the hardware that maximizes $V_{\text{adaptive}}$: a geometry good for blind schedules is good because its expected measurements are individually informative on average, and that property tends to leave little room for outcome-dependent re-routing.  Conversely, a geometry with very large \emph{oracle} value (what a clairvoyant sensor with perfect knowledge of $\bx$ could achieve) may put so much of that value out of reach of any policy that only sees past data that the realizable adaptive value is actually small.  The geometry that deploys well under an adaptive policy is an \emph{interior} geometry, one that neither is over-tuned to blind schedules nor relies on clairvoyance; this optimum is not located by examining $V_{\text{fixed}}$ or $V_{\text{oracle}}$ separately.
+
+\paragraph{Consequence: the two layers cannot be solved in sequence.}  One cannot pick $\bc$ first (by any single-functional criterion) and then pick $\pi$, because the criterion for a good $\bc$ depends on which $\pi$ will follow.  Joint optimization of $(\bc, \pi)$ is necessary; the rest of the paper is about making it tractable.  Section~\ref{sec:envelope} gives the envelope-theorem identity that decouples the \emph{gradient computation} from the inner-policy solve even when the two quantities themselves do not decouple, so that an outer-loop optimizer can climb $V_{\text{adaptive}}(\bc)$ with a single Bellman solve per iteration.
+
+\subsection{A natural shortcut via EVPI, and why it fails}
+\label{sec:evpi_shortcut}
+
+Before committing to the joint solve, it is worth asking whether some cheaper criterion identifies the right $\bc$.  The four-functional decomposition suggests a tempting candidate: the EVPI.  Chaining the inequalities
 \begin{equation}
-V_{\text{fixed}}(\bc) \;\le\; V_{\text{adaptive}}(\bc) \;\le\; \E_{\bx}[V_{\text{oracle}}(\bx, \bc)].
+V_{\text{fixed}}(\bc) \;\le\; V_{\text{adaptive}}(\bc) \;\le\; \E_{\bx}[V_{\text{oracle}}(\bx, \bc)]
 \label{eq:chain}
 \end{equation}
-The left inequality is trivial (fixed schedules are a subset of adaptive policies).  The right inequality is the EVPI bound: no adaptive policy can do better than an oracle who knows $\bx$ outright.  Rearranging,
+(fixed schedules are a subset of adaptive policies, and no policy beats the clairvoyant oracle) gives the EVPI upper bound
 \begin{equation}
 V_{\text{adaptive}}(\bc) - V_{\text{fixed}}(\bc) \;\le\; \E[\mathrm{IG}](\bc).
 \label{eq:evpi}
 \end{equation}
-This is the standard EVPI upper bound on adaptive gain.
+Since $V_{\text{oracle}}$ and $V_{\text{fixed}}$ are obtainable by direct schedule enumeration, $\E[\mathrm{IG}](\bc)$ is cheap to compute in any setting where the schedule space is enumerable, unlike $V_{\text{adaptive}}(\bc)$ which requires a full backward-induction DP.  So one might hope to pick $\bc^{\text{EVPI}} = \argmax_{\bc} \E[\mathrm{IG}](\bc)$ and proceed.
 
-\subsection{The EVPI is loose: a central empirical fact}
-
-The critical empirical observation that motivates the paper, and which we will back up quantitatively in Section~\ref{sec:radar}, is that the inequality in~\eqref{eq:evpi} is typically \emph{slack}, and the slackness pattern is non-monotone in $\bc$:
+This shortcut fails empirically.  The critical observation, which we back up quantitatively in Section~\ref{sec:radar}, is that the bound in~\eqref{eq:evpi} is typically slack \emph{and its slackness pattern is non-monotone in $\bc$}:
 \begin{equation}
 \argmax_{\bc} \,\E[\mathrm{IG}](\bc) \;\;\ne\;\; \argmax_{\bc} V_{\text{adaptive}}(\bc).
 \label{eq:argmax_mismatch}
 \end{equation}
-In words, the geometry that maximizes the information bound (the pre-screen any statistician's first instinct would reach for) typically \emph{differs from} the geometry that maximizes the attainable adaptive value.  The EVPI is therefore useful as a cheap diagnostic that upper-bounds the adaptive slack at each geometry; the full joint solve remains necessary to pick $\bc$.
+The geometry with the largest in-principle adaptive gain, as measured by EVPI, is typically a geometry where most of that gain is unreachable in practice.  Extreme geometries (a very narrow beam, a near-isotropic beam) produce high EVPI because the oracle's advantage over any blind fixed schedule is enormous; but the adaptive policy, which does not know $\bx$, cannot replicate the oracle's strategy and captures only a small fraction of the nominal headroom.  Interior geometries, by contrast, have a modest EVPI ceiling but let the adaptive policy capture a larger fraction of it, which is what ultimately matters.  On a canonical radar benchmark (Case~Study~A, Section~\ref{sec:radar}), $\bc^{\text{EVPI}}$ loses a factor of $2.8\times$ in attainable $V_{\text{adaptive}}$ to the joint-DP optimum.  The joint solve is unavoidable.
 
-\subsection{EVPI's operational role, calibrated}
+\subsection{EVPI's remaining roles}
 
-The EVPI remains useful in three roles in the design workflow:
+Although EVPI cannot replace the joint solve as a design criterion, it retains three useful roles:
 \begin{enumerate}[nosep]
-\item \textbf{Cheap pre-screen.}  Computing $\E[\mathrm{IG}](\bc)$ requires $V_{\text{oracle}}$ (enumeration over schedules at known $\bx$) and $V_{\text{fixed}}$ (enumeration at unknown $\bx$).  Both are much cheaper than the full Bellman DP for $V_{\text{adaptive}}$.  When the full DP is prohibitive, EVPI alone provides a defensible upper bound on adaptive reach.
-\item \textbf{Post-hoc interpretation.}  After solving the joint problem, $\E[\mathrm{IG}](\bc^\star)$ is the headroom between the adaptive value and the oracle ceiling, useful for understanding where further adaptive gains could come from (longer horizon, richer action set, etc.).
-\item \textbf{Diagnostic lens on the slackness pattern.}  When $\argmax_{\bc} \E[\mathrm{IG}](\bc)$ and $\argmax_{\bc} V_{\text{adaptive}}(\bc)$ disagree, as in~\eqref{eq:argmax_mismatch}, the disagreement structure exposes the physics: extreme geometries typically have the largest EVPI because they leave the most adaptive headroom on the table; interior geometries capture more of a smaller ceiling.  Section~\ref{sec:radar} develops this in detail.
+\item \textbf{A pre-screen when the full joint DP is prohibitive but schedule enumeration is tractable.}  $\E[\mathrm{IG}](\bc)$ depends only on $V_{\text{oracle}}$ and $V_{\text{fixed}}$; its cheapness is inherited from the cheapness of those enumerations (small discrete action sets or low-dimensional continuous actions on a reasonable grid), and evaporates when schedule enumeration itself becomes the bottleneck.
+\item \textbf{Post-hoc interpretation.}  After solving the joint problem, $\E[\mathrm{IG}](\bc^\star)$ quantifies the headroom between the attained adaptive value and the oracle ceiling, indicating where further gains might come from (longer horizon, richer action set).
+\item \textbf{Diagnostic lens on the slackness pattern.}  When $\argmax_{\bc} \E[\mathrm{IG}]$ and $\argmax_{\bc} V_{\text{adaptive}}$ disagree, the disagreement structure exposes the physics: extreme geometries leave the most adaptive headroom on the table, and interior geometries capture more of a smaller ceiling.  Section~\ref{sec:radar} develops this in detail.
 \end{enumerate}
-
-We emphatically do \emph{not} recommend using $\argmax_{\bc} \E[\mathrm{IG}](\bc)$ as a design target when the full joint solve is available; Case~Study~A below shows this costs $2.8\times$ in attainable adaptive value on a canonical benchmark.
 
 %===============================================================================
 \section{Envelope-theorem gradient for the outer loop}
@@ -262,8 +264,9 @@ Convergence to a stationary point of $V^\star$ follows from standard policy-iter
 
 Nothing in the envelope theorem presupposes discrete actions.  For continuous $\bs$, the Bellman backup's inner maximization is a continuous optimization:
 \begin{equation}
-W_k(\bb) = \max_{\bs \in \mathcal{S}} \E_{\by}[W_{k+1}(T(\bb, \bs, \by))].
+V_k(\bb) = \max_{\bs \in \mathcal{S}} \E_{\by}[V_{k+1}(T(\bb, \bs, \by))],
 \end{equation}
+with the terminal condition $V_K$ given by the inner expression of $\Phi$ at the terminal belief (Table~\ref{tab:phi_family}).  The $k=0$ value under the optimal policy coincides with $V(\bc, \pi^\star)$ of Equation~\eqref{eq:V_def}.
 Standard tools, differential dynamic programming~\cite{jacobson1970ddp, tassa2012ddp}, sample-based tree search~\cite{silver2010monte, couetoux2011continuous}, local gradient inner optimization, HJB-PDE solutions~\cite{munos2014bandits}, apply.  The one caveat specific to our setting is that the standard count-statistic belief memoization used by discrete-action Bellman DP (Section~\ref{sec:radar}) fails for continuous actions because distinct inner-optimization candidates produce distinct child beliefs.  We handle this in Case~Study~C by using the Gaussian-posterior surrogate, in which the belief state is finite-dimensional and the Bellman backup admits a one-step-lookahead closed form; and in Case~Study~B by fine discretization of the continuous action dimension (achieving $\sim 99\%$ of the continuous performance at $\sim 10\%$ of the implementation complexity).
 
 %===============================================================================
@@ -599,7 +602,7 @@ Quantum sensing, metrology, and state estimation~\cite{giovannetti2006quantum, b
 
 We advocate demoting the EVPI from a design target to a workflow tool.  Three concrete roles survive:
 \begin{enumerate}[nosep]
-\item A cheap pre-screen when the full joint DP is computationally prohibitive.  $\E[\mathrm{IG}](\bc)$ requires only $V_{\text{oracle}}$ and $V_{\text{fixed}}$, both computable by direct schedule enumeration without backward induction.
+\item A pre-screen when the full joint DP is computationally prohibitive but schedule enumeration remains tractable.  $\E[\mathrm{IG}](\bc)$ requires only $V_{\text{oracle}}$ and $V_{\text{fixed}}$, both computable by direct schedule enumeration without backward induction; the cheapness of EVPI is inherited from the cheapness of those enumerations (small discrete action sets or low-dimensional continuous actions on a reasonable grid), and evaporates when the schedule space is large enough that enumeration itself becomes the bottleneck.
 \item A post-hoc diagnostic showing how much adaptive headroom is available at the joint-optimum geometry.  Small $\E[\mathrm{IG}](\bc^\star)$ means the joint-optimum is close to the oracle ceiling; large values indicate remaining value from longer horizons, richer action sets, or tighter priors.
 \item An interpretive lens on the shape of the $\bc$-landscape.  The non-coincidence of $\argmax \E[\mathrm{IG}]$ and $\argmax V_{\text{adaptive}}$ encodes physics: extreme geometries have large ceilings that no policy can reach; interior geometries have smaller ceilings that adaptive policies can consume a larger fraction of.
 \end{enumerate}
