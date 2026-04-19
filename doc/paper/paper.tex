@@ -36,7 +36,7 @@
 \maketitle
 
 \begin{abstract}
-End-to-end optical inverse design co-optimizes continuous physical hardware with a \emph{one-step} learned reconstruction, with a growing literature explicitly adopting mutual-information or Fisher-information rewards as the training objective~\cite{kellman2019physics, muthumbi2019learned, bostan2018deep, kellman2020datadriven}; adaptive-sensing POMDP theory optimizes a \emph{multi-step adaptive policy} on fixed hardware.  Neither addresses what a real reconfigurable sensor is: a physical geometry whose operator reacts to data as it arrives.  We close this gap.  Using the pointwise expected information-gain functional $\Phi(\bx, \bs, \bc)$ as a family of compatible scalar rewards, we formulate the joint optimization of continuous hardware $\bc$ and Bellman-optimal adaptive policy $\pi$ end-to-end.  An envelope-theorem identity removes the policy Jacobian from the geometry gradient, making the outer loop tractable even when the inner Bellman solver is approximate.  A principled relaxation hierarchy, exact dynamic programming, deep reinforcement learning, certainty-equivalent control, myopic Bayesian $D$-optimal design, and extended-Kalman-filter Gaussian-trace surrogates, renders the formulation portable from 16-state discrete POMDPs to $10^{5}$-pixel photonic topologies.  Three case studies demonstrate the framework at three scales and under three different choices of $\Phi$: (i) a radar beam-search POMDP solved by exact enumeration where the classical information-bound-guided geometry loses a factor of $2.8\times$ in attainable adaptive value to the joint-DP optimum, (ii) a superconducting-qubit flux sensor in which joint dynamic-programming co-design achieves a statistically significant $13.4\%$ reduction in deployed mean-squared error ($z = +11.5\sigma$) over the joint Bayesian Cram\'er--Rao (PCRB) baseline, and (iii) a photonic metasensor with 90{,}000 free design pixels co-optimized via the Bayesian Fisher-information-matrix surrogate.  We show that the central operational claim, joint $(\bc, \pi)$ optimization strictly outperforms the decoupled classical blueprint, holds provided three engineering preconditions are met: a sufficiently rich action grid, a scalar reward aligned with the deployment metric, and a physically realistic hardware box.  We advance the Expected Value of Perfect Information as a useful diagnostic pre-screen, not a go/no-go gate.
+Real reconfigurable sensors are continuous physical hardware \emph{plus} a measurement operator that adapts to data.  End-to-end optics co-designs the first half; adaptive-sensing POMDP theory optimizes the second.  Neither does both.  We formulate the joint optimization of continuous hardware $\bc$ and Bellman-optimal adaptive policy $\pi$, enabled by an envelope-theorem gradient that removes the policy Jacobian from the outer loop, and a relaxation hierarchy that scales from exact dynamic programming to Gaussian-posterior surrogates on $10^5$-pixel topologies.  On a radar beam-search POMDP, classical information-bound-guided geometry selection loses $2.8\times$ in attainable adaptive value to the joint-DP optimum.  On a superconducting-qubit flux sensor, joint dynamic-programming co-design reduces deployed mean-squared error by $13.4\%$ at $z{=}{+}11.5\sigma$ over the joint Bayesian Cram\'er--Rao baseline.  A $90{,}000$-pixel photonic metasensor co-designed via the Bayesian Fisher-information-matrix surrogate demonstrates the framework at scale.  For any sensor whose hardware is designed once but whose policy runs forever, joint $(\bc, \pi)$ optimization is the minimum principled procedure.
 \end{abstract}
 
 \tableofcontents
@@ -61,19 +61,13 @@ Closing this gap requires a formulation that (a) is cleanly defined across discr
 \item \textbf{Portability across scales.}  A principled relaxation hierarchy extends the framework from the exact-DP discrete POMDP through Gaussian-posterior extended-Kalman-filter surrogates, with each rung's failure mode catalogued explicitly.  A 90{,}000-pixel photonic metasensor co-designed via the Bayesian Fisher-information-matrix surrogate demonstrates the framework at a scale $10^{4}\times$ beyond what exact Bellman dynamic programming admits.
 \end{enumerate}
 
-\subsection{Positioning: what we do and do not claim}
+\subsection{Relation to prior work}
 
-We do \emph{not} claim that Bellman's equation for POMDPs is novel, this dates to Bellman~\cite{bellman1957dynamic}, Sondik~\cite{sondik1971optimal}, and Smallwood--Sondik~\cite{smallwood1973sondik}; nor that mutual information as a design reward is novel (Lindley 1956~\cite{lindley1956measure}); nor that joint hardware--policy optimization is novel in general (end-to-end optics already does this for \emph{one-step} reconstructions).  Our novelty is the \emph{joint} optimization with \emph{continuous} physical hardware and a \emph{multi-step Bellman-optimal} adaptive policy, enabled by the envelope theorem and a principled relaxation hierarchy.
+The components of our framework are individually well-established: exact Bellman DP for POMDPs~\cite{bellman1957dynamic, sondik1971optimal, smallwood1973sondik}; mutual information as an experimental-design reward (Lindley~\cite{lindley1956measure}); end-to-end optical co-design with learned reconstruction, including information-reward end-to-end imaging by Waller and collaborators~\cite{kellman2019physics, muthumbi2019learned, bostan2018deep, kellman2020datadriven}; the envelope/Danskin theorem~\cite{milgrom2002envelope, danskin1966theory}; Expected Value of Perfect Information as a classical decision-theoretic quantity~\cite{howard1966decision, raiffa1961applied}.  The joint optimization of \emph{continuous} physical hardware with a \emph{multi-step Bellman-optimal} adaptive policy is not standard in any of these: end-to-end optics uses one-step reconstructions, adaptive sensing fixes the hardware, and the EVPI/IG line does not treat continuous physical geometry as a first-class design variable.
 
-We also do \emph{not} claim that the Expected Value of Perfect Information (EVPI)~\cite{howard1966decision, raiffa1961applied} is new, nor that the observation ``EVPI is an upper bound on adaptive gain'' is new.  Our contribution on the EVPI front is the numerically-backed empirical demonstration that $\argmax_{\bc} \E[\mathrm{IG}](\bc) \ne \argmax_{\bc} V_{\text{adaptive}}(\bc)$, with a measured factor of $2.8\times$ gap in attainable adaptive value on a canonical benchmark, and the corresponding observation that EVPI is a useful \emph{diagnostic} but not a replacement for the joint solve.
+Our framework sits downstream of, and is complementary to, the recent program on fundamental limits to light--matter interaction via convex-duality and T-matrix methods~\cite{miller2016fundamental, miller2023bounds, chao2022maximum, molesky2020tmatrix, molesky2020hierarchical, molesky2020bounds, kuang2020maximal, strekalov2022bounds, gustafsson2020upper, schab2020bounds, strekalov2020bounds, molesky2019global, venkataram2020fundamental, jelinek2021upper}: those bounds certify whether a target is achievable by \emph{any} passive medium; we select the $\bc$ that realizes it along with the policy that consumes it.  Likewise for the quantum Fisher information program on wave and photon scattering~\cite{rotter2017light, bouchet2021maximum, carrington2020fisher, defienne2021coincidence, tsang2016quantum, tsang2017ziv, tsang2019resolving}: our $\Phi_{\log J}$ choice in the Gaussian-posterior regime is the Bayesian analog of the maximum-Fisher-information-state object; outside that regime it is one of several reasonable scalar rewards, not the uniquely correct one.
 
-For clarity the paper avoids the following overclaims that a careful reader will reject on sight: ``there is no Bellman equation for continuous actions'' (there is, one uses local gradient inner optimization, differential dynamic programming, or sample-based methods inside the Bellman backup~\cite{jacobson1970ddp, silver2010monte, munos2014bandits}); ``Fisher information bounds are rigorous for finite-horizon Bayesian estimators'' (the Cram\'er--Rao bound is asymptotic and frequentist~\cite{vantrees2007bayesian, tsang2016quantum}); ``photonic information bounds are redundant given our framework'' (the two are complementary, information bounds characterize the best achievable $\Phi$ at \emph{any} policy; our framework produces the policy that realizes the bound, when the bound is tight).
-
-\subsection{Relation to photonic information-bound and quantum-Fisher-information programs}
-
-Our framework is complementary to two adjacent research programs whose intersection with this work merits explicit discussion.  The first is the recent body of work on fundamental limits to light--matter interaction via convex-duality and T-matrix methods~\cite{miller2016fundamental, miller2023bounds, chao2022maximum, molesky2020tmatrix, molesky2020hierarchical, molesky2020bounds, kuang2020maximal, strekalov2022bounds, gustafsson2020upper, schab2020bounds, strekalov2020bounds, molesky2019global, venkataram2020fundamental, jelinek2021upper}.  These bounds characterize the maximum scattering, absorption, radiative heat transfer, or local density of states achievable by \emph{any} passive physical medium respecting electromagnetic reciprocity and passivity.  Our framework sits downstream: given a family of physical media $\{\bc\}$, we ask how to co-optimize $\bc$ with a Bellman-optimal measurement policy.  An information bound tells you \emph{whether} a target $\Phi$ is achievable in principle; our framework tells you \emph{which} $\bc$ in a feasible family realizes it along with the policy that achieves it.
-
-The second is the body of work on quantum Fisher information for wave and photon scattering~\cite{rotter2017light, bouchet2021maximum, carrington2020fisher, defienne2021coincidence, tsang2016quantum, tsang2017ziv, tsang2019resolving}.  That program establishes Fisher-information optimality of specific wave states with respect to specific estimation tasks, and has developed a rigorous vocabulary for what ``the most informative probe'' means in the wave-scattering and quantum-metrology settings.  Our $\Phi_{\log J}$ choice (used in Case~Study~C below) is the natural inheritor of this language: in the Gaussian-posterior extended-Kalman-filter regime, $\Phi_{\log J}(\bx, \bs, \bc) = \tfrac{1}{2} \log \det J_N(\bx, \bs, \bc)$ is precisely the log-volume of the Bayesian Fisher-information matrix.  In this regime our joint-DP machinery reduces to the Bayesian analog of the maximum-Fisher-information-state calculation; outside this regime ($K$ small, bounded-support priors, biased Bayesian estimators) the Fisher-information path is one of several reasonable scalar rewards, not the uniquely correct one.  The paper's $\Phi$-flexibility thesis is designed precisely to accommodate this kind of pluralism across communities.
+Scope.  We make no claim that Bellman's equation, mutual-information rewards, joint hardware--policy co-design in general, or the EVPI upper bound are new.  The novel object is the joint optimization of continuous hardware with a Bellman-optimal adaptive policy, enabled by the envelope theorem and tested on three case studies in three different regimes (discrete POMDP, continuous POMDP, high-dimensional continuous geometry).  A Bellman equation for continuous actions does exist~\cite{jacobson1970ddp, silver2010monte, munos2014bandits}; the Bayesian Cram\'er--Rao bound is asymptotic~\cite{vantrees2007bayesian, tsang2016quantum} and we do not assert it as a tight finite-horizon anchor; our framework consumes information-theoretic upper bounds as certificates, not as substitutes.
 
 \subsection{Organization}
 
@@ -86,37 +80,23 @@ The paper is organized as follows.  Section~\ref{sec:setup} formalizes the joint
 
 \subsection{Sensor model}
 
-A \emph{sensor} in the sense of this paper is a tuple $(\bc, \pi, \hat\bx)$:
-\begin{itemize}[nosep]
-\item $\bc \in \mathcal{C} \subseteq \R^{d_c}$, continuous \emph{physical geometry} fixed at manufacturing time.  Examples: the flux-bias and readout-line mutual inductances of a SQUID loop, the permittivity distribution of an inverse-designed metasurface, the elements of a phased-array antenna.
-\item $\pi: \mathcal{B} \to \mathcal{S}$, a \emph{measurement policy} that maps the current belief $\bb \in \mathcal{B}$ over the unknown state $\bx$ to an action $\bs \in \mathcal{S}$.  For non-adaptive (``fixed-schedule'') policies $\pi$ is a constant function; for adaptive policies $\pi$ depends on the history of observations.
-\item $\hat\bx: \mathcal{B} \to \R^{d_x}$, a \emph{Bayesian point estimator}, conventionally the posterior mean $\hat\bx(\bb) = \mathbb{E}_{\bb}[\bx]$.
-\end{itemize}
-
-The hardware $\bc$ parametrizes the likelihood $p(\by_k \mid \bx, \bs_k; \bc)$ through its physical forward model (Maxwell's equations, Hamiltonian dynamics, etc.).  The policy selects $\bs_k$ online based on the history $\mathcal{F}_{k-1} = \{\bs_{1:k-1}, \by_{1:k-1}\}$.  After $K$ decision epochs the sensor returns the point estimate $\hat\bx(\bb_K)$, and the deployment-time cost is the Bayesian MSE
-\begin{equation}
-  \overline{\mathrm{MSE}}(\bc, \pi) \;=\; \E_{\bx \sim p_0}\E_{\by_{1:K}\mid \bx, \pi, \bc}\!\left[\|\hat\bx(\bb_K) - \bx\|_2^2\right].
-\end{equation}
+A \emph{sensor} in this paper is a tuple $(\bc, \pi)$ where $\bc \in \mathcal{C} \subseteq \R^{d_c}$ is a continuous \emph{physical geometry} fixed at manufacturing time (the flux-bias and readout-line mutual inductances of a SQUID loop, the permittivity distribution of an inverse-designed metasurface, the elements of a phased-array antenna), and $\pi: \mathcal{B} \to \mathcal{S}$ is a \emph{measurement policy} that maps the current belief $\bb \in \mathcal{B}$ over the unknown state $\bx$ to an action $\bs \in \mathcal{S}$.  For non-adaptive (``fixed-schedule'') policies $\pi$ is a constant function of the belief; for adaptive policies $\pi$ depends on the history $\mathcal{F}_{k-1} = \{\bs_{1:k-1}, \by_{1:k-1}\}$.  The hardware $\bc$ parametrizes the likelihood $p(\by_k \mid \bx, \bs_k; \bc)$ through its physical forward model (Maxwell's equations, Hamiltonian dynamics, etc.).  We write $K$ for the horizon, $p_0(\bx)$ for the prior, and reserve $\pi^\star(\bc)$ for the Bellman-optimal policy at fixed $\bc$.  Inner expectations are over observations $\by$ with $\bx, \bc$ held fixed; outer expectations are over the prior $p_0$.
 
 \subsection{Joint optimization statement}
 
-The joint hardware--policy optimization seeks
+A \emph{joint co-design objective} is any scalar functional of the hardware-policy pair,
 \begin{equation}
-  (\bc^\star, \pi^\star) \;=\; \argmin_{\bc \in \mathcal{C},\; \pi \in \Pi}\; \overline{\mathrm{MSE}}(\bc, \pi).
+  V(\bc, \pi) \;=\; \E_{\bx \sim p_0}\, \E_{\by_{1:K} \mid \bx, \pi, \bc}\!\bigl[\, \Phi(\bx, \bs_{1:K}^{\pi}, \bc) \,\bigr],
+  \label{eq:V_def}
+\end{equation}
+where $\Phi: \mathcal{X} \times \mathcal{S}^K \times \mathcal{C} \to \R$ is a user-specified \emph{pointwise reward}.  The joint hardware--policy optimization solves
+\begin{equation}
+  (\bc^\star, \pi^\star) \;=\; \argmax_{\bc \in \mathcal{C},\; \pi \in \Pi}\; V(\bc, \pi).
   \label{eq:joint_opt}
 \end{equation}
-Equivalently, for any strictly-decreasing $g$, the joint optimization maximizes a scalar $V(\bc, \pi) = -g(\overline{\mathrm{MSE}}(\bc, \pi))$; we will construct such scalars from pointwise functionals $\Phi$ in the next section.
+Equation~\eqref{eq:joint_opt} is the sole formal statement in the paper; what varies across applications is only the choice of~$\Phi$.  Two degenerate cases recover classical programs: $\Pi = \{\text{constant policies}\}$ with $\Phi$ minus a reconstruction loss recovers \textbf{end-to-end optics}~\cite{sitzmann2018e2e, chang2019diffractive}; $\mathcal{C} = \{\bc_0\}$ (fixed hardware) with any $\Phi$ recovers \textbf{adaptive sensor management}~\cite{kaelbling1998pomdp, kreucher2005kastella}.  Their pairing is the content of this paper.
 
-Two degenerate cases recover the classical programs:
-\begin{itemize}[nosep]
-\item $\Pi = \{\text{constant policies}\}$ and $\hat\bx = $ learned neural reconstruction: \textbf{end-to-end optics}~\cite{sitzmann2018e2e, chang2019diffractive}.
-\item $\mathcal{C} = \{\bc_0\}$ (fixed hardware), $\Pi = $ all measurable policies: \textbf{adaptive sensor management}~\cite{kaelbling1998pomdp, kreucher2005kastella}.
-\end{itemize}
-Their pairing is the content of this paper.
-
-\subsection{Notation}
-
-We use $K$ for the horizon, $d_c$ for the geometry dimension, $\bb$ for the belief, $\pi^\star$ for the Bellman-optimal policy at fixed $\bc$, and $\Phi$ for the pointwise scalar reward.  Inner expectations are over observations $\by$ (with $\bx$ and $\bc$ held fixed); outer expectations are over the prior $p_0(\bx)$.  When a quantity is computed under the optimal policy at given $\bc$ we write $V^\star(\bc) = V(\bc, \pi^\star(\bc))$.  Throughout the paper ``Fisher information'' refers to the Bayesian Fisher information matrix~\cite{vantrees2007bayesian} unless explicitly qualified as ``classical'' or ``frequentist.''
+For the posterior-mean estimator on continuous $\bx$, the tower-law identity $\E[(\hat\bx_{\text{pm}} - \bx)^2] = \E[\mathrm{Var}(\bx \mid \bb_K)]$ makes the Bayesian MSE a special case of $V(\bc, \pi)$ with $\Phi = -\mathrm{Var}(\bx \mid \bb_K)$.  Section~\ref{sec:phi_family} develops this and two alternative $\Phi$ choices used by the other case studies.
 
 %===============================================================================
 \section{The family of pointwise scalar rewards $\Phi$}
@@ -563,39 +543,25 @@ computed in a single FDFD solve per frequency, then linked via port connections 
 
 \subsection{Joint optimization}
 
-The outer loop is the policy iteration of Section~\ref{sec:envelope}.  At each $\bc$ the inner sensor-parameter argmax $\bs^\star(\bb_k; \bc)$ is obtained by grid search + L-BFGS.  Its derivative with respect to $\bc$ is required by the chain rule; we supply it via a custom \texttt{rrule} that uses the implicit function theorem at the inner argmax (bypassing the need for nested automatic differentiation).  The outer Adam optimizer uses a density filter of radius $R = 5$~pixels and a hyperbolic-tangent threshold projection with continuation parameter $\beta$ annealed from $\beta = 16$ to $\beta = 256$ to enforce fabrication constraints and near-binary permittivity~\cite{wang2011projection, sigmund2007morphology, lazarov2016length, christiansen2018compact}.  The $\beta$ schedule is steered by an autonomous tuning agent that reads inspector snapshots of the geometry, loss-trajectory, and gradient distribution after each cron-scheduled fire and writes a control file consumed by the Julia process on the next iteration~\cite{autotune2026}.
+The outer loop is the policy iteration of Section~\ref{sec:envelope}.  At each $\bc$ the inner sensor-parameter argmax $\bs^\star(\bb_k; \bc)$ is obtained by grid search + L-BFGS.  Its derivative with respect to $\bc$ is required by the chain rule; we supply it via a custom \texttt{rrule} that uses the implicit function theorem at the inner argmax (bypassing the need for nested automatic differentiation).  The outer Adam optimizer uses a density filter and hyperbolic-tangent threshold projection with continuation to enforce fabrication constraints and binary permittivity~\cite{wang2011projection, sigmund2007morphology, lazarov2016length, christiansen2018compact}.
 
-\subsection{Results at the manufacturable $\beta = 256$ binary design}
-
-The autotune run starts from a random permittivity initialization and completes 583 outer Adam iterations through a $\beta$ continuation schedule $\beta \in \{16, 32, 64, 128, 256\}$.  Key milestones:
-\begin{itemize}[nosep]
-\item Moving-average-20 loss drops from $\sim\!2.5$ at initialization to $5.15 \times 10^{-4}$ at the terminal $\beta = 256$ plateau (loss minimum $1.63 \times 10^{-4}$).
-\item Binary percentage of the projected permittivity increases monotonically through the $\beta$ schedule: $10.6\% \to 43\% \to 69.6\% \to 84.8\% \to \mathbf{92.4\%}$ at $\beta = 256$.  The terminal 92.4\% reflects a structural ceiling of the density filter at $R = 5$: the remaining $\sim 7.6\%$ gray pixels concentrate at thin curvilinear interfaces that the filter cannot sharpen further without reducing $R$.
-\item Post-$\beta$-doubling loss spikes decrease progressively as the geometry pre-commits: $159\times$ at $\beta = 32$, $230\times$ at $\beta = 64$, $30\times$ at $\beta = 128$, and \emph{no spike} at $\beta = 256$.  Each spike is followed by clean exponential recovery over 40--80 iterations.  Isolated-pixel fraction remains at the run-minimum $(0.004\text{--}0.007)\%$ throughout, and the geometry is free of wrong-basin blobs (\texttt{grad\_sat\_pct} never exceeds noise).
-\end{itemize}
+\subsection{Optimized binary design and loss trajectory}
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.95\textwidth]{figures/photonic_geometry_beta256.png}
-\caption{The $\beta = 256$ manufacturable photonic geometry at the end of the $583$-iteration autotune run.  Left: raw permittivity field.  Middle: density-filtered permittivity at filter radius $R = 5$ pixels.  Right: tanh-threshold projection at $\beta = 256$; terminal binary fraction is $92.4\%$, with the remaining $\sim 7.6\%$ gray pixels concentrated at thin curvilinear interfaces that the filter cannot sharpen further without reducing $R$.}
-\label{fig:photonic_geometry}
+\includegraphics[width=0.95\textwidth]{figures/photonic_main.png}
+\caption{Final optimized binary permittivity of the 300$\times$300 design region (main panel).  Inset: joint-DP loss trajectory from a fully random initialization through the full co-design; light blue, per-iteration loss; red, 20-iteration moving average; dashed, the transition into the filter-constrained projection phase.}
+\label{fig:photonic_main}
 \end{figure}
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.95\textwidth]{figures/photonic_loss_trajectory.png}
-\caption{Loss trajectory through the $\beta \in \{16, 32, 64, 128, 256\}$ continuation schedule.  Post-doubling loss spikes decrease progressively as the geometry pre-commits: $159\times$, $230\times$, $30\times$, and no spike at $\beta = 256$.  Each spike is followed by clean exponential recovery over $40$--$80$ iterations.  Terminal moving-average-20 loss is $5.15 \times 10^{-4}$; loss minimum is $1.63 \times 10^{-4}$.}
-\label{fig:photonic_loss}
-\end{figure}
+\subsection{Monte-Carlo EKF deployment}
 
-\subsection{Monte-Carlo EKF deployment at the $\beta = 256$ optimum}
-
-Deploying the $\beta = 256$ binary design with the EKF reconstruction and fresh perturbation draws (200 episodes, $K = 10$ EKF steps per episode):
+Deploying the optimized binary design with the EKF reconstruction and fresh perturbation draws (200 episodes, $K = 10$ EKF steps per episode):
 
 \begin{center}
 \begin{tabular}{@{}lccc@{}}
 \toprule
-metric & optimized ($\beta = 256$) & random initial & ratio \\
+metric & optimized & random initial & ratio \\
 \midrule
 EKF relative error (10 steps) & $0.97\%$ & $120\%$ & $\mathbf{123\times}$ better \\
 BFIM trace (step 1)           & $2.50 \times 10^{13}$ & $4.01 \times 10^{10}$ & $\mathbf{622\times}$ \\
@@ -670,7 +636,7 @@ For any sensor whose physical hardware is designed once but whose measurement po
 
 \paragraph{Acknowledgments.}  [redacted for blind review; funding, collaborators, and facility acknowledgments here.]
 
-\bibliographystyle{plainnat}
+\bibliographystyle{unsrtnat}
 \bibliography{paper}
 
 \end{document}
