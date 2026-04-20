@@ -318,14 +318,14 @@ Because the policy at every rung is prescribed as an explicit function of the cu
 \paragraph{Rung 4 --- Fisher-trace surrogate with EKF.}  Replace the information criterion by the Fisher-information trace evaluated at the posterior mean, and replace the exact Bayesian update by an extended Kalman filter: $\bs_k = \argmax_{\bs_k} \tr J(\bar\bx_k, \bs_k, \bc)$ with $\bb_k \approx \mathcal{N}(\bar\bx_k, \Sigma_k)$ propagated by EKF.  Inference: Gaussian moments $(\bar\bx_k, \Sigma_k)$.  This is the cheapest rung still compatible with continuous $\bc$, continuous $\bx$, and arbitrary state dimension.  Failure modes: Gaussian approximation breaks near prior boundaries or under multimodal posteriors; EKF linearization fails when the forward model is strongly non-linear in $\bx$ over the posterior support.
 
 \begin{center}
-\begin{tabular}{@{}lllp{4.2cm}@{}}
+\begin{tabular}{@{}llp{3.9cm}p{3.6cm}@{}}
 \toprule
 rung & inner policy rule & inference primitive & triggered when rung above is intractable \\
 \midrule
-1 & exact Bellman $\argmax$                      & exact belief (grid / tabulated)        & --- \\
-2 & certainty-equivalent oracle at $\hat\bx_k$   & point estimate $\hat\bx_k$             & memoization $|\mathcal{S}|^K \gtrsim 10^6$ \\
-3 & myopic $\argmax_{\bs_k} \E[\Phi \mid \bb_k]$ & full belief $\bb_k$                    & per-step oracle too expensive \\
-4 & $\tr J(\bar\bx_k, \bs_k, \bc)$ + EKF       & Gaussian moments $(\bar\bx_k, \Sigma_k)$ & full-belief expectation too expensive \\
+1 & exact Bellman $\argmax$                      & exact belief (grid / tabulated)          & --- \\
+2 & certainty-equivalent oracle at $\hat\bx_k$   & point estimate $\hat\bx_k$               & memoization $|\mathcal{S}|^K \gtrsim 10^6$ \\
+3 & myopic $\argmax_{\bs_k} \E[\Phi \mid \bb_k]$ & full belief $\bb_k$                      & per-step oracle too expensive \\
+4 & $\tr J(\bar\bx_k, \bs_k, \bc)$ + EKF         & Gaussian $(\bar\bx_k, \Sigma_k)$         & full-belief expectation too expensive \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -343,7 +343,7 @@ Information loss at the analog-to-digital boundary upper-bounds any downstream r
 \label{sec:radar}
 %===============================================================================
 
-The radar beam-search case is the smallest non-trivial POMDP that exhibits the full $V_{\text{oracle}}/V_{\text{fixed}}/V_{\text{adaptive}}/\E[\mathrm{IG}]$ decomposition, and it serves as the pedagogical entry point for the rest of the paper.
+The radar beam-search case is the smallest non-trivial POMDP that exhibits the full $V_{\text{oracle}}$ / $V_{\text{fixed}}$ / $V_{\text{adaptive}}$ / $\E[\mathrm{IG}]$ decomposition, and it serves as the pedagogical entry point for the rest of the paper.
 
 \begin{figure}[h]
 \centering
