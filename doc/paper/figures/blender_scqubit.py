@@ -28,25 +28,48 @@ if "--" in sys.argv:
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
 
-scene.render.engine = "CYCLES"
-scene.cycles.device = "GPU"
-scene.cycles.samples = 512
-scene.cycles.use_denoising = True
-scene.cycles.max_bounces = 8
+# Eevee engine with emission-only shading = cartoon / flat editorial look
+# (no PBR reflections, so no mirror-image of flux lines on the gold).
+scene.render.engine = "BLENDER_EEVEE_NEXT"
 scene.render.resolution_x = 2400
 scene.render.resolution_y = 1800
 scene.render.resolution_percentage = 100
 scene.render.filepath = OUTFILE
 scene.render.image_settings.file_format = "PNG"
-scene.render.film_transparent = True  # composite on white in the final overlay
-scene.view_settings.view_transform = "Filmic"
-scene.view_settings.look = "Medium High Contrast"
+scene.render.film_transparent = True
+scene.view_settings.view_transform = "Standard"    # linear, no Filmic tone map
+scene.view_settings.look = "None"
 
-prefs = bpy.context.preferences
-cprefs = prefs.addons["cycles"].preferences
-cprefs.compute_device_type = "OPTIX"
-for dev in cprefs.devices:
-    dev.use = True
+# Freestyle: black outlines for cartoon edge definition
+scene.render.use_freestyle = True
+scene.render.line_thickness_mode = "ABSOLUTE"
+scene.render.line_thickness = 1.2
+try:
+    vl = scene.view_layers[0]
+    vl.use_freestyle = True
+    fs = vl.freestyle_settings
+    # Wipe default and add a single comprehensive lineset
+    while len(fs.linesets) > 0:
+        fs.linesets.remove(fs.linesets[-1])
+    ls = fs.linesets.new("outline")
+    ls.select_silhouette   = True
+    ls.select_crease       = True
+    ls.select_border       = True
+    ls.select_contour      = True
+    ls.select_edge_mark    = True
+    ls.select_external_contour = True
+    ls.select_material_boundary = True
+    ls.select_suggestive_contour = False   # suggestive contours clutter; disable
+    fs.crease_angle = math.radians(120)    # only outline sharp-ish creases
+    ls.select_by_visibility = True
+    ls.visibility = "VISIBLE"
+    if ls.linestyle is None:
+        lstyle = bpy.data.linestyles.new("outline_style")
+        ls.linestyle = lstyle
+    ls.linestyle.color = (0.05, 0.07, 0.12)
+    ls.linestyle.thickness = 1.2
+except Exception as e:
+    print(f"Freestyle setup warning: {e}")
 
 # World
 world = bpy.data.worlds.new("World")
@@ -62,33 +85,42 @@ bg.inputs["Strength"].default_value = 0.30
 nt.links.new(bg.outputs["Background"], out.inputs["Surface"])
 
 # -------------------------------------------------------------------
-# Materials
+# Flat (toon/editorial) materials: mix emission with a tiny diffuse
+# component so that shading gradients still read softly, but the surface
+# does not reflect other geometry.  No PBR, no mirror-image of flux
+# lines on gold.
 def mat_principled(name, color, metallic=0.0, roughness=0.5,
                    transmission=0.0, coat=0.0, emission=None,
                    emission_strength=0.0, alpha=1.0):
+    # All params except `color` and `alpha` are ignored in flat mode.
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     nt = m.node_tree
     for n in list(nt.nodes):
         nt.nodes.remove(n)
     out = nt.nodes.new("ShaderNodeOutputMaterial")
-    bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
-    bsdf.inputs["Base Color"].default_value = (*color, 1.0)
-    bsdf.inputs["Metallic"].default_value = metallic
-    bsdf.inputs["Roughness"].default_value = roughness
-    try: bsdf.inputs["Transmission Weight"].default_value = transmission
-    except Exception: pass
-    try: bsdf.inputs["Coat Weight"].default_value = coat
-    except Exception: pass
-    if emission:
-        try:
-            bsdf.inputs["Emission Color"].default_value = (*emission, 1.0)
-            bsdf.inputs["Emission Strength"].default_value = emission_strength
-        except Exception: pass
+    # Pure Emission with a touch of diffuse, mixed by an AO-ish factor
+    emis = nt.nodes.new("ShaderNodeEmission")
+    emis.inputs["Color"].default_value = (*color, 1.0)
+    emis.inputs["Strength"].default_value = 1.0
+    diff = nt.nodes.new("ShaderNodeBsdfDiffuse")
+    # slightly darker diffuse tint so shading gradient stays subtle
+    diff.inputs["Color"].default_value = (
+        color[0]*0.72, color[1]*0.72, color[2]*0.72, 1.0)
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    mix.inputs["Fac"].default_value = 0.18   # mostly emission
+    nt.links.new(emis.outputs["Emission"], mix.inputs[1])
+    nt.links.new(diff.outputs["BSDF"],     mix.inputs[2])
     if alpha < 1.0:
-        bsdf.inputs["Alpha"].default_value = alpha
+        trans = nt.nodes.new("ShaderNodeBsdfTransparent")
+        mix2 = nt.nodes.new("ShaderNodeMixShader")
+        mix2.inputs["Fac"].default_value = alpha
+        nt.links.new(trans.outputs["BSDF"], mix2.inputs[1])
+        nt.links.new(mix.outputs["Shader"], mix2.inputs[2])
+        nt.links.new(mix2.outputs["Shader"], out.inputs["Surface"])
         m.blend_method = "BLEND"
-    nt.links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+    else:
+        nt.links.new(mix.outputs["Shader"], out.inputs["Surface"])
     return m
 
 mat_sapphire = mat_principled("sapphire", (0.24, 0.36, 0.58),
@@ -113,10 +145,9 @@ mat_flux     = mat_principled("flux",     (0.88, 0.22, 0.10),
                                emission=(0.96, 0.30, 0.15),
                                emission_strength=0.8)
 # Amber insulating layer for JJ barrier (between two gold pads)
-mat_jj_barrier = mat_principled("jj_barrier", (0.92, 0.32, 0.14),
-                                 metallic=0.0, roughness=0.35,
-                                 emission=(1.0, 0.42, 0.18),
-                                 emission_strength=0.9)
+# Deep/dark blue JJ marker (user request)
+mat_jj_barrier = mat_principled("jj_barrier", (0.08, 0.12, 0.50),
+                                 metallic=0.0, roughness=0.35)
 
 # -------------------------------------------------------------------
 # Convention: all primitive_cube_add use size=1 -> edge-length 1, so setting
@@ -209,46 +240,62 @@ for y_sign in (+1, -1):
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     b.data.materials.append(mat_gold)
 
-# Two Josephson junctions: realistic overlap-barrier-overlap structure.
-#   - Two gold pads overlap each other at a thin amber barrier layer.
-#   - Pads protrude slightly above/below the SQUID loop surface, so the
-#     JJ stack is clearly distinguishable from the ring.
-#
-# Layout: for each JJ on the top/bottom SQUID segment, build three parts:
-#   * Left pad (gold, short stub into the loop wall)
-#   * Right pad (gold, short stub into the loop wall, overlapping the left)
-#   * Barrier (thin amber layer sandwiched between the two pads)
+# Two Josephson junctions, each depicted as a proper 3-element overlap:
+#   (a) the SQUID ring is BROKEN at the JJ position — a small rectangular
+#       gap cut out of the ring's top/bottom segment.
+#   (b) two gold electrodes extend across the gap, each attached to one
+#       side of the ring, overlapping at the center.
+#   (c) the insulating barrier (dark blue) sits flat at the overlap,
+#       visible as a thin stripe separating the two electrode tabs.
+# All flat (same z as ring top), no bumps, no cast shadows on the ring.
+
+GAP_W       = 0.28              # ring break width in x (along the ring)
+ELECTRODE_W = 0.20              # each electrode tab extends this far
+BARRIER_W   = 0.06              # insulator width at the overlap
+Z_TOP_RING  = Z_SQ + SQ_Z/2
+ELEC_Z      = Z_TOP_RING + 0.002
+BARRIER_Z   = Z_TOP_RING + 0.010
+ELEC_THK    = 0.018
+BARRIER_THK = 0.014
+
 for y_sign in (+1, -1):
-    y = y_sign * (SQ_H/2 - SQ_TH/2)
-    # Pad dimensions
-    pad_w = 0.22    # width of each pad along the loop direction
-    pad_d = SQ_TH * 1.50   # into/out of loop (wider than ring)
-    pad_h = SQ_Z * 1.40
-    barrier_w = 0.06
-    overlap  = 0.02
-    # left pad (slightly above)
+    y_center = y_sign * (SQ_H/2 - SQ_TH/2)
+
+    # (a) CUT a gap out of the top/bottom ring segment.
+    # Build a small subtraction cube at (SQ_CX, y_center, Z_TOP_RING) of size
+    # (GAP_W, SQ_TH*1.2, SQ_Z*1.2) and boolean-difference it from the SQUID ring.
     bpy.ops.mesh.primitive_cube_add(size=1,
-        location=(SQ_CX - (pad_w - barrier_w)/2 - overlap,
-                  y, Z_SQ + SQ_Z/2 + pad_h/2 * 0.35))
-    lp = bpy.context.active_object
-    lp.scale = (pad_w, pad_d, pad_h)
+        location=(SQ_CX, y_center, Z_TOP_RING))
+    gap = bpy.context.active_object
+    gap.scale = (GAP_W, SQ_TH * 1.40, SQ_Z * 1.40)
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    lp.data.materials.append(mat_gold)
-    # right pad (slightly lower)
+
+    bpy.context.view_layer.objects.active = squid
+    mod = squid.modifiers.new(f"jj_gap_{y_sign}", type="BOOLEAN")
+    mod.object = gap
+    mod.operation = "DIFFERENCE"
+    bpy.ops.object.modifier_apply(modifier=f"jj_gap_{y_sign}")
+    bpy.data.objects.remove(gap, do_unlink=True)
+
+    # (b) Two gold electrode tabs, one on each side of the gap, overlapping.
+    # Each tab is ELECTRODE_W wide; they overlap by ELECTRODE_W - GAP_W/2 + 0.02.
+    left_cx  = SQ_CX - (GAP_W/2) + ELECTRODE_W/2 - 0.01
+    right_cx = SQ_CX + (GAP_W/2) - ELECTRODE_W/2 + 0.01
+    for ecx in (left_cx, right_cx):
+        bpy.ops.mesh.primitive_cube_add(size=1,
+            location=(ecx, y_center, ELEC_Z))
+        tab = bpy.context.active_object
+        tab.scale = (ELECTRODE_W, SQ_TH * 0.92, ELEC_THK)
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        tab.data.materials.append(mat_gold)
+
+    # (c) Dark-blue insulating barrier at the overlap (center of the gap)
     bpy.ops.mesh.primitive_cube_add(size=1,
-        location=(SQ_CX + (pad_w - barrier_w)/2 + overlap,
-                  y, Z_SQ + SQ_Z/2 + pad_h/2 * 0.15))
-    rp = bpy.context.active_object
-    rp.scale = (pad_w, pad_d, pad_h)
+        location=(SQ_CX, y_center, BARRIER_Z))
+    barrier = bpy.context.active_object
+    barrier.scale = (BARRIER_W, SQ_TH * 1.02, BARRIER_THK)
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    rp.data.materials.append(mat_gold)
-    # thin amber barrier (in the overlap region between the two pads)
-    bpy.ops.mesh.primitive_cube_add(size=1,
-        location=(SQ_CX, y, Z_SQ + SQ_Z/2 + pad_h/2 * 0.28))
-    br = bpy.context.active_object
-    br.scale = (barrier_w, pad_d * 1.02, pad_h * 0.9)
-    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    br.data.materials.append(mat_jj_barrier)
+    barrier.data.materials.append(mat_jj_barrier)
 
 # -------------------------------------------------------------------
 # Purple flux-bias line: a U-bend hugging the +x side of the SQUID, visibly
@@ -270,106 +317,100 @@ def add_wire_poly(points, radius, material):
     obj.data.materials.append(material)
     return obj
 
-# Flux-bias line: a thin flat-on-chip trace (purple) routed from two chip-edge
-# bond pads, hugging the +x side of the SQUID loop at chip-surface height.
-# The trace is a RIBBON (flat rectangular wire), not a floating tube.
+# Flux-bias line: a thin flat trace (purple) on the chip surface, drawn
+# as a SMOOTH BEZIER CURVE with a rectangular cross-section (bevel object).
+# This replaces angular straight-segment slabs whose sharp corners read as
+# ugly kinks; bezier AUTO handles give continuous-tangent bends.
 
-BIAS_Z = CHIP_H + 0.02            # trace sits on chip surface
-BIAS_HALFWIDTH = 0.09
+BIAS_Z = CHIP_H + 0.025            # trace sits on chip surface
+BIAS_HALFW = 0.085
 BIAS_THK = 0.04
-PAD_SIZE = 0.55                   # square bond pads at chip edges
+PAD_SIZE = 0.55
 PAD_ZH   = 0.06
 
-# Two bond pads at the +x chip edge (y = ±3.4)
-for y_pad in (-3.2, 3.2):
+# Two square bond pads at the +x chip edge
+for y_pad in (-3.3, 3.3):
     bpy.ops.mesh.primitive_cube_add(size=1,
-        location=(CHIP_W/2 - PAD_SIZE/2 - 0.2, y_pad, BIAS_Z + PAD_ZH/2))
+        location=(CHIP_W/2 - PAD_SIZE/2 - 0.15, y_pad, BIAS_Z + PAD_ZH/2))
     pad = bpy.context.active_object
     pad.scale = (PAD_SIZE, PAD_SIZE, PAD_ZH)
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     pad.data.materials.append(mat_purple)
 
-# Trace segments: lay out as a ribbon following a polyline of waypoints, but
-# built from rectangular slabs at the chip-surface height.
-# Waypoints in (x, y):
-bias_path = [
-    (CHIP_W/2 - 0.5, -3.2),
-    (SQ_CX + SQ_W/2 + 0.30, -2.0),
-    (SQ_CX + SQ_W/2 + 0.30, -0.35),   # approaches SQUID from bottom-right
-    (SQ_CX + SQ_W/2 + 0.30,  0.35),   # passes around SQUID +x side
-    (SQ_CX + SQ_W/2 + 0.30,  2.0),
-    (CHIP_W/2 - 0.5,  3.2),
+# Bezier waypoints routed from -y pad -> around SQUID +x side -> +y pad
+bias_waypoints = [
+    (CHIP_W/2 - 0.55, -3.3, BIAS_Z + BIAS_THK/2),
+    (SQ_CX + SQ_W/2 + 0.80, -2.20, BIAS_Z + BIAS_THK/2),
+    (SQ_CX + SQ_W/2 + 0.30, -1.00, BIAS_Z + BIAS_THK/2),
+    (SQ_CX + SQ_W/2 + 0.30,  0.00, BIAS_Z + BIAS_THK/2),  # hugs SQUID side
+    (SQ_CX + SQ_W/2 + 0.30,  1.00, BIAS_Z + BIAS_THK/2),
+    (SQ_CX + SQ_W/2 + 0.80,  2.20, BIAS_Z + BIAS_THK/2),
+    (CHIP_W/2 - 0.55,  3.3, BIAS_Z + BIAS_THK/2),
 ]
-for i in range(len(bias_path) - 1):
-    (x0, y0), (x1, y1) = bias_path[i], bias_path[i+1]
-    cx = (x0 + x1) / 2
-    cy = (y0 + y1) / 2
-    dx, dy = x1 - x0, y1 - y0
-    length = math.sqrt(dx*dx + dy*dy)
-    angle = math.atan2(dy, dx)
-    bpy.ops.mesh.primitive_cube_add(size=1, location=(cx, cy, BIAS_Z + BIAS_THK/2),
-                                    rotation=(0, 0, angle))
-    seg = bpy.context.active_object
-    seg.scale = (length, 2*BIAS_HALFWIDTH, BIAS_THK)
-    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    seg.data.materials.append(mat_purple)
-# Bevel to smooth corners slightly (separate pass per object; skip for speed)
+
+# Build a rectangular BEVEL profile (flat ribbon: width 2*BIAS_HALFW, thickness BIAS_THK)
+# Method: create a small rectangular curve as the bevel object for the main bezier.
+bev_curve_data = bpy.data.curves.new("bias_bevel", type="CURVE")
+bev_curve_data.dimensions = "3D"
+sp_b = bev_curve_data.splines.new("POLY")
+# rectangle in local XY of the bevel, traced counterclockwise
+rect_pts = [( BIAS_HALFW, -BIAS_THK/2),
+            ( BIAS_HALFW,  BIAS_THK/2),
+            (-BIAS_HALFW,  BIAS_THK/2),
+            (-BIAS_HALFW, -BIAS_THK/2),
+            ( BIAS_HALFW, -BIAS_THK/2)]
+sp_b.points.add(len(rect_pts)-1)
+for i, (u, v) in enumerate(rect_pts):
+    sp_b.points[i].co = (u, v, 0.0, 1.0)
+bev_obj = bpy.data.objects.new("bias_bevel", bev_curve_data)
+bpy.context.collection.objects.link(bev_obj)
+
+# Main bezier path
+main_curve = bpy.data.curves.new("bias_trace", type="CURVE")
+main_curve.dimensions = "3D"
+sp_m = main_curve.splines.new("BEZIER")
+sp_m.bezier_points.add(len(bias_waypoints)-1)
+for i, (x, y, z) in enumerate(bias_waypoints):
+    bp = sp_m.bezier_points[i]
+    bp.co = (x, y, z)
+    bp.handle_left_type  = "AUTO"
+    bp.handle_right_type = "AUTO"
+main_curve.bevel_mode   = "OBJECT"
+main_curve.bevel_object = bev_obj
+trace_obj = bpy.data.objects.new("bias_trace", main_curve)
+bpy.context.collection.objects.link(trace_obj)
+trace_obj.data.materials.append(mat_purple)
 
 # -------------------------------------------------------------------
-# Magnetic flux lines threading the SQUID loop.
-# We draw a set of 5 parallel vertical tubes spaced across the loop
-# interior, each with an up-arrow cap.  Each tube has a gentle S-curve
-# near the SQUID plane to visualise the field bending as it passes through
-# the loop (dipole-like).
-FLUX_TUBE_R   = 0.035
-FLUX_Z_TOP    = Z_SQ + SQ_Z + 2.3
-FLUX_Z_BOT    = Z_SQ - 1.6
-# Spread positions across the SQUID loop interior in BOTH x and y so the
-# tubes are individually visible from the camera (which looks from -y).
-interior_x_half = SQ_W/2 - SQ_TH - 0.12
-interior_y_half = SQ_H/2 - SQ_TH - 0.12
-# 5 lines along x (visible row in camera view)
-flux_positions_x = [
-    SQ_CX - 0.70*interior_x_half,
-    SQ_CX - 0.35*interior_x_half,
-    SQ_CX,
-    SQ_CX + 0.35*interior_x_half,
-    SQ_CX + 0.70*interior_x_half,
-]
-# offset y slightly for perspective depth (a shallow V pattern)
-flux_positions_y = [-0.3*interior_y_half,
-                    -0.15*interior_y_half,
-                     0.0,
-                    -0.15*interior_y_half,
-                    -0.3*interior_y_half]
+# External magnetic flux through the SQUID: uniform far-field
+# approximation — three parallel straight vertical arrows pointing DOWN
+# through the loop interior.  This is the standard textbook symbol for a
+# nearly-uniform flux density threading a small loop (valid when the
+# bias source is far compared to the loop size).  Straight + parallel
+# conveys uniform B without misleading curvature.
+plane_z = Z_SQ + SQ_Z/2
+interior_x_half = SQ_W/2 - SQ_TH - 0.15
+flux_arrow_xs = [SQ_CX - 0.55*interior_x_half,
+                 SQ_CX,
+                 SQ_CX + 0.55*interior_x_half]
+ARROW_TOP_Z   = plane_z + 2.4          # top of shaft (high above loop)
+ARROW_TIP_Z   = plane_z + 0.15         # cone tip just above SQUID top
+CONE_HEIGHT   = 0.40
+SHAFT_RADIUS  = 0.055
 
-def add_flux_tube(cx, cy):
-    curve_data = bpy.data.curves.new("flux_line", type="CURVE")
-    curve_data.dimensions = "3D"
-    sp = curve_data.splines.new("BEZIER")
-    # three anchors: top, plane, bottom — with slight curvature in x
-    pts3 = [
-        (cx, cy, FLUX_Z_TOP),
-        (cx, cy, Z_SQ + SQ_Z/2),
-        (cx, cy, FLUX_Z_BOT),
-    ]
-    sp.bezier_points.add(len(pts3)-1)
-    for i, p in enumerate(pts3):
-        bp = sp.bezier_points[i]
-        bp.co = p
-        bp.handle_left_type  = "AUTO"
-        bp.handle_right_type = "AUTO"
-    curve_data.bevel_depth = FLUX_TUBE_R
-    curve_data.bevel_resolution = 8
-    obj = bpy.data.objects.new("flux_line", curve_data)
-    bpy.context.collection.objects.link(obj)
-    obj.data.materials.append(mat_flux)
-
-for (cx, cy) in zip(flux_positions_x, flux_positions_y):
-    add_flux_tube(cx, cy)
-    # Upward arrow cap at the top of each line
-    bpy.ops.mesh.primitive_cone_add(radius1=0.085, radius2=0.0, depth=0.22,
-        location=(cx, cy, FLUX_Z_TOP + 0.10), vertices=28)
+for ax_x in flux_arrow_xs:
+    shaft_bot = ARROW_TIP_Z + CONE_HEIGHT       # where shaft meets cone base
+    shaft_top = ARROW_TOP_Z
+    shaft_mid = (shaft_top + shaft_bot) / 2
+    shaft_h   = shaft_top - shaft_bot
+    bpy.ops.mesh.primitive_cylinder_add(radius=SHAFT_RADIUS,
+        depth=shaft_h, location=(ax_x, 0, shaft_mid), vertices=28)
+    bpy.context.active_object.data.materials.append(mat_flux)
+    # cone tip pointing DOWN (base at shaft bottom, tip at ARROW_TIP_Z)
+    bpy.ops.mesh.primitive_cone_add(radius1=SHAFT_RADIUS * 2.8, radius2=0.0,
+        depth=CONE_HEIGHT,
+        location=(ax_x, 0, ARROW_TIP_Z + CONE_HEIGHT/2),
+        rotation=(math.pi, 0, 0), vertices=28)
     bpy.context.active_object.data.materials.append(mat_flux)
 
 # -------------------------------------------------------------------
