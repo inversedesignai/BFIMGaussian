@@ -186,38 +186,43 @@ V_{\text{adaptive}}(\bc)    &= \max_{\pi \in \Pi} \E_{\bx} \E_{\by\mid\bx, \pi, 
 
 The functional $V_{\text{oracle}}(\bx, \bc)$ is the value attained by a \emph{clairvoyant} sensor that knows the true $\bx$ and picks the best fixed schedule for it; its prior average is an oracle upper bound.  $V_{\text{fixed}}(\bc)$ is the best non-adaptive schedule.  $V_{\text{adaptive}}(\bc)$ is the best adaptive policy, which is the quantity the user ultimately deploys.  $\E[\mathrm{IG}](\bc)$, the \emph{expected ignorance gap} or \emph{expected value of perfect information} (EVPI)~\cite{howard1966decision, raiffa1961applied}, is a well-defined scalar functional of $\bc$ that measures how much adaptive slack exists at that geometry.
 
-\subsection{The case for joint hardware--policy co-design}
+\subsection{Inequalities and the adaptive gain}
+\label{sec:inequalities}
+
+The three values are ordered at every $\bc$,
+\begin{equation}
+V_{\text{fixed}}(\bc) \;\le\; V_{\text{adaptive}}(\bc) \;\le\; \E_{\bx}[V_{\text{oracle}}(\bx, \bc)],
+\label{eq:chain}
+\end{equation}
+because fixed schedules are a subset of adaptive policies (the left inequality) and no policy can beat the clairvoyant oracle (the right inequality).  The \emph{adaptive gain} at hardware $\bc$ is the nonnegative difference $V_{\text{adaptive}}(\bc) - V_{\text{fixed}}(\bc)$, and subtracting $V_{\text{fixed}}$ from Equation~\eqref{eq:chain} bounds it above by the EVPI,
+\begin{equation}
+0 \;\le\; V_{\text{adaptive}}(\bc) - V_{\text{fixed}}(\bc) \;\le\; \E[\mathrm{IG}](\bc).
+\label{eq:evpi}
+\end{equation}
+Equation~\eqref{eq:evpi} is what makes the EVPI a candidate design criterion: if the upper bound were tight, the geometry that maximizes $\E[\mathrm{IG}]$ would coincide with the one that maximizes the adaptive gain.  Whether that hope survives scrutiny is the topic of \S\ref{sec:evpi_shortcut}.
+
+\subsection{Why joint hardware--policy co-design is necessary}
 \label{sec:codesign_case}
 
-The quantity the user deploys is $V_{\text{adaptive}}(\bc)$: the value attained by the best adaptive policy at the chosen hardware.  Two facts make it a function of $\bc$ that cannot be maximized piecewise.
+The quantity the user deploys is $V_{\text{adaptive}}(\bc)$, so the question is which hardware maximizes that deployed value.  Two facts make it a function of $\bc$ that cannot be maximized piecewise.
 
-\paragraph{Fact 1: adaptation extracts real value at most geometries.}  A fixed schedule commits all $K$ measurements in advance, before any data has arrived.  An adaptive policy sees each outcome as it happens and re-routes subsequent measurements accordingly: effort that would have been wasted confirming something the data has already settled gets redirected toward parts of the state space that remain ambiguous.  In an imaging problem this is the difference between a fixed raster scan and one that zooms in on the suspected region; in a qubit-flux sensor it is the difference between a fixed Ramsey delay ladder and one that shortens $\tau$ when the posterior is broad (to avoid phase-wrapping ambiguity) and lengthens $\tau$ once the flux is roughly localized.  The resulting \emph{adaptive gain} $V_{\text{adaptive}}(\bc) - V_{\text{fixed}}(\bc)$ is typically strictly positive and often sizable.
+\paragraph{Fact 1: adaptation extracts real value at most geometries.}  A fixed schedule commits all $K$ measurements in advance, before any data has arrived.  An adaptive policy sees each outcome as it happens and re-routes subsequent measurements accordingly: effort that would have been wasted confirming something the data has already settled gets redirected toward parts of the state space that remain ambiguous.  In an imaging problem this is the difference between a fixed raster scan and one that zooms in on the suspected region; in a qubit-flux sensor it is the difference between a fixed Ramsey delay ladder and one that shortens $\tau$ when the posterior is broad (to avoid phase-wrapping ambiguity) and lengthens $\tau$ once the flux is roughly localized.  The adaptive gain of Equation~\eqref{eq:evpi} is therefore typically strictly positive and often sizable.
 
-\paragraph{Fact 2: the adaptive gain depends nontrivially on $\bc$.}  A hardware configuration that maximizes $V_{\text{fixed}}$ is not in general the hardware that maximizes $V_{\text{adaptive}}$: a geometry good for blind schedules is good because its expected measurements are individually informative on average, and that property tends to leave little room for outcome-dependent re-routing.  Conversely, a geometry with very large \emph{oracle} value (what a clairvoyant sensor with perfect knowledge of $\bx$ could achieve) may put so much of that value out of reach of any policy that only sees past data that the realizable adaptive value is actually small.  The geometry that deploys well under an adaptive policy is an \emph{interior} geometry, one that neither is over-tuned to blind schedules nor relies on clairvoyance; this optimum is not located by examining $V_{\text{fixed}}$ or $V_{\text{oracle}}$ separately.
+\paragraph{Fact 2: the adaptive gain depends nontrivially on $\bc$.}  A hardware configuration that maximizes $V_{\text{fixed}}$ is not in general the hardware that maximizes $V_{\text{adaptive}}$: a geometry good for blind schedules is good because its expected measurements are individually informative on average, and that property tends to leave little room for outcome-dependent re-routing.  Conversely, a geometry with very large oracle value (the right-hand side of Equation~\eqref{eq:chain}) may put so much of that value out of reach of any policy that only sees past data that the realizable adaptive value is actually small.  The geometry that deploys well under an adaptive policy is an \emph{interior} geometry, one that neither is over-tuned to blind schedules nor relies on clairvoyance; this optimum is not located by examining $V_{\text{fixed}}$ or $V_{\text{oracle}}$ separately.
 
 \paragraph{Consequence: the two layers cannot be solved in sequence.}  One cannot pick $\bc$ first (by any single-functional criterion) and then pick $\pi$, because the criterion for a good $\bc$ depends on which $\pi$ will follow.  Joint optimization of $(\bc, \pi)$ is necessary; the rest of the paper is about making it tractable.  Section~\ref{sec:envelope} gives the envelope-theorem identity that decouples the \emph{gradient computation} from the inner-policy solve even when the two quantities themselves do not decouple, so that an outer-loop optimizer can climb $V_{\text{adaptive}}(\bc)$ with a single Bellman solve per iteration.
 
-\subsection{A natural shortcut via EVPI, and why it fails}
+\subsection{Why EVPI does not identify the right geometry}
 \label{sec:evpi_shortcut}
 
-Before committing to the joint solve, it is worth asking whether some cheaper criterion identifies the right $\bc$.  The four-functional decomposition suggests a tempting candidate: the EVPI.  Chaining the inequalities
-\begin{equation}
-V_{\text{fixed}}(\bc) \;\le\; V_{\text{adaptive}}(\bc) \;\le\; \E_{\bx}[V_{\text{oracle}}(\bx, \bc)]
-\label{eq:chain}
-\end{equation}
-(fixed schedules are a subset of adaptive policies, and no policy beats the clairvoyant oracle) gives the EVPI upper bound
-\begin{equation}
-V_{\text{adaptive}}(\bc) - V_{\text{fixed}}(\bc) \;\le\; \E[\mathrm{IG}](\bc).
-\label{eq:evpi}
-\end{equation}
-Since $V_{\text{oracle}}$ and $V_{\text{fixed}}$ are obtainable by direct schedule enumeration, $\E[\mathrm{IG}](\bc)$ is cheap to compute in any setting where the schedule space is enumerable, unlike $V_{\text{adaptive}}(\bc)$ which requires a full backward-induction DP.  So one might hope to pick $\bc^{\text{EVPI}} = \argmax_{\bc} \E[\mathrm{IG}](\bc)$ and proceed.
+Before committing to the joint solve, it is worth asking whether the EVPI can stand in.  Since $V_{\text{oracle}}$ and $V_{\text{fixed}}$ are computable by direct schedule enumeration (no Bellman recursion, no belief tree), $\E[\mathrm{IG}](\bc)$ is a cheap scalar functional of $\bc$, unlike $V_{\text{adaptive}}(\bc)$ which requires the full backward-in-time value iteration.  One might hope that maximizing the easy functional is enough.
 
-This shortcut fails empirically.  The critical observation, which we back up quantitatively in Section~\ref{sec:radar}, is that the bound in~\eqref{eq:evpi} is typically slack \emph{and its slackness pattern is non-monotone in $\bc$}:
+It is not: the upper bound in Equation~\eqref{eq:evpi} is typically slack, and its slackness pattern is non-monotone in $\bc$, so
 \begin{equation}
 \argmax_{\bc} \,\E[\mathrm{IG}](\bc) \;\;\ne\;\; \argmax_{\bc} V_{\text{adaptive}}(\bc).
 \label{eq:argmax_mismatch}
 \end{equation}
-The geometry with the largest in-principle adaptive gain, as measured by EVPI, is typically a geometry where most of that gain is unreachable in practice.  Extreme geometries (a very narrow beam, a near-isotropic beam) produce high EVPI because the oracle's advantage over any blind fixed schedule is enormous; but the adaptive policy, which does not know $\bx$, cannot replicate the oracle's strategy and captures only a small fraction of the nominal headroom.  Interior geometries, by contrast, have a modest EVPI ceiling but let the adaptive policy capture a larger fraction of it, which is what ultimately matters.  On a canonical radar benchmark (Case~Study~A, Section~\ref{sec:radar}), $\bc^{\text{EVPI}}$ loses a factor of $2.8\times$ in attainable $V_{\text{adaptive}}$ to the joint-DP optimum.  The joint solve is unavoidable.
+The geometry with the largest in-principle adaptive gain, as measured by EVPI, is typically a geometry where most of that gain is unreachable in practice.  Extreme geometries (a very narrow beam, a near-isotropic beam) produce high EVPI because the oracle's advantage over any blind fixed schedule is enormous, but the adaptive policy, which does not know $\bx$, cannot replicate the oracle's strategy and captures only a small fraction of the nominal headroom.  Interior geometries have a modest EVPI ceiling but let the adaptive policy capture a larger fraction of it, which is what ultimately matters.  On the radar benchmark of Section~\ref{sec:radar}, $\bc^{\text{EVPI}}$ loses a factor of $2.8\times$ in attainable $V_{\text{adaptive}}$ to the joint-DP optimum; the joint solve is unavoidable.
 
 \subsection{EVPI's remaining roles}
 
