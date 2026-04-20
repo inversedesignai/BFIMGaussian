@@ -322,6 +322,13 @@ Section~\ref{sec:intro} introduced the framing --- the juncture of information l
 
 The radar beam-search case is the smallest non-trivial POMDP that exhibits the full $V_{\text{oracle}}/V_{\text{fixed}}/V_{\text{adaptive}}/\E[\mathrm{IG}]$ decomposition.  We present it as the pedagogical entry point to the paper's quantitative findings.
 
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/radar_scene.png}
+\caption{Case Study A geometry.  A phased-array antenna (16 elements, $\lambda/2$ spacing) on a metallic baseplate interrogates a ring of $K = 16$ target cells.  The true target (red) and the current belief mode (blue) illustrate the adaptive-policy state; the two translucent beam lobes show the policy's current pointing (blue) and next-step candidate (purple) under the joint-DP solution.  The geometry $\bc$ includes element positions and complex excitations that shape the main-lobe width and sidelobe structure.}
+\label{fig:radar_scene}
+\end{figure}
+
 \subsection{Problem setup}
 
 \paragraph{State.}  $\bx \in \{1, \ldots, K\}$ is a target cell on a ring, $K = 16$.  Prior $p_0(\bx) = 1/K$.
@@ -428,6 +435,13 @@ A detection at cell 1 (which covers cells $\{14, 15, 16, 1, 2, 3, 4\}$) narrows 
 %===============================================================================
 
 Case Study A is discrete-state and has no natural MSE metric; Case Study B takes the same exact-DP machinery to a continuous-state problem where the natural deployment metric is Bayesian MSE.  The case study's central claim is the paper's \emph{operational} headline: joint-DP co-design with $\Phi_{\text{Var}}$ beats the joint Bayesian Cram\'er--Rao fixed-schedule baseline on deployed MSE, at statistical significance $z = +11.5\sigma$.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.92\textwidth]{figures/scqubit_scene.png}
+\caption{Case Study B geometry.  Left: the x-mon transmon cross on a sapphire substrate, with the SQUID loop (two Josephson junctions shown as red dots) at the end of the $+x$ arm, a flux-bias line (purple) threading the magnetic flux $\Phi_\mathrm{ext}$ (field line in navy) through the SQUID, a meandering readout resonator (green) on the opposite arm, and an xy-control line (blue) entering from the $+y$ side.  Right: Bloch-sphere representation of the Ramsey measurement --- the qubit state $(|0\rangle + |1\rangle)/\sqrt{2}$ accumulates a phase $\phi = \Delta\omega(\Phi_\mathrm{ext})\, \tau$ (red arc) during the delay $\tau$, and the final projective readout returns a Bernoulli outcome with flux-dependent probability.}
+\label{fig:scqubit_scene}
+\end{figure}
 
 \subsection{Problem setup}
 
@@ -542,6 +556,13 @@ The three preconditions are independent but conjunctively required.  No single i
 %===============================================================================
 
 The two preceding case studies used exact Bellman DP; the photonic case study operates on a $\sim 10^5$-pixel permittivity landscape where exact DP is infeasible.  We demonstrate the relaxation-hierarchy rung 4: Gaussian-posterior with extended-Kalman-filter updates, Bayesian Fisher-information-matrix (BFIM) reward $\Phi_{\log J}$, and implicit-function-theorem differentiation through the inner sensor-parameter argmax.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.92\textwidth]{figures/photonic_3d_scene.png}
+\caption{Case Study C geometry.  The 2D cross-waveguide photonic device is rendered in 3D: silicon pillars (dark) arranged on a lighter cladding slab form the $300 \times 300$ pixel binary permittivity pattern at the $\beta = 256$ autotune checkpoint, coupled to the four waveguide ports at the slab edges.  The translucent overlay above the slab visualizes the E-field intensity at one interrogation frequency; it is for illustration only (generated from a multi-lobe Gaussian envelope on this render).  The joint-DP objective is the Bayesian Fisher-trace $\tr J_N(\bar\bx_k, \bs_k, \bc)$ evaluated at the EKF posterior mean, with $\bs_k = (\phi_1, \phi_2)$ parametrizing the coherent input phases on the two input ports.}
+\label{fig:photonic_scene}
+\end{figure}
 
 \subsection{Problem setup}
 
