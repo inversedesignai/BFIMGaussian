@@ -54,13 +54,13 @@ A mature literature on adaptive sensing and sequential Bayesian experimental des
 
 Closing this gap requires a framework that (a) is cleanly defined across discrete and continuous state spaces, (b) admits a tractable outer gradient with respect to the physical geometry, and (c) offers a hierarchy of relaxations scaling from exact dynamic programming on small POMDPs to high-dimensional continuous hardware inverse design.  We supply all three, and call the procedure \emph{joint dynamic programming}, or \emph{joint-DP}: a single optimization that treats the continuous hardware $\bc$ and the Bellman-optimal adaptive policy $\pi$ as co-equal decision variables, with $\pi$ re-solved by dynamic programming at each outer iterate in $\bc$.  To our knowledge, this is the first formulation in which continuous physical hardware and a multi-step Bellman-optimal adaptive policy are co-designed as a single optimization problem.
 
-Joint-DP improves on the two natural baselines that bracket the problem, on benchmarks where exact comparison is tractable.  The adaptive-sensing POMDP literature runs the Bellman DP at fixed, manufacturer-specified hardware; joint-DP strictly generalizes this by co-optimizing $\bc$ under the adaptive policy, yielding a $123\times$ deployed-MSE improvement on the photonic metasensor of Case Study~C over a non-co-designed baseline.  The OED and physics-of-bounds literatures select $\bc$ to maximize a prior-averaged, fixed-schedule information functional (mutual information, expected-Fisher log-determinant, Expected Value of Perfect Information) and attach an adaptive policy afterwards; on the radar POMDP of Case Study~A the information-functional-maximizing $\bc$ loses a factor of $2.8\times$ in attainable adaptive value to the joint-DP optimum, and on the superconducting-qubit flux sensor of Case Study~B the joint Bayesian Cram\'er--Rao fixed-schedule baseline loses a factor of $11.3\times$ in deployed Bayesian MSE ($z=+132\sigma$).  The performance gaps are first-order in engineering terms.
+Joint-DP improves on the two natural baselines that bracket the problem, on benchmarks where exact comparison is tractable.  The adaptive-sensing POMDP literature runs the Bellman dynamic-programming (DP) recursion (the standard backward-in-time value-iteration procedure that solves for an optimal measurement policy at fixed hardware) joint-DP strictly generalizes this by co-optimizing $\bc$ under the adaptive policy, yielding a $123\times$ deployed-MSE improvement on the photonic metasensor of Case Study~C over a non-co-designed baseline.  The OED and physics-of-bounds literatures select $\bc$ to maximize a prior-averaged, fixed-schedule information functional (mutual information, expected-Fisher log-determinant, Expected Value of Perfect Information) and attach an adaptive policy afterwards; on the radar POMDP of Case Study~A the information-functional-maximizing $\bc$ loses a factor of $2.8\times$ in attainable adaptive value to the joint-DP optimum, and on the superconducting-qubit flux sensor of Case Study~B the joint Bayesian Cram\'er--Rao fixed-schedule baseline loses a factor of $11.3\times$ in deployed Bayesian MSE ($z=+132\sigma$).  The performance gaps are first-order in engineering terms.
 
 \subsection{Contributions}
 
 \begin{enumerate}[leftmargin=2em]
 \item \textbf{Unified formulation.}  A family of pointwise scalar rewards $\Phi(\bx, \bs, \bc)$ (mutual-information-aligned $\Phi_{\text{MI}}$~\cite{lindley1956measure}, Bayesian-MSE-aligned $\Phi_{\text{Var}}$, and Fisher-log-det $\Phi_{\log J}$~\cite{cramer1946mathematical, rao1945information}) fit the same joint-$(\bc, \pi)$ Bellman machinery.  Choosing $\Phi$ is a modeling commitment set by the problem's deployment metric.
-\item \textbf{Structural insight.}  The envelope theorem~\cite{milgrom2002envelope} eliminates the policy Jacobian $\partial \pi^\star / \partial \bc$ from the outer geometry gradient, making joint optimization tractable even when the inner Bellman solver is approximate.
+\item \textbf{Structural insight.}  The envelope theorem~\cite{milgrom2002envelope} (the optimality condition that lets one differentiate a maximum-over-$\pi$ expression by holding $\pi$ fixed at its optimum) eliminates the policy Jacobian $\partial \pi^\star / \partial \bc$ from the outer geometry gradient, making joint optimization tractable even when the inner Bellman solver is approximate.
 \item \textbf{Quantitative findings.}  On benchmarks where exact comparison is tractable, joint-DP delivers performance gaps of $2.8\times$ against classical information-bound-guided geometry selection (radar, Case Study~A); $11.3\times$ at $z=+132\sigma$ in deployed Bayesian MSE against the joint Bayesian Cram\'er--Rao baseline~\cite{vantrees2007bayesian, tichavsky1998posterior} (scqubit, Case Study~B); and $123\times$ in deployed MSE against a non-co-designed baseline (photonic, Case Study~C).
 \item \textbf{Portability across scales.}  A relaxation cascade (exact DP, certainty-equivalent, myopic one-step, Fisher-trace plus EKF) carries the framework from small POMDPs to a $90{,}000$-pixel photonic metasensor, with each rung's failure mode named.
 \end{enumerate}
@@ -115,9 +115,9 @@ Three canonical choices for $\Phi$ emerge naturally from three different bodies 
 \begin{equation}
   \Phi_{\text{MI}}(\bx, \bs, \bc) \;=\; \E_{\by\mid\bx, \bs, \bc}\!\bigl[\ln|\mathrm{supp}(\bb_K)| - H(\bb_K)\bigr],
 \end{equation}
-the expected negative entropy of the terminal belief $\bb_K$ at state $\bx$.  Averaging over the prior gives $\E_{\bx}[\Phi_{\text{MI}}] = I(\bx; \by_{1:K} \mid \bs, \bc)$, the mutual information.  This is the reward of choice for discrete-state problems where MSE is undefined or dominated by 0/1 classification loss~\cite{castanon2008stochastic}, and for any problem in the large-$K$ Bernstein--von Mises regime~\cite{vaart2000asymptotic, clark2021bvm} where the Gaussian-posterior approximation makes MI monotone in MSE.  The photonic and quantum-sensing communities have developed extensive machinery for \emph{upper bounds} on achievable mutual information given physical constraints (reciprocity, passivity, energy); our framework consumes those bounds as constraints on the feasible set $\{\Phi_{\text{MI}}(\cdot, \cdot, \bc) : \bc \in \mathcal{C}\}$ rather than re-deriving them.
+the expected negative entropy of the terminal belief $\bb_K$ at state $\bx$.  Averaging over the prior gives $\E_{\bx}[\Phi_{\text{MI}}] = I(\bx; \by_{1:K} \mid \bs, \bc)$, the mutual information.  This is the reward of choice for discrete-state problems where MSE is undefined or dominated by 0/1 classification loss~\cite{castanon2008stochastic}, and for any problem in the large-$K$ Bernstein--von Mises regime~\cite{vaart2000asymptotic, clark2021bvm} (the asymptotic limit in which the posterior converges to a Gaussian centered near the true parameter, making MI monotone in MSE).  The photonic and quantum-sensing communities have developed extensive machinery for \emph{upper bounds} on achievable mutual information given physical constraints (reciprocity, passivity, energy); our framework consumes those bounds as constraints on the feasible set $\{\Phi_{\text{MI}}(\cdot, \cdot, \bc) : \bc \in \mathcal{C}\}$ rather than re-deriving them.
 
-\paragraph{Bayesian-MSE-aligned reward $\Phi_{\text{Var}}$.}  Inheriting from the Bayesian Cram\'er--Rao tradition~\cite{vantrees2007bayesian} and the posterior-variance-minimization line of Bayesian optimal experimental design~\cite{chaloner1995bayesian, pronzato2010optimal}, the tower law of variance
+\paragraph{Bayesian-MSE-aligned reward $\Phi_{\text{Var}}$.}  Inheriting from the Bayesian Cram\'er--Rao tradition~\cite{vantrees2007bayesian} and the posterior-variance-minimization line of Bayesian optimal experimental design~\cite{chaloner1995bayesian, pronzato2010optimal}, the tower law of variance (the identity that the Bayes-averaged squared error of the posterior mean equals the Bayes-averaged posterior variance)
 \begin{equation}
   \E_{\bx, \by_{1:K}}\!\left[(\hat\bx_{\text{pm}} - \bx)^2\right]
   \;=\; \E_{\by_{1:K}}\!\left[\mathrm{Var}(\bx \mid \by_{1:K})\right]
@@ -288,7 +288,7 @@ Because the policy at every rung is prescribed as an explicit function of the cu
 
 \paragraph{Rung 1 --- Exact Bellman DP.}  $\pi^\star_k = \argmax_{\bs_k} \mathcal{Q}^\star_k(\bb_k, \bs_k)$, the true optimum.  Inference: exact belief $\bb_k$ (tabulated for discrete state; on a $K_\Phi$-point grid for continuous state).  Feasibility ceiling: reachable-belief memoization $\sim|\mathcal{S}|^K$ up to $\sim 10^6$ on a single node.  When this is violated, move to rung 2.
 
-\paragraph{Rung 2 --- Certainty-equivalent control, full horizon.}  At step $k$, form the point estimate $\hat\bx_k = \E[\bx \mid \bb_k]$ (or the MAP) and play the schedule the clairvoyant oracle would choose against $\hat\bx_k$.  Inference: explicit point estimate from the filter.  Plausibly optimal when the posterior concentrates rapidly and the oracle map is Lipschitz in $\bx$; known failure mode: under-exploration when $\hat\bx_k$ is wrong.  Feasibility ceiling: one oracle solve per decision step (itself an $N$-step enumeration or continuous optimization).  When the per-step oracle solve is too expensive, move to rung 3.
+\paragraph{Rung 2 --- Certainty-equivalent control, full horizon.}  At step $k$, form a point estimate of the unknown state (posterior mean $\hat\bx_k = \E[\bx \mid \bb_k]$ or posterior mode / MAP) and play the schedule the clairvoyant oracle would choose against $\hat\bx_k$.  Inference: explicit point estimate from the filter.  Plausibly optimal when the posterior concentrates rapidly and the oracle map is Lipschitz in $\bx$; known failure mode: under-exploration when $\hat\bx_k$ is wrong.  Feasibility ceiling: one oracle solve per decision step (itself an $N$-step enumeration or continuous optimization).  When the per-step oracle solve is too expensive, move to rung 3.
 
 \paragraph{Rung 3 --- Myopic one-step information criterion.}  Collapse the look-ahead to one step: $\bs_k = \argmax_{\bs_k} \E_{\by_k \mid \bb_k, \bs_k}\!\bigl[\Phi(\bx, \bs_k, \bc)\bigr]$, i.e., maximize the single-step expected information (or reward) gain conditional on the full current belief.  Inference: full belief $\bb_k$ maintained by exact Bayesian update.  Plausibly optimal by submodularity-based near-optimality for information-theoretic rewards~\cite{drovandi2014sequential}; failure mode: myopia proper, i.e., no credit for information that pays off two or more steps out.  Feasibility ceiling: one $\argmax$ over $\bs_k$ plus a full-belief expectation per step.  When the full-belief expectation is itself too expensive (high-dimensional continuous $\bx$, for example), move to rung 4.
 
@@ -339,7 +339,7 @@ The radar beam-search case is the smallest non-trivial POMDP that exhibits the f
 \begin{equation}
 p(\by_k = 1 \mid \bx, \bs_k; \bc) = p_\mathrm{FA} + (p_\mathrm{D} - p_\mathrm{FA}) \cdot G_{\bc}(\theta_{\bs_k} - \varphi_{\bx}),
 \end{equation}
-with $p_\mathrm{D} = 0.9$, $p_\mathrm{FA} = 0.05$, cell bearings $\varphi_{\bx} = 2\pi(\bx - 1)/|\mathcal{X}|$, and pointing angles $\theta_{\bs_k}$.  The geometry family is a top-hat beam parametrized by integer width $m \in \{1, \ldots, |\mathcal{X}|\}$: the beam centered on cell $a$ covers all cells within a ring distance of $\lfloor m/2 \rfloor$ from $a$, giving detection probability $p_\mathrm{D}$ inside the beam and $p_\mathrm{FA}$ outside.  $m$ is the discrete design variable for the within-family sweep below.
+with $p_\mathrm{D} = 0.9$, $p_\mathrm{FA} = 0.05$, cell bearings $\varphi_{\bx} = 2\pi(\bx - 1)/|\mathcal{X}|$, and pointing angles $\theta_{\bs_k}$.  The geometry family is a top-hat (uniform-sensitivity, rectangular-profile) beam parametrized by integer width $m \in \{1, \ldots, |\mathcal{X}|\}$: the beam centered on cell $a$ covers all cells within a ring distance of $\lfloor m/2 \rfloor$ from $a$, giving detection probability $p_\mathrm{D}$ uniformly inside the beam and $p_\mathrm{FA}$ uniformly outside.  $m$ is the discrete design variable we sweep below.
 
 \paragraph{Reward.}  $\Phi = \Phi_{\text{MI}}$, since the state is discrete and there is no natural MSE.
 
@@ -364,7 +364,7 @@ EVPI saturation           & $5.8\%$      & $56.4\%$     \\
 
 Note the non-monotone relationship: the narrow regime has the largest $\E[\mathrm{IG}]$ (more than $4\times$ the wide regime's) but the smallest realized adaptive gain (less than half).  The narrow EVPI is ``loose'', most of the adaptive headroom is unreachable by any policy at $K = 4$, while the wide EVPI is relatively tight.
 
-\subsection{Within-family sweep over the top-hat beam width}
+\subsection{Sweep over the top-hat beam width}
 
 Sweeping the integer beam width $m \in \{1, \ldots, |\mathcal{X}|\}$ and reporting all four functionals:
 
@@ -387,13 +387,13 @@ $m$ & $V_{\text{oracle}}$ & $V_{\text{adaptive}}$ & $V_{\text{fixed}}$ & $\E[\ma
 \end{tabular}
 \end{center}
 
-The in-family optimum for $V_{\text{adaptive}}$ is at $m^\star = 9$ ($V_{\text{adaptive}}^\star = 1.704$ nats, saturation $63.5\%$).  $V_{\text{fixed}}$ peaks one cell earlier at $m = 7$.  Realized adaptive gain $V_{\text{adaptive}} - V_{\text{fixed}}$ peaks at $m = 13$ ($0.347$ nats).  And the ignorance gap $\E[\mathrm{IG}]$ peaks at the two \emph{extremes} $m = 1$ (narrow) and $m = 16$ (isotropic), far from any $V_{\text{adaptive}}$ or $V_{\text{fixed}}$ maximum.
+The optimum for $V_{\text{adaptive}}$ is at $m^\star = 9$ ($V_{\text{adaptive}}^\star = 1.704$ nats, saturation $63.5\%$).  $V_{\text{fixed}}$ peaks one cell earlier at $m = 7$.  Realized adaptive gain $V_{\text{adaptive}} - V_{\text{fixed}}$ peaks at $m = 13$ ($0.347$ nats).  And the ignorance gap $\E[\mathrm{IG}]$ peaks at the two \emph{extremes} $m = 1$ (narrow) and $m = 16$ (isotropic), far from any $V_{\text{adaptive}}$ or $V_{\text{fixed}}$ maximum.
 
-\subsection{Within-family three-way comparison: EVPI picks the wrong geometry}
+\subsection{Three-way comparison: EVPI picks the wrong geometry}
 
 \begin{center}
 \fbox{\parbox{0.93\textwidth}{
-\textbf{Top-hat within-family three-way comparison.}
+\textbf{Top-hat three-way comparison.}
 \begin{center}
 \begin{tabular}{@{}lrrrrr@{}}
 \toprule
@@ -401,11 +401,11 @@ $\bc$ & $\E[\mathrm{IG}]$ & $V_{\text{adaptive}}$ & $V_{\text{fixed}}$ & realize
 \midrule
 top-hat $m = 1$ (narrow extreme)            & $\mathbf{2.081}$ & $0.619$          & $0.499$          & $0.121$          & $5.8\%$           \\
 top-hat $m = 16$ (isotropic extreme)        & $2.071$          & $0.611$          & $0.442$          & $0.169$          & $8.1\%$           \\
-top-hat $m = 9$ (in-family optimum)         & $0.478$          & $\mathbf{1.704}$ & $\mathbf{1.401}$ & $\mathbf{0.303}$ & $\mathbf{63.5\%}$ \\
+top-hat $m = 9$ (optimum)                    & $0.478$          & $\mathbf{1.704}$ & $\mathbf{1.401}$ & $\mathbf{0.303}$ & $\mathbf{63.5\%}$ \\
 \bottomrule
 \end{tabular}
 \end{center}
-The in-family optimum $m^\star = 9$ dominates both extremes on every actionable column: $V_{\text{adaptive}}$, $V_{\text{fixed}}$, realized gain, and saturation.  The \emph{only} column on which it is not best is $\E[\mathrm{IG}]$, where both extremes beat it by a factor of four.  An EVPI-only geometry selection would reject $m^\star = 9$ in favor of either $m = 1$ or $m = 16$, both of which realize $V_{\text{adaptive}}$ that is nearly three times worse.  Quantitatively, $V_{\text{adaptive}}(m = 9) / V_{\text{adaptive}}(m = 1) = 1.704 / 0.619 \approx 2.75$: the EVPI-argmax geometry is strictly suboptimal in attainable adaptive value by a factor of $\sim 2.75\times$ on the top-hat family at this problem size.
+The optimum $m^\star = 9$ dominates both extremes on every actionable column: $V_{\text{adaptive}}$, $V_{\text{fixed}}$, realized gain, and saturation.  The \emph{only} column on which it is not best is $\E[\mathrm{IG}]$, where both extremes beat it by a factor of four.  An EVPI-only geometry selection would reject $m^\star = 9$ in favor of either $m = 1$ or $m = 16$, both of which realize $V_{\text{adaptive}}$ that is nearly three times worse.  Quantitatively, $V_{\text{adaptive}}(m = 9) / V_{\text{adaptive}}(m = 1) = 1.704 / 0.619 \approx 2.75$: the EVPI-argmax geometry is strictly suboptimal in attainable adaptive value by a factor of $\sim 2.75\times$ at this problem size.
 }}
 \end{center}
 
@@ -582,7 +582,7 @@ The $11.3\times$ Case~B margin sharpens this general statement.  Both $\bc^\star
 
 We advocate demoting the EVPI from a design target to a workflow tool.  Three concrete roles survive:
 \begin{enumerate}[nosep]
-\item A pre-screen when the full joint DP is computationally prohibitive but schedule enumeration remains tractable.  $\E[\mathrm{IG}](\bc)$ requires only $V_{\text{oracle}}$ and $V_{\text{fixed}}$, both computable by direct schedule enumeration without backward induction; the cheapness of EVPI is inherited from the cheapness of those enumerations (small discrete action sets or low-dimensional continuous actions on a reasonable grid), and evaporates when the schedule space is large enough that enumeration itself becomes the bottleneck.
+\item A pre-screen when the full joint DP is computationally prohibitive but schedule enumeration remains tractable.  $\E[\mathrm{IG}](\bc)$ requires only $V_{\text{oracle}}$ and $V_{\text{fixed}}$, both computable by direct enumeration of candidate schedules, bypassing the backward-in-time value iteration that $V_{\text{adaptive}}$ demands; the cheapness of EVPI is inherited from the cheapness of those enumerations (small discrete action sets or low-dimensional continuous actions on a reasonable grid), and evaporates when the schedule space is large enough that enumeration itself becomes the bottleneck.
 \item A post-hoc diagnostic showing how much adaptive headroom is available at the joint-optimum geometry.  Small $\E[\mathrm{IG}](\bc^\star)$ means the joint-optimum is close to the oracle ceiling; large values indicate remaining value from longer horizons, richer action sets, or tighter priors.
 \item An interpretive lens on the shape of the $\bc$-landscape.  The non-coincidence of $\argmax \E[\mathrm{IG}]$ and $\argmax V_{\text{adaptive}}$ encodes physics: extreme geometries have large ceilings that no policy can reach; interior geometries have smaller ceilings that adaptive policies can consume a larger fraction of.
 \end{enumerate}
