@@ -1,0 +1,30 @@
+scqubit narrow-prior headline (BASELINE c)
+K=4 J=10 L=2 K_Φ=256 phi_max=0.100 N_MC=40000
+c = PAPER_BASELINE: f_q=9.00 GHz, E_C/h=0.254 GHz, κ=5.00e+05 Hz, Δ=2.00 GHz
+ω_d = 2.2821e+10 rad/s  (at φ*=0.4436)
+prior variance = 8.3333e-04
+
+[1/4] Building adaptive policy memo at K_PHI=256...
+  V_adaptive (grid-variance) = -9.9734e-05  memo=8643976  147.9s
+
+[2/4] Deploying adaptive policy (MC)...
+  MSE̅_adaptive = 1.0156e-04 ± 2.33e-06  (11.2s)
+
+[3/4] Finding optimal PCRB schedule (enumerate)...
+  best schedule: [(10, 2), (10, 2), (10, 2), (10, 2)]  log J_P=20.6405  (71.3s)
+
+[4/4] Deploying PCRB schedule (MC)...
+  MSE̅_pcrb = 8.4153e-04 ± 3.78e-06  (7.0s)
+
+========================================================================
+HEADLINE
+------------------------------------------------------------------------
+  prior variance         = 8.3333e-04
+  MSE̅_adaptive (joint DP) = 1.0156e-04 ± 2.33e-06
+  MSE̅_pcrb (baseline)     = 8.4153e-04 ± 3.78e-06
+  1/J_P (CRB bound)       = 1.0863e-09
+  ratio MSE̅_pcrb/MSE̅_adaptive = 8.2862
+  z-score                 = +166.63 σ
+  gap (%)                = 728.6%
+========================================================================
+Saved.

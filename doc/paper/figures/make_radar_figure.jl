@@ -18,6 +18,7 @@ Output: doc/paper/figures/radar_scene.png
 =#
 
 using GLMakie
+using GeometryBasics: GLTriangleFace
 using LinearAlgebra
 
 GLMakie.activate!()

@@ -166,7 +166,7 @@ function render_scqubit_scene()
     phi = range(0, 2π; length=48)
     sx = [sin(t) * cos(p) for t in theta, p in phi]
     sy = [sin(t) * sin(p) for t in theta, p in phi]
-    sz = [cos(t) for _ in theta, _ in phi]
+    sz = [cos(t) for t in theta, _ in phi]
     wireframe!(ax_bloch, sx, sy, sz; color=RGBAf(0.7, 0.7, 0.7, 0.45), linewidth=0.4)
 
     # Axes
