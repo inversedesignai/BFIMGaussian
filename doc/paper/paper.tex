@@ -534,23 +534,23 @@ The two preceding case studies used exact Bellman DP.  The photonic case study o
 \begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{figures/photonic_hero.png}
-\caption{Case Study C overview.  \emph{Left}: deployed-MSE comparison between the joint-DP co-designed 90{,}000-pixel permittivity landscape (MSE $= 9.8 \times 10^{-4}$) and a non-co-designed baseline at the same physical parameters (MSE $= 1.2 \times 10^{-1}$), a $123\times$ reduction; the BFIM surrogate $\tfrac{1}{2}\log\det J_N$ reaches $24.6$~nats at the final projection checkpoint ($\beta = 256$, see §\ref{sec:photonic_joint_opt}).  \emph{Right}: the $300 \times 300$ binary permittivity pattern (silicon dark, cladding light) after co-optimization, with four waveguide ports (N, S, E, W) at the slab edges; the two input phases $(\phi_1, \phi_2)$ are re-chosen adaptively at each epoch, and the gradient through their inner-optimization argmax is obtained by the implicit function theorem (§\ref{sec:envelope}, rung 4).}
+\caption{Case Study C overview.  \emph{Left}: deployed-MSE comparison between the joint-DP co-designed 90{,}000-pixel permittivity landscape (MSE $= 9.8 \times 10^{-4}$) and a non-co-designed baseline at the same physical parameters (MSE $= 1.2 \times 10^{-1}$), a $123\times$ reduction; the BFIM surrogate $\tfrac{1}{2}\log\det J_N$ reaches $24.6$~nats at the final projection checkpoint ($\beta = 256$, see §\ref{sec:photonic_joint_opt}).  \emph{Right}: the $300 \times 300$ binary permittivity pattern (silicon dark, cladding light) of one unit cell after co-optimization, a four-port cross-waveguide scatterer tiled in a $2 \times 2$ lattice to form the full sensor; the two input phases $(\phi_1, \phi_2)$ are re-chosen adaptively at each epoch, and the gradient through their inner-optimization argmax is obtained by the implicit function theorem (§\ref{sec:envelope}, rung 4).}
 \label{fig:photonic_scene}
 \end{figure}
 
 \subsection{Problem setup}
 
-A 2D cross-waveguide photonic device has a design region discretized into $300 \times 300$ pixels of permittivity $\bc \in \R^{90{,}000}$.  The state $\bx \in \R^2$ encodes the amplitudes of two orthogonal physical perturbations (e.g., thermal or mechanical strain modes).  At each of $K_\text{train} = 3$ measurement epochs used during co-design the sensor chooses a pair of input phases $\bs_k = (\phi_1^{(k)}, \phi_2^{(k)})$ applied to coherent broadband inputs at 20 frequencies.  The outputs are the port powers $\by_k \in \R^4$ with additive Gaussian noise.
+The device is a $2 \times 2$ lattice of identical 2D cross-waveguide scatterers, each cell a four-port cross with a central $300 \times 300$-pixel permittivity design region; all four cells share the same inverse-designed geometry, giving $\bc \in [0, 1]^{300 \times 300}$ (equivalently $\bc \in \R^{90{,}000}$) as the outer optimization variable.  The unknown state $\bx = \mathrm{vec}(\Delta n) \in \R^4$ is the vector of per-cell refractive-index perturbations to be estimated.  At each of $K_\text{train} = 3$ measurement epochs during co-design the sensor chooses a pair of input phases $\bs_k = (\phi_1^{(k)}, \phi_2^{(k)})$ applied to two of the lattice's external input ports as coherent broadband drives across 20 frequencies; the observations are the $\by_k \in \R^8$ broadband port powers measured at the lattice's 8 external output ports, with additive Gaussian noise.
 
 \paragraph{Reward.}  $\Phi = \Phi_{\log J}$ with $J_N$ the Bayesian Fisher-information matrix accumulated over the $K_\text{train}$ epochs.  The Gaussian-posterior Kalman filter makes $\log \det J_N$ tractable in closed form at each epoch.
 
 \subsection{Physics and differentiability}
 
-The forward model is a 2D finite-difference frequency-domain (FDFD) Maxwell solver, which returns one $S$-matrix per frequency on a broadband sampling grid of 20 frequencies.  We expand the per-lattice-block $S$-matrix to second order in the local permittivity perturbation $\Delta n$,
+The forward model is a 2D finite-difference frequency-domain (FDFD) Maxwell solver applied to a single unit cell, which returns one $4 \times 4$ $S$-matrix per frequency on a broadband sampling grid of 20 frequencies.  We Taylor-expand the per-cell $S$-matrix to second order in the local refractive-index perturbation $\Delta n$,
 \begin{equation}
 S(\Delta n) \approx S_0 + \frac{\partial S}{\partial n}\Delta n + \frac{1}{2}\frac{\partial^2 S}{\partial n^2}\Delta n^2,
 \end{equation}
-using a single FDFD solve per frequency, and link the blocks via port connections to assemble the 4-port device $S$-matrix.  The Jacobian $\partial \by / \partial \bc$ is obtained via the adjoint method~\cite{hughes2018adjoint, minkov2020inverse}.
+computed with a single FDFD solve per frequency and evaluated independently at each of the four cells with its own $\Delta n_i$.  The four cells are wired together by the port-connection equations to assemble the lattice's 8-port $S$-matrix; the 8 external-port powers, summed over the 20 frequencies against a Gaussian spectral weight, form the observation $\by \in \R^8$.  The Jacobian $\partial \by / \partial \bc$ passes through the cell $S$-matrix coefficients via the FDFD adjoint method~\cite{hughes2018adjoint, minkov2020inverse}.
 
 \subsection{Joint optimization}
 \label{sec:photonic_joint_opt}
