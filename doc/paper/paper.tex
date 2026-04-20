@@ -105,6 +105,19 @@ Equation~\eqref{eq:joint_opt} is the sole formal statement in the paper; what va
 
 For the posterior-mean estimator on continuous $\bx$, the tower-law identity $\E[(\hat\bx_{\text{pm}} - \bx)^2] = \E[\mathrm{Var}(\bx \mid \bb_K)]$ makes the Bayesian MSE a special case of $V(\bc, \pi)$ with $\Phi = -\mathrm{Var}(\bx \mid \bb_K)$.  Section~\ref{sec:phi_family} develops this and two alternative $\Phi$ choices used by the other case studies.
 
+\paragraph{Two-level structure (joint-DP).}  When $\Pi$ is the full space of adaptive policies, the inner $\argmax_\pi$ in Equation~\eqref{eq:joint_opt} is solved by the Bellman recursion on the belief state $\bb_k$,
+\begin{align}
+V_K(\bb;\, \bc) &\;=\; \E_{\bx \mid \bb}\!\left[\,\Phi_0(\bx, \bb;\, \bc)\,\right], \label{eq:bellman_terminal}\\
+V_k(\bb;\, \bc) &\;=\; \max_{\bs_k \in \mathcal{S}}\; \E_{\by_k \mid \bb, \bs_k, \bc}\!\left[\,V_{k+1}\!\bigl(T(\bb, \bs_k, \by_k;\, \bc);\, \bc\bigr)\,\right], \quad k = K-1, \ldots, 0,
+\label{eq:bellman}
+\end{align}
+where $T(\bb, \bs, \by;\, \bc)$ is the Bayesian belief-update operator at action $\bs$ and observation $\by$ (available in closed form whenever the likelihood~\eqref{eq:likelihood} is), and $\Phi_0(\bx, \bb_K;\, \bc)$ is the terminal pointwise reward written as a function of the terminal belief; for $\Phi_{\log J}$ the belief is augmented by the accumulated Fisher-information matrix, and $\Phi_0$ is read off the augmentation.  The inner optimal policy at each step is $\pi^\star_k(\bb;\, \bc) = \argmax_{\bs_k} \E_{\by_k}[V_{k+1}(T(\bb, \bs_k, \by_k;\, \bc);\, \bc)]$, and the joint hardware-policy optimum is the outer maximum of the inner DP value at the initial belief $\bb_0 = p_0$,
+\begin{equation}
+\boxed{\;\bc^\star \;=\; \argmax_{\bc \in \mathcal{C}}\; V^\star(\bc), \qquad V^\star(\bc) \;\coloneqq\; V_0(\bb_0;\, \bc).\;}
+\label{eq:jointDP}
+\end{equation}
+We call Equations~\eqref{eq:bellman_terminal}--\eqref{eq:jointDP} the \emph{joint-DP} structure: an outer continuous optimization over the physical geometry $\bc$ wrapped around an inner Bellman recursion that produces the optimal adaptive policy $\pi^\star(\bc)$ at each candidate $\bc$.  Section~\ref{sec:envelope} gives an envelope-theorem outer gradient that decouples the $\bc$-gradient from the inner Bellman solve; Section~\ref{sec:hierarchy} describes a cascade of relaxations for the inner recursion when exact DP is infeasible.
+
 %===============================================================================
 \subsection{The scalar-reward family $\Phi$}
 \label{sec:phi_family}
