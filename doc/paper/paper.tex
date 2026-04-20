@@ -324,8 +324,8 @@ The radar beam-search case is the smallest non-trivial POMDP that exhibits the f
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.85\textwidth]{figures/radar_scene.png}
-\caption{Case Study A geometry.  A phased-array antenna (16 elements, $\lambda/2$ spacing) on a metallic baseplate interrogates a ring of $K = 16$ target cells.  The true target (red) and the current belief mode (blue) illustrate the adaptive-policy state; the two translucent beam lobes show the policy's current pointing (blue) and next-step candidate (purple) under the joint-DP solution.  The geometry $\bc$ includes element positions and complex excitations that shape the main-lobe width and sidelobe structure.}
+\includegraphics[width=\textwidth]{figures/radar_hero.png}
+\caption{Case Study A overview.  \emph{Left}: the in-family optimum $m^\star = 9$ achieves $V_{\text{adaptive}} = 1.704$ nats against $V_{\text{oracle}} = 1.879$ nats and $V_{\text{fixed}} = 1.401$ nats; the EVPI ($0.478$ nats) is the oracle-fixed ignorance gap that the adaptive policy recovers a fraction of.  \emph{Right}: a $16$-element phased-array antenna (16-element $\lambda/2$ array) interrogates a ring of $K = 16$ target cells; the true target (red, cell 4), the current belief mode (green, cell 7), the current beam pointing at width $m = 3$, and the next-step adaptive redirect under $\pi^\star$.}
 \label{fig:radar_scene}
 \end{figure}
 
@@ -438,8 +438,8 @@ Case Study A is discrete-state and has no natural MSE metric; Case Study B takes
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.92\textwidth]{figures/scqubit_scene.png}
-\caption{Case Study B geometry.  Left: the x-mon transmon cross on a sapphire substrate, with the SQUID loop (two Josephson junctions shown as red dots) at the end of the $+x$ arm, a flux-bias line (purple) threading the magnetic flux $\Phi_\mathrm{ext}$ (field line in navy) through the SQUID, a meandering readout resonator (green) on the opposite arm, and an xy-control line (blue) entering from the $+y$ side.  Right: Bloch-sphere representation of the Ramsey measurement --- the qubit state $(|0\rangle + |1\rangle)/\sqrt{2}$ accumulates a phase $\phi = \Delta\omega(\Phi_\mathrm{ext})\, \tau$ (red arc) during the delay $\tau$, and the final projective readout returns a Bernoulli outcome with flux-dependent probability.}
+\includegraphics[width=\textwidth]{figures/scqubit_hero.png}
+\caption{Case Study B overview.  \emph{Left}: the deployed-MSE comparison at the uninformative prior ($\phi_\mathrm{max} = \Phi_0/2$): joint-DP co-design $\overline{\mathrm{MSE}} = 1.83 \times 10^{-2}\,\Phi_0^2$ vs.\ PCRB baseline $2.07 \times 10^{-2}\,\Phi_0^2$ ($13.4\%$ reduction, $z = +11.5\sigma$); the advantage grows monotonically to $8.3\times$ at $\phi_\mathrm{max} = \Phi_0/10$ and $128\times$ at $\phi_\mathrm{max} = \Phi_0/33$ (§8.7.3).  \emph{Right}: the x-mon transmon cross on sapphire with a SQUID loop (two Josephson junctions, red dots) at the end of the $+x$ arm, a flux-bias line (purple) threading $\Phi_\mathrm{ext}$ (navy field lines) through the SQUID, and a meandering readout resonator (green); the belief evolution $p_0(x) \to p_1(x) \to p_K(x)$ (right inset curves) narrows to a sharp posterior delivering the MSE-optimal estimate $\hat{x}^\star$; the adaptive schedule $s_k = (\tau_k, n_k)$ is chosen by $\pi^\star(b_k)$ each epoch.}
 \label{fig:scqubit_scene}
 \end{figure}
 
@@ -590,8 +590,8 @@ The two preceding case studies used exact Bellman DP; the photonic case study op
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.92\textwidth]{figures/photonic_3d_scene.png}
-\caption{Case Study C geometry.  The 2D cross-waveguide photonic device is rendered in 3D: silicon pillars (dark) arranged on a lighter cladding slab form the $300 \times 300$ pixel binary permittivity pattern at the $\beta = 256$ autotune checkpoint, coupled to the four waveguide ports at the slab edges.  The translucent overlay above the slab visualizes the E-field intensity at one interrogation frequency; it is for illustration only (generated from a multi-lobe Gaussian envelope on this render).  The joint-DP objective is the Bayesian Fisher-trace $\tr J_N(\bar\bx_k, \bs_k, \bc)$ evaluated at the EKF posterior mean, with $\bs_k = (\phi_1, \phi_2)$ parametrizing the coherent input phases on the two input ports.}
+\includegraphics[width=\textwidth]{figures/photonic_hero.png}
+\caption{Case Study C overview.  \emph{Left}: deployed-MSE comparison between the joint-DP co-designed 90{,}000-pixel permittivity landscape (MSE $= 9.8 \times 10^{-4}$) and a non-co-designed baseline at the same physical parameters (MSE $= 1.2 \times 10^{-1}$), a $123\times$ reduction; the BFIM surrogate $\tfrac{1}{2}\log\det J_N$ reaches $24.6$~nats at the final $\beta = 256$ checkpoint.  \emph{Right}: the $300 \times 300$ binary permittivity pattern (silicon dark, cladding light) after co-optimization, with four waveguide ports (N, S, E, W) at the slab edges; the two input phases $(\phi_1, \phi_2)$ are the adaptive sensor-parameter argmax, differentiated through via the implicit-function-theorem envelope gradient (§6, rung 4).}
 \label{fig:photonic_scene}
 \end{figure}
 
