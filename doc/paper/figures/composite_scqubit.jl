@@ -15,12 +15,14 @@ Output: scqubit_hero.png  (replaces prior versions)
 using CairoMakie
 using Printf
 using FileIO
+using Colors
+using FixedPointNumbers
 
 CairoMakie.activate!()
 
-const BG        = RGBf(0.97, 0.93, 0.85)
-const PANEL_BG  = RGBf(0.95, 0.92, 0.82)
-const PANEL_BG2 = RGBf(0.99, 0.97, 0.92)
+const BG        = RGBf(1.0,  1.0,  1.0)    # pure white
+const PANEL_BG  = RGBf(0.96, 0.96, 0.96)   # very light grey panels
+const PANEL_BG2 = RGBf(1.0,  1.0,  1.0)
 const FRAME     = RGBf(0.22, 0.27, 0.38)
 const BAR_DARK  = RGBf(0.10, 0.15, 0.35)
 const BAR_LIGHT = RGBf(0.28, 0.45, 0.72)
@@ -54,13 +56,13 @@ end
 # =============================================================================
 # Canvas
 # =============================================================================
-fig = Figure(size=(1600, 900), backgroundcolor=BG, figure_padding=10)
+fig = Figure(size=(1600, 780), backgroundcolor=BG, figure_padding=8)
 gl = fig[1, 1] = GridLayout()
 left_col  = gl[1, 1] = GridLayout()
 right_col = gl[1, 2] = GridLayout()
 colsize!(gl, 1, Relative(0.30))
 colsize!(gl, 2, Relative(0.70))
-colgap!(gl, 18)
+colgap!(gl, 14)
 
 # =============================================================================
 # LEFT: Performance Metrics (CairoMakie)
@@ -185,13 +187,27 @@ text!(ax_right, 0.36, 0.97;
       text="Flux Sensing POMDP & System Geometry",
       align=(:center, :center), fontsize=18, font=:bold, color=TEXT)
 
+# Flatten transparent PNG onto white background
+function flatten_white(img)
+    out = similar(img, RGB{N0f8})
+    for I in eachindex(img)
+        c = img[I]
+        α = Float64(alpha(c))
+        r = Float64(red(c))  * α + (1 - α)
+        g = Float64(green(c))* α + (1 - α)
+        b = Float64(blue(c)) * α + (1 - α)
+        out[I] = RGB{N0f8}(clamp(r,0,1), clamp(g,0,1), clamp(b,0,1))
+    end
+    out
+end
+
 # Place Blender scqubit render as main image
-scqubit_img = load(joinpath(@__DIR__, "blender_scqubit.png"))
-img_x0, img_y0, img_x1, img_y1 = 0.00, 0.29, 0.72, 0.93
+scqubit_img = flatten_white(load(joinpath(@__DIR__, "blender_scqubit.png")))
+img_x0, img_y0, img_x1, img_y1 = 0.00, 0.29, 0.72, 0.95
 image!(ax_right, img_x0..img_x1, img_y0..img_y1, rotr90(scqubit_img))
 
 # Place Bloch-sphere inset upper-right (square aspect)
-bloch_img = load(joinpath(@__DIR__, "blender_bloch.png"))
+bloch_img = flatten_white(load(joinpath(@__DIR__, "blender_bloch.png")))
 bl_cx, bl_cy = 0.88, 0.82
 bl_w = 0.22
 bl_x0 = bl_cx - bl_w/2;  bl_x1 = bl_cx + bl_w/2

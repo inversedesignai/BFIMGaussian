@@ -38,7 +38,7 @@ scene.render.resolution_y = 1800
 scene.render.resolution_percentage = 100
 scene.render.filepath = OUTFILE
 scene.render.image_settings.file_format = "PNG"
-scene.render.film_transparent = False
+scene.render.film_transparent = True  # composite on white in the final overlay
 scene.view_settings.view_transform = "Filmic"
 scene.view_settings.look = "Medium High Contrast"
 
@@ -57,8 +57,8 @@ for n in list(nt.nodes):
     nt.nodes.remove(n)
 out = nt.nodes.new("ShaderNodeOutputWorld")
 bg = nt.nodes.new("ShaderNodeBackground")
-bg.inputs["Color"].default_value = (0.97, 0.93, 0.85, 1.0)
-bg.inputs["Strength"].default_value = 0.20   # less ambient to preserve shadows
+bg.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)     # pure white
+bg.inputs["Strength"].default_value = 0.30
 nt.links.new(bg.outputs["Background"], out.inputs["Surface"])
 
 # -------------------------------------------------------------------
@@ -107,6 +107,16 @@ mat_navy     = mat_principled("navy",     (0.22, 0.32, 0.65),
                                metallic=0.4, roughness=0.35,
                                emission=(0.30, 0.45, 0.90),
                                emission_strength=1.2)
+# Bright orange-red for magnetic flux lines (contrasts with blue sapphire)
+mat_flux     = mat_principled("flux",     (0.88, 0.22, 0.10),
+                               metallic=0.0, roughness=0.28,
+                               emission=(0.96, 0.30, 0.15),
+                               emission_strength=0.8)
+# Amber insulating layer for JJ barrier (between two gold pads)
+mat_jj_barrier = mat_principled("jj_barrier", (0.92, 0.32, 0.14),
+                                 metallic=0.0, roughness=0.35,
+                                 emission=(1.0, 0.42, 0.18),
+                                 emission_strength=0.9)
 
 # -------------------------------------------------------------------
 # Convention: all primitive_cube_add use size=1 -> edge-length 1, so setting
@@ -199,15 +209,46 @@ for y_sign in (+1, -1):
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     b.data.materials.append(mat_gold)
 
-# Two Josephson junctions (red pads inserted into top/bottom SQUID segments)
+# Two Josephson junctions: realistic overlap-barrier-overlap structure.
+#   - Two gold pads overlap each other at a thin amber barrier layer.
+#   - Pads protrude slightly above/below the SQUID loop surface, so the
+#     JJ stack is clearly distinguishable from the ring.
+#
+# Layout: for each JJ on the top/bottom SQUID segment, build three parts:
+#   * Left pad (gold, short stub into the loop wall)
+#   * Right pad (gold, short stub into the loop wall, overlapping the left)
+#   * Barrier (thin amber layer sandwiched between the two pads)
 for y_sign in (+1, -1):
     y = y_sign * (SQ_H/2 - SQ_TH/2)
+    # Pad dimensions
+    pad_w = 0.22    # width of each pad along the loop direction
+    pad_d = SQ_TH * 1.50   # into/out of loop (wider than ring)
+    pad_h = SQ_Z * 1.40
+    barrier_w = 0.06
+    overlap  = 0.02
+    # left pad (slightly above)
     bpy.ops.mesh.primitive_cube_add(size=1,
-        location=(SQ_CX, y, Z_SQ + SQ_Z/2 + 0.01))
-    jj = bpy.context.active_object
-    jj.scale = (0.30, SQ_TH * 1.05, SQ_Z * 0.6)
+        location=(SQ_CX - (pad_w - barrier_w)/2 - overlap,
+                  y, Z_SQ + SQ_Z/2 + pad_h/2 * 0.35))
+    lp = bpy.context.active_object
+    lp.scale = (pad_w, pad_d, pad_h)
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    jj.data.materials.append(mat_red_jj)
+    lp.data.materials.append(mat_gold)
+    # right pad (slightly lower)
+    bpy.ops.mesh.primitive_cube_add(size=1,
+        location=(SQ_CX + (pad_w - barrier_w)/2 + overlap,
+                  y, Z_SQ + SQ_Z/2 + pad_h/2 * 0.15))
+    rp = bpy.context.active_object
+    rp.scale = (pad_w, pad_d, pad_h)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    rp.data.materials.append(mat_gold)
+    # thin amber barrier (in the overlap region between the two pads)
+    bpy.ops.mesh.primitive_cube_add(size=1,
+        location=(SQ_CX, y, Z_SQ + SQ_Z/2 + pad_h/2 * 0.28))
+    br = bpy.context.active_object
+    br.scale = (barrier_w, pad_d * 1.02, pad_h * 0.9)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    br.data.materials.append(mat_jj_barrier)
 
 # -------------------------------------------------------------------
 # Purple flux-bias line: a U-bend hugging the +x side of the SQUID, visibly
@@ -229,28 +270,107 @@ def add_wire_poly(points, radius, material):
     obj.data.materials.append(material)
     return obj
 
-PURPLE_ELEV = 0.55  # how high the bias line lifts above the chip
-add_wire_poly(
-    [(CHIP_W/2 + 0.8, -3.5, CHIP_H + PURPLE_ELEV),
-     (CHIP_W/2 - 0.8, -2.4, CHIP_H + PURPLE_ELEV*0.9),
-     (SQ_CX + SQ_W/2 + 0.35, -0.6, CHIP_H + PURPLE_ELEV*0.6),
-     (SQ_CX + SQ_W/2 + 0.35, -0.15, Z_SQ + SQ_Z + 0.02),
-     (SQ_CX + SQ_W/2 + 0.35,  0.15, Z_SQ + SQ_Z + 0.02),
-     (SQ_CX + SQ_W/2 + 0.35,  0.6, CHIP_H + PURPLE_ELEV*0.6),
-     (CHIP_W/2 - 0.8,  2.4, CHIP_H + PURPLE_ELEV*0.9),
-     (CHIP_W/2 + 0.8,  3.5, CHIP_H + PURPLE_ELEV)],
-    radius=0.10, material=mat_purple)
+# Flux-bias line: a thin flat-on-chip trace (purple) routed from two chip-edge
+# bond pads, hugging the +x side of the SQUID loop at chip-surface height.
+# The trace is a RIBBON (flat rectangular wire), not a floating tube.
+
+BIAS_Z = CHIP_H + 0.02            # trace sits on chip surface
+BIAS_HALFWIDTH = 0.09
+BIAS_THK = 0.04
+PAD_SIZE = 0.55                   # square bond pads at chip edges
+PAD_ZH   = 0.06
+
+# Two bond pads at the +x chip edge (y = ±3.4)
+for y_pad in (-3.2, 3.2):
+    bpy.ops.mesh.primitive_cube_add(size=1,
+        location=(CHIP_W/2 - PAD_SIZE/2 - 0.2, y_pad, BIAS_Z + PAD_ZH/2))
+    pad = bpy.context.active_object
+    pad.scale = (PAD_SIZE, PAD_SIZE, PAD_ZH)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    pad.data.materials.append(mat_purple)
+
+# Trace segments: lay out as a ribbon following a polyline of waypoints, but
+# built from rectangular slabs at the chip-surface height.
+# Waypoints in (x, y):
+bias_path = [
+    (CHIP_W/2 - 0.5, -3.2),
+    (SQ_CX + SQ_W/2 + 0.30, -2.0),
+    (SQ_CX + SQ_W/2 + 0.30, -0.35),   # approaches SQUID from bottom-right
+    (SQ_CX + SQ_W/2 + 0.30,  0.35),   # passes around SQUID +x side
+    (SQ_CX + SQ_W/2 + 0.30,  2.0),
+    (CHIP_W/2 - 0.5,  3.2),
+]
+for i in range(len(bias_path) - 1):
+    (x0, y0), (x1, y1) = bias_path[i], bias_path[i+1]
+    cx = (x0 + x1) / 2
+    cy = (y0 + y1) / 2
+    dx, dy = x1 - x0, y1 - y0
+    length = math.sqrt(dx*dx + dy*dy)
+    angle = math.atan2(dy, dx)
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(cx, cy, BIAS_Z + BIAS_THK/2),
+                                    rotation=(0, 0, angle))
+    seg = bpy.context.active_object
+    seg.scale = (length, 2*BIAS_HALFWIDTH, BIAS_THK)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    seg.data.materials.append(mat_purple)
+# Bevel to smooth corners slightly (separate pass per object; skip for speed)
 
 # -------------------------------------------------------------------
-# Navy flux arrow (vertical through the SQUID)
-ARROW_LEN = 2.0
-bpy.ops.mesh.primitive_cylinder_add(radius=0.07,
-    depth=ARROW_LEN, location=(SQ_CX, 0, Z_SQ + SQ_Z + ARROW_LEN/2 + 0.10),
-    vertices=48)
-bpy.context.active_object.data.materials.append(mat_navy)
-bpy.ops.mesh.primitive_cone_add(radius1=0.22, radius2=0.0, depth=0.35,
-    location=(SQ_CX, 0, Z_SQ + SQ_Z + ARROW_LEN + 0.27), vertices=48)
-bpy.context.active_object.data.materials.append(mat_navy)
+# Magnetic flux lines threading the SQUID loop.
+# We draw a set of 5 parallel vertical tubes spaced across the loop
+# interior, each with an up-arrow cap.  Each tube has a gentle S-curve
+# near the SQUID plane to visualise the field bending as it passes through
+# the loop (dipole-like).
+FLUX_TUBE_R   = 0.035
+FLUX_Z_TOP    = Z_SQ + SQ_Z + 2.3
+FLUX_Z_BOT    = Z_SQ - 1.6
+# Spread positions across the SQUID loop interior in BOTH x and y so the
+# tubes are individually visible from the camera (which looks from -y).
+interior_x_half = SQ_W/2 - SQ_TH - 0.12
+interior_y_half = SQ_H/2 - SQ_TH - 0.12
+# 5 lines along x (visible row in camera view)
+flux_positions_x = [
+    SQ_CX - 0.70*interior_x_half,
+    SQ_CX - 0.35*interior_x_half,
+    SQ_CX,
+    SQ_CX + 0.35*interior_x_half,
+    SQ_CX + 0.70*interior_x_half,
+]
+# offset y slightly for perspective depth (a shallow V pattern)
+flux_positions_y = [-0.3*interior_y_half,
+                    -0.15*interior_y_half,
+                     0.0,
+                    -0.15*interior_y_half,
+                    -0.3*interior_y_half]
+
+def add_flux_tube(cx, cy):
+    curve_data = bpy.data.curves.new("flux_line", type="CURVE")
+    curve_data.dimensions = "3D"
+    sp = curve_data.splines.new("BEZIER")
+    # three anchors: top, plane, bottom — with slight curvature in x
+    pts3 = [
+        (cx, cy, FLUX_Z_TOP),
+        (cx, cy, Z_SQ + SQ_Z/2),
+        (cx, cy, FLUX_Z_BOT),
+    ]
+    sp.bezier_points.add(len(pts3)-1)
+    for i, p in enumerate(pts3):
+        bp = sp.bezier_points[i]
+        bp.co = p
+        bp.handle_left_type  = "AUTO"
+        bp.handle_right_type = "AUTO"
+    curve_data.bevel_depth = FLUX_TUBE_R
+    curve_data.bevel_resolution = 8
+    obj = bpy.data.objects.new("flux_line", curve_data)
+    bpy.context.collection.objects.link(obj)
+    obj.data.materials.append(mat_flux)
+
+for (cx, cy) in zip(flux_positions_x, flux_positions_y):
+    add_flux_tube(cx, cy)
+    # Upward arrow cap at the top of each line
+    bpy.ops.mesh.primitive_cone_add(radius1=0.085, radius2=0.0, depth=0.22,
+        location=(cx, cy, FLUX_Z_TOP + 0.10), vertices=28)
+    bpy.context.active_object.data.materials.append(mat_flux)
 
 # -------------------------------------------------------------------
 # Readout resonator: green meandering line clearly on the -x arm side of chip
@@ -291,15 +411,7 @@ pad.scale = (0.12, 0.20, ARM_THK/2)
 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 pad.data.materials.append(mat_green)
 
-# -------------------------------------------------------------------
-# xy-control line on +y side of chip (blue short wire entering the chip)
-mat_blue = mat_principled("blue_xy", (0.20, 0.40, 0.85), metallic=0.8,
-                           roughness=0.25)
-add_wire_poly(
-    [(TRANSMON_CX - 0.2, CHIP_D/2 + 1.0, CHIP_H + 0.55),
-     (TRANSMON_CX - 0.2, ARM_LEN + 0.3,  CHIP_H + 0.40),
-     (TRANSMON_CX - 0.2, ARM_LEN + 0.05, Z_METAL + 0.02)],
-    radius=0.06, material=mat_blue)
+# (Removed xy-control line — not needed for this figure)
 
 # -------------------------------------------------------------------
 # Camera
