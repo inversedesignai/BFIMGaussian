@@ -324,9 +324,9 @@ The radar beam-search case is the smallest non-trivial POMDP that exhibits the f
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=\textwidth]{figures/radar_hero.png}
-\caption{Case Study A overview.  \emph{Left}: the in-family optimum $m^\star = 9$ achieves $V_{\text{adaptive}} = 1.704$ nats against $V_{\text{oracle}} = 1.879$ nats and $V_{\text{fixed}} = 1.401$ nats; the EVPI ($0.478$ nats) is the oracle-fixed ignorance gap that the adaptive policy recovers a fraction of.  \emph{Right}: a $16$-element phased-array antenna (16-element $\lambda/2$ array) interrogates a ring of $K = 16$ target cells; the true target (red, cell 4), the current belief mode (green, cell 7), the current beam pointing at width $m = 3$, and the next-step adaptive redirect under $\pi^\star$.}
-\label{fig:radar_scene}
+\includegraphics[width=\textwidth]{figures/CasesAB.png}
+\caption{Scene illustrations for the two case studies.  \emph{Left} (Case Study A, §\ref{sec:radar}): a phased-array antenna interrogates a ring of $K = 16$ target cells; the true state (green, cell 11), the current beam pointing at cell $\bs_k = 5$ with width $m = 3$, and the adaptive redirect selected by $\pi^\star$ at the next epoch.  \emph{Right} (Case Study B, §\ref{sec:scqubit}): the x-mon transmon cross on sapphire with a SQUID loop (two Josephson junctions) at the end of the $+x$ arm, the external flux $\Phi_\mathrm{ext}$ (navy field lines) threading the loop, a meandering readout resonator, and the Bloch-sphere view of the qubit; the bottom timeline shows the adaptive Ramsey sequences $\bs_k = (\tau_k, n_k)$ chosen by $\pi^\star(\bb_k)$ at each epoch.}
+\label{fig:casesAB}
 \end{figure}
 
 \subsection{Problem setup}
@@ -434,14 +434,7 @@ A detection at cell 1 (which covers cells $\{14, 15, 16, 1, 2, 3, 4\}$) narrows 
 \label{sec:scqubit}
 %===============================================================================
 
-Case Study A is discrete-state and has no natural MSE metric; Case Study B takes the same exact-DP machinery to a continuous-state problem where the natural deployment metric is Bayesian MSE.  The case study's central claim is the paper's \emph{operational} headline: joint-DP co-design with $\Phi_{\text{Var}}$ beats the joint Bayesian Cram\'er--Rao fixed-schedule baseline on deployed MSE, at statistical significance $z = +11.5\sigma$.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{figures/scqubit_hero.png}
-\caption{Case Study B overview.  \emph{Left}: the deployed-MSE comparison at the uninformative prior ($\phi_\mathrm{max} = \Phi_0/2$): joint-DP co-design $\overline{\mathrm{MSE}} = 1.83 \times 10^{-2}\,\Phi_0^2$ vs.\ PCRB baseline $2.07 \times 10^{-2}\,\Phi_0^2$ ($13.4\%$ reduction, $z = +11.5\sigma$); the advantage grows monotonically to $8.3\times$ at $\phi_\mathrm{max} = \Phi_0/10$ and $128\times$ at $\phi_\mathrm{max} = \Phi_0/33$ (§8.7.3).  \emph{Right}: the x-mon transmon cross on sapphire with a SQUID loop (two Josephson junctions, red dots) at the end of the $+x$ arm, a flux-bias line (purple) threading $\Phi_\mathrm{ext}$ (navy field lines) through the SQUID, and a meandering readout resonator (green); the belief evolution $p_0(x) \to p_1(x) \to p_K(x)$ (right inset curves) narrows to a sharp posterior delivering the MSE-optimal estimate $\hat{x}^\star$; the adaptive schedule $s_k = (\tau_k, n_k)$ is chosen by $\pi^\star(b_k)$ each epoch.}
-\label{fig:scqubit_scene}
-\end{figure}
+Case Study A is discrete-state and has no natural MSE metric; Case Study B takes the same exact-DP machinery to a continuous-state problem where the natural deployment metric is Bayesian MSE.  The case study's central claim is the paper's \emph{operational} headline: joint-DP co-design with $\Phi_{\text{Var}}$ beats the joint Bayesian Cram\'er--Rao fixed-schedule baseline on deployed MSE, at statistical significance $z = +11.5\sigma$.  The sensor geometry and adaptive Ramsey sequencing are illustrated in the right panel of Figure~\ref{fig:casesAB}.
 
 \subsection{Problem setup}
 
