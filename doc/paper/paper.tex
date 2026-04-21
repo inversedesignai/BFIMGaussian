@@ -674,7 +674,16 @@ U^\pi_k(\bb;\, \bc) &\;=\; \E_{\by_k \mid \bb, \pi(\bb), \bc}\!\bigl[U^\pi_{k+1}
 \end{align}
 with $V(\bc, \pi) = U^\pi_0(p_0;\, \bc)$.  This is Equation~\eqref{eq:V_def} rewritten as a backward recursion --- no optimization yet, just Bayesian bookkeeping.
 
-\paragraph{Step 4: Bellman's principle of optimality.}  Maximizing $V(\bc, \pi)$ over adaptive policies factors step-by-step: the outer $\max_\pi$ commutes with each one-step $\E_{\by_k}$, and pushing it inside produces the recursion for $V_k(\bb;\, \bc) \coloneqq \max_\pi U^\pi_k(\bb;\, \bc)$, which is precisely Equations~\eqref{eq:bellman_terminal}--\eqref{eq:bellman}.  The Bellman-optimal policy is read off at each step as
+\paragraph{Step 4: Bellman's principle of optimality.}  Define $V_k(\bb;\, \bc) \coloneqq \max_\pi U^\pi_k(\bb;\, \bc)$.  Maximizing over $\pi$ factors step-by-step.  At step $k$, parametrize the policy by the action it prescribes at the current belief, $\bs_k = \pi(\bb)$, and its continuation $\pi'$ over steps $\{k+1, \ldots, K-1\}$.  Equation~\eqref{eq:policy_eval} depends on these two pieces separately: the current action $\bs_k$ enters the one-step measurement distribution, and the continuation enters via $U^{\pi'}_{k+1}$.  Maximizing over both gives
+\begin{equation}
+V_k(\bb;\, \bc) \;=\; \max_{\bs_k \in \mathcal{S}}\; \max_{\pi'}\; \E_{\by_k \mid \bb, \bs_k, \bc}\!\bigl[U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_k;\, \bc);\, \bc\bigr)\bigr].
+\label{eq:double_max}
+\end{equation}
+The inner $\max_{\pi'}$ may be pushed inside $\E_{\by_k}$: adaptive continuations are history-dependent, so the maximizer $\pi'$ can itself depend on the realization of $\by_k$, and maximizing a family of $\by_k$-dependent continuations pointwise before averaging gives the same result as maximizing their average (the interchange of $\max$ and $\E$ over $\by_k$-measurable policies).  Applying this interchange and substituting the definition of $V_{k+1}$,
+\begin{equation}
+V_k(\bb;\, \bc) \;=\; \max_{\bs_k \in \mathcal{S}}\; \E_{\by_k \mid \bb, \bs_k, \bc}\!\bigl[V_{k+1}\bigl(T(\bb, \bs_k, \by_k;\, \bc);\, \bc\bigr)\bigr],
+\end{equation}
+which is Equation~\eqref{eq:bellman}.  The Bellman-optimal policy is read off at each step as
 \begin{equation}
 \pi^\star_k(\bb;\, \bc) \;=\; \argmax_{\bs_k \in \mathcal{S}}\; \E_{\by_k \mid \bb, \bs_k, \bc}\!\bigl[V_{k+1}\bigl(T(\bb, \bs_k, \by_k;\, \bc);\, \bc\bigr)\bigr],
 \end{equation}
