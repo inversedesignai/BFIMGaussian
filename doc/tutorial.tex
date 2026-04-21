@@ -2,6 +2,7 @@
 
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}
 \usepackage{bm}
 \usepackage{enumitem}
 \usepackage{booktabs}
@@ -125,6 +126,147 @@ Equation~\eqref{eq:bellman_terminal} is the \emph{terminal condition}: at step $
 \end{equation}
 Reading $\pi^\star_0, \pi^\star_1, \ldots, \pi^\star_{K-1}$ off the recursion gives the globally optimal adaptive policy.
 
+\subsection{Deriving the recursion from $V(\pi)$}
+\label{sec:derivation}
+
+We stated the recursion above.  Now we derive it --- starting from Equation~\eqref{eq:V_pi}, the expected reward under a fixed policy --- in four steps.  Each step isolates one ingredient: change of conditioning, sufficiency of the posterior, trajectory factorization through the belief update, and Bellman's principle applied as an interchange of max and expectation.
+
+\paragraph{Step 1: Condition on the data, not on the state.}  Equation~\eqref{eq:V_pi} is a nested expectation, outer over the prior $p_0$ and inner over the data under $\pi$.  By the law of total expectation (Fubini plus the tower rule), we may swap these:
+\begin{equation}
+V(\pi) \;=\; \E_{\by_{1:K} \mid \pi,\, \bc}\!\bigl[\, \E_{\bx \mid \by_{1:K},\, \bc}\!\bigl[\Phi(\bx, \bs_{1:K}^\pi;\, \bc)\bigr] \,\bigr].
+\label{eq:V_pi_swap}
+\end{equation}
+The outer expectation is now over how the data trajectory plays out under $\pi$; the inner expectation, over what $\bx$ could have been given the observed data.
+
+\paragraph{Step 2: Replace the history-dependent integrand by a belief-dependent one.}  Two logically separate substitutions happen here, both often compressed into the single phrase ``sufficient-statistic reduction.''  They are worth separating, because the first is automatic and the second is a real assumption on the reward.
+
+\textbf{(2a) Conditioning change: $p(\bx \mid \by_{1:K}) = \bb_K$.}  The posterior $\bb_K$ is by definition the conditional distribution of $\bx$ given the measurement history:
+\begin{equation}
+\bb_K(\bx) \;=\; p(\bx \mid \by_{1:K}, \bs_{1:K};\, \bc).
+\end{equation}
+Consequently, for any integrand $f(\bx)$ --- no matter how chosen ---
+\begin{equation}
+\E_{\bx \mid \by_{1:K},\, \bc}\!\bigl[f(\bx)\bigr] \;=\; \int f(\bx)\, \bb_K(\bx)\, d\bx \;=\; \E_{\bx \mid \bb_K}\!\bigl[f(\bx)\bigr].
+\label{eq:suff_of_bK}
+\end{equation}
+This is just the definition of conditional expectation.  The ``history'' $\by_{1:K}$ and the ``belief'' $\bb_K$ are interchangeable as the conditioning object for any function of $\bx$.  Point (2a) is therefore free.
+
+\textbf{(2b) Function substitution: $\Phi(\bx, \bs_{1:K};\, \bc) = \Phi_0(\bx, \bb_K;\, \bc)$.}  This is the part that requires care.  The original reward $\Phi$ takes the action trajectory $\bs_{1:K}$ as an argument; we want to replace that argument by the terminal belief $\bb_K$.  The substitution is legitimate iff $\Phi$'s dependence on $\bs_{1:K}$ actually factors through $\bb_K$.
+
+\emph{Definition (belief-encodable reward).}  We call $\Phi$ \emph{belief-encodable} if there is a function $\Phi_0(\bx, \bb;\, \bc)$ such that, for every $\bx$, every $\bc$, and every pair of trajectories $(\bs_{1:K}, \by_{1:K})$ and $(\bs'_{1:K}, \by'_{1:K})$ whose terminal beliefs agree ($\bb_K = \bb'_K$),
+\begin{equation}
+\Phi(\bx, \bs_{1:K};\, \bc) \;=\; \Phi(\bx, \bs'_{1:K};\, \bc) \;=\; \Phi_0(\bx, \bb_K;\, \bc).
+\label{eq:belief_encodable}
+\end{equation}
+In words: any two histories that land on the same terminal posterior yield the same reward.  If Equation~\eqref{eq:belief_encodable} holds, $\Phi_0$ is uniquely defined (up to values on unreachable beliefs), and substituting the rewrite into Equation~\eqref{eq:V_pi_swap} is valid.
+
+\emph{Two easy cases.}  The two rewards used in this tutorial both pass the test immediately, because each is a simple functional of the posterior's shape:
+
+\begin{itemize}[nosep, leftmargin=*]
+\item \textbf{Posterior variance ($\Phi_{\text{Var}}$).}  $\Phi(\bx, \bs_{1:K};\, \bc) = -(\bx - \hat{x}(\bb_K))^2$, where $\hat{x}(\bb_K) = \E[\bx \mid \bb_K]$ is the posterior mean.  The only place $\bs_{1:K}$ enters is through $\bb_K$, and $\bb_K$ is itself the object we are substituting in.  Belief-encodable with $\Phi_0(\bx, \bb;\, \bc) = -(\bx - \hat{x}(\bb))^2$.  The belief-level average $\E_{\bx \mid \bb}[\Phi_0]$ equals $-\mathrm{Var}(\bx \mid \bb)$ --- the familiar Bayesian MSE expression.
+\item \textbf{Mutual information / log-posterior-ratio ($\Phi_{\text{MI}}$).}  $\Phi(\bx, \bs_{1:K};\, \bc) = \log \bb_K(\bx) - \log p_0(\bx)$.  Same argument: $\bs_{1:K}$ enters only through $\bb_K$.  Belief-encodable with $\Phi_0(\bx, \bb;\, \bc) = \log \bb(\bx) - \log p_0(\bx)$.  The belief-level average is $\E_{\bx \mid \bb}[\Phi_0] = \mathrm{KL}(\bb \Vert p_0)$; averaging further under the prior gives the mutual information $I(\bx;\, \by_{1:K})$.
+\end{itemize}
+
+\emph{A case where the test fails.}  The Fisher-information-aligned reward $\Phi_{\log J}(\bx, \bs_{1:K};\, \bc) = \tfrac{1}{2} \log \det J_N(\bx, \bs_{1:K};\, \bc)$ has an explicit $\bs_{1:K}$ dependence through the accumulated Fisher matrix $J_N$.  Two schedules that reach the same terminal posterior $\bb_K$ but use different delays can have different $J_N$ values (the matrix accumulates a different sum) and therefore different $\Phi$.  Equation~\eqref{eq:belief_encodable} fails: same $\bb_K$, different $\Phi$.  $\Phi_{\log J}$ is \emph{not} belief-encodable as stated.
+
+\emph{The repair.}  When Equation~\eqref{eq:belief_encodable} fails, redefine the ``belief'' to carry whatever action-dependent accumulator the reward references --- in the Fisher case, augment $\bb \to \tilde{\bb} = (\bb, J)$, so that $\Phi_{\log J}(\bx, \bs_{1:K};\, \bc)$ becomes a function of $(\bx, \tilde{\bb}_K, \bc)$.  The belief-encodability condition now holds on the augmented belief by construction.  The cost is a larger state space for the DP; the benefit is that Step~2b works again.  See §\ref{sec:augmentation} for the full treatment.
+
+\textbf{Combining (2a) and (2b).}  Whenever the reward is belief-encodable (possibly after augmentation),
+\begin{equation}
+\E_{\bx \mid \by_{1:K},\, \bc}\!\bigl[\Phi(\bx, \bs_{1:K}^\pi;\, \bc)\bigr]
+\;\stackrel{\text{(2b)}}{=}\;
+\E_{\bx \mid \by_{1:K},\, \bc}\!\bigl[\Phi_0(\bx, \bb_K;\, \bc)\bigr]
+\;\stackrel{\text{(2a)}}{=}\;
+\E_{\bx \mid \bb_K}\!\bigl[\Phi_0(\bx, \bb_K;\, \bc)\bigr].
+\end{equation}
+The first step replaces the integrand by its belief-indexed form (2b); the second step changes the conditioning object (2a), which is automatic.  Plugging into Equation~\eqref{eq:V_pi_swap} gives
+\begin{equation}
+V(\pi) \;=\; \E_{\by_{1:K} \mid \pi,\, \bc}\!\bigl[\, \E_{\bx \mid \bb_K}\!\bigl[\Phi_0(\bx, \bb_K;\, \bc)\bigr] \,\bigr].
+\label{eq:V_pi_belief}
+\end{equation}
+The inner bracket is a pure functional of $\bb_K$; write $\Phi_0^{\mathrm{belief}}(\bb;\, \bc) \coloneqq \E_{\bx \mid \bb}[\Phi_0(\bx, \bb;\, \bc)]$ to give it a name.  The two examples above illustrate the two most common forms of $\Phi_0^{\mathrm{belief}}$: the posterior variance and the posterior KL to the prior.
+
+\paragraph{Step 3: Factorize the trajectory expectation through the belief update.}  Any realized trajectory $(\by_1, \ldots, \by_K)$ can be sampled one step at a time.  Draw $\by_1$ from $p(\cdot \mid \bb_0, \pi(\bb_0);\, \bc)$, update the belief via $\bb_1 = T(\bb_0, \pi(\bb_0), \by_1;\, \bc)$, draw $\by_2$ from $p(\cdot \mid \bb_1, \pi(\bb_1);\, \bc)$, and so on.  The outer expectation in Equation~\eqref{eq:V_pi_belief} thus factorizes as
+\begin{equation}
+V(\pi) \;=\; \E_{\by_1 \mid \bb_0, \pi, \bc}\, \E_{\by_2 \mid \bb_1, \pi, \bc}\, \cdots\, \E_{\by_K \mid \bb_{K-1}, \pi, \bc}\!\bigl[\,\Phi_0^{\mathrm{belief}}(\bb_K;\, \bc)\,\bigr].
+\label{eq:V_factored}
+\end{equation}
+
+Define the \emph{policy-evaluation} value-to-go under a fixed policy $\pi$ as
+\begin{equation}
+U^\pi_k(\bb;\, \bc) \;\coloneqq\; \E_{\by_{k+1}, \ldots, \by_K \mid \bb_k = \bb, \pi, \bc}\!\bigl[\Phi_0^{\mathrm{belief}}(\bb_K;\, \bc)\bigr].
+\label{eq:U_def}
+\end{equation}
+Equation~\eqref{eq:V_factored} is exactly $V(\pi) = U^\pi_0(p_0;\, \bc)$.  The terminal case of Equation~\eqref{eq:U_def} is immediate: with no remaining measurements, the expectation degenerates and
+\begin{equation}
+U^\pi_K(\bb;\, \bc) \;=\; \Phi_0^{\mathrm{belief}}(\bb;\, \bc).
+\label{eq:U_terminal}
+\end{equation}
+
+\textbf{Deriving the one-step recursion.}  We now show how $U^\pi_{k-1}$ is determined by $U^\pi_k$, which is the content of the backward recursion.  Start from the definition, Equation~\eqref{eq:U_def}, at step $k - 1$:
+\begin{equation}
+U^\pi_{k-1}(\bb;\, \bc) \;=\; \E_{\by_k, \by_{k+1}, \ldots, \by_K \mid \bb_{k-1} = \bb, \pi, \bc}\!\bigl[\Phi_0^{\mathrm{belief}}(\bb_K;\, \bc)\bigr].
+\label{eq:U_km1}
+\end{equation}
+Apply the tower rule to split the expectation over $\by_k$ from the expectation over the remaining trajectory:
+\begin{equation}
+U^\pi_{k-1}(\bb;\, \bc) \;=\; \E_{\by_k \mid \bb_{k-1} = \bb, \pi(\bb), \bc}\!\Biggl[\,\underbrace{\E_{\by_{k+1}, \ldots, \by_K \mid \bb_{k-1} = \bb, \by_k, \pi, \bc}\!\bigl[\Phi_0^{\mathrm{belief}}(\bb_K;\, \bc)\bigr]}_{\text{inner expectation}}\,\Biggr].
+\label{eq:U_km1_tower}
+\end{equation}
+Now examine the inner expectation.  Its conditioning variables are $(\bb_{k-1} = \bb,\ \by_k,\ \pi,\ \bc)$.  Given these, the belief at step $k$ is determined:
+\begin{equation}
+\bb_k \;=\; T\bigl(\bb, \pi(\bb), \by_k;\, \bc\bigr).
+\label{eq:bk_det}
+\end{equation}
+The distribution of the remaining trajectory $(\by_{k+1}, \ldots, \by_K)$ depends on the past only through the current belief (the \emph{sufficiency of the belief} for the future dynamics, in the Markov-chain sense).  So conditioning on $(\bb_{k-1} = \bb,\ \by_k)$ is equivalent --- for the purpose of computing expectations of functions of the future --- to conditioning on the single number $\bb_k$ from Equation~\eqref{eq:bk_det}:
+\begin{equation}
+\E_{\by_{k+1}, \ldots, \by_K \mid \bb_{k-1} = \bb, \by_k, \pi, \bc}\!\bigl[\,\cdot\,\bigr]
+\;=\;
+\E_{\by_{k+1}, \ldots, \by_K \mid \bb_k = T(\bb, \pi(\bb), \by_k;\, \bc), \pi, \bc}\!\bigl[\,\cdot\,\bigr].
+\label{eq:belief_sufficient}
+\end{equation}
+The right-hand side of Equation~\eqref{eq:belief_sufficient}, applied to the integrand $\Phi_0^{\mathrm{belief}}(\bb_K;\, \bc)$, is exactly the definition of $U^\pi_k$, Equation~\eqref{eq:U_def}, evaluated at belief $T(\bb, \pi(\bb), \by_k;\, \bc)$:
+\begin{equation}
+\E_{\by_{k+1}, \ldots, \by_K \mid \bb_k = T(\ldots), \pi, \bc}\!\bigl[\Phi_0^{\mathrm{belief}}(\bb_K;\, \bc)\bigr]
+\;=\; U^\pi_k\bigl(T(\bb, \pi(\bb), \by_k;\, \bc);\, \bc\bigr).
+\label{eq:inner_is_Uk}
+\end{equation}
+Substituting Equation~\eqref{eq:inner_is_Uk} back into Equation~\eqref{eq:U_km1_tower}:
+\begin{equation}
+\boxed{\ U^\pi_{k-1}(\bb;\, \bc) \;=\; \E_{\by_k \mid \bb, \pi(\bb), \bc}\!\bigl[\,U^\pi_k\bigl(T(\bb, \pi(\bb), \by_k;\, \bc);\, \bc\bigr)\,\bigr]\ }
+\label{eq:U_recursion}
+\end{equation}
+which is the policy-evaluation recursion.  Shifting the index by one ($k - 1 \to k,\ k \to k + 1$) and pairing with Equation~\eqref{eq:U_terminal} gives the full backward recursion for $U^\pi$.
+
+\textbf{What each step used.}  Three ingredients, one per substitution:
+\begin{enumerate}[nosep, leftmargin=*]
+\item Equation~\eqref{eq:U_km1_tower} uses the \emph{tower rule} (iterated expectation): joint expectations factor into nested conditional expectations.  Applied to separate ``first step'' from ``rest.''
+\item Equation~\eqref{eq:bk_det} uses the \emph{deterministic belief update} $T$: given the previous belief, action, and outcome, the next belief is fixed by Bayes' rule with no remaining randomness.
+\item Equation~\eqref{eq:belief_sufficient} uses the \emph{Markov property of the belief}: the future trajectory's distribution depends on the past only through the current belief.  Every piece of history that is not captured in $\bb_k$ drops out.
+\end{enumerate}
+No optimization is used anywhere in this derivation; Equation~\eqref{eq:U_recursion} is a valid identity for every fixed policy $\pi$.  The backward recursion for $U^\pi$ is therefore the right-hand object to carry into Step~4, where we maximize over $\pi$ to turn it into the Bellman recursion for $V_k$.
+
+\paragraph{Step 4: Maximize over $\pi$ (Bellman's principle).}  Let $V_k(\bb;\, \bc) \coloneqq \max_\pi U^\pi_k(\bb;\, \bc)$, the value-to-go under the \emph{optimal} continuation from belief $\bb$ at step $k$.  The recursion for $V_k$ requires commuting $\max_\pi$ with the one-step $\E_{\by_{k+1}}$ in Equation~\eqref{eq:U_recursion}, and this commutation is the one delicate move in the whole derivation.
+
+Done naively it is wrong.  If $\pi$ were a single fixed function, $\max_\pi \E_{\by}[f(\pi, \by)]$ and $\E_{\by}[\max_\pi f(\pi, \by)]$ need not agree.  The step Bellman relies on is that $\pi$ is \emph{decomposable}.  Split the policy at step $k$ into its action at the current belief and the rest:
+\begin{equation}
+\pi \;=\; (\bs_k, \pi'), \qquad \bs_k = \pi(\bb), \qquad \pi' = \text{the restriction of } \pi \text{ to steps } k+1, \ldots, K-1.
+\end{equation}
+The one-step expectation in Equation~\eqref{eq:U_recursion} depends on $\bs_k$ (which fixes the measurement distribution) and on $\pi'$ (which determines $U^{\pi'}_{k+1}$).  Maximizing jointly,
+\begin{equation}
+V_k(\bb;\, \bc) \;=\; \max_{\bs_k \in \mathcal{S}}\; \max_{\pi'}\; \E_{\by_{k+1} \mid \bb, \bs_k,\, \bc}\!\bigl[\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc)\bigr) \,\bigr].
+\label{eq:double_max_tutorial}
+\end{equation}
+Now $\max_{\pi'}$ \emph{can} be pushed inside $\E_{\by_{k+1}}$: adaptive continuations are by construction history-dependent functions, so the maximizer $\pi'$ is allowed to depend on the realized $\by_{k+1}$.  Picking the best $\pi'$ for each $\by_{k+1}$ and then averaging gives the same number as maximizing over $\pi'$ before averaging.  This is the \emph{interchange of max and expectation over history-measurable policies} --- it would \emph{fail} if $\pi'$ were restricted to be non-adaptive.  Applying the interchange,
+\begin{equation}
+V_k(\bb;\, \bc) \;=\; \max_{\bs_k}\; \E_{\by_{k+1} \mid \bb, \bs_k,\, \bc}\!\bigl[\,\max_{\pi'}\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc)\bigr) \,\bigr],
+\end{equation}
+and substituting $\max_{\pi'} U^{\pi'}_{k+1} = V_{k+1}$ gives Equation~\eqref{eq:bellman_general} exactly.  The terminal condition Equation~\eqref{eq:bellman_terminal} is immediate from Equation~\eqref{eq:U_terminal}: at the last step there is no further action to take, so $V_K = U^\pi_K$ is independent of $\pi$.
+
+Evaluating at $k = 0$, $\bb = p_0$ recovers $V^\star = \max_\pi V(\pi) = V_0(p_0;\, \bc)$, closing the loop from Equation~\eqref{eq:V_pi} to Equations~\eqref{eq:bellman_terminal}--\eqref{eq:bellman_general}.
+
+\paragraph{Where the adaptive-versus-fixed distinction lives.}  The only non-trivial move in the derivation is the interchange of $\max_{\pi'}$ with $\E_{\by_{k+1}}$ in Step 4.  That interchange is valid \emph{because} adaptive continuations are allowed to depend on the data.  If we restricted $\pi'$ to be a fixed schedule of actions (non-adaptive), $\max_{\pi'}$ would \emph{not} commute with $\E_{\by_{k+1}}$, and the Bellman recursion would not simplify.  What one would recover instead is the \emph{fixed-schedule} value $V_{\text{fixed}}$, strictly smaller than $V_{\text{adaptive}}$ in general.  The gap between the two --- the ``adaptive gain'' that the companion paper's EVPI analysis quantifies --- is in a precise sense the value of this interchange being legitimate.
+
 \subsection{Why this is called \emph{backward} induction}
 
 The only equation in the recursion that contains no unknowns is Equation~\eqref{eq:bellman_terminal} --- the terminal one.  There is no future to integrate over; only the present belief and the present reward.  Once $V_K$ is a known function, Equation~\eqref{eq:bellman_general} at $k = K-1$ becomes solvable, because its right-hand side only references $V_K$.  That gives $V_{K-1}$, which feeds $V_{K-2}$, and so on, back to $V_0$.  The value function is constructed layer by layer, from the end of the experiment to the beginning.  This is ``backward induction on the horizon.''
@@ -157,23 +299,55 @@ p(\by = 1 \mid \bx, \tau;\, \bc) \;=\; \tfrac{1}{2} + \tfrac{1}{2}\,\mathrm{th}(
 \end{equation}
 where $\mathrm{th}, A, B, \Delta\omega$ are closed-form expressions in $\bx$ and the hardware $\bc$.  The outcome of $n$ shots at a fixed delay is Binomial$(n, p)$.  The reward is negative terminal posterior variance, $\Phi_0(\bb_K) = -\mathrm{Var}(\bx \mid \bb_K)$.
 
-\subsection{The belief is continuous, but has a lossless finite reduction}
+\subsection{The measurement history reduces to a count-tuple}
 
-At any point in the experiment, the belief $\bb_k(\bx)$ is a density on the interval $[0, \phi_{\max}\, \Phi_0]$.  Trying to tabulate $V_k(\bb)$ over all such densities is hopeless --- the space is infinite-dimensional.
-
-The saving observation is this.  The Ramsey likelihood, Equation~\eqref{eq:ramsey}, depends on the action only through $\tau$.  Shots at the same delay give independent Bernoulli outcomes with the same success probability (conditional on $\bx$); the belief update after $n$ shots at delay $\tau$ is a function only of $n$ and the total number of ones observed, not of their order or of when within the experiment they were taken.  Consequently the likelihood factor that enters Bayes' rule after any sequence of measurements is
+The raw measurement history after $k$ epochs is the list
 \begin{equation}
-\prod_{j=1}^J p(\bx, \tau_j; \bc)^{M_j}\, \bigl[1 - p(\bx, \tau_j; \bc)\bigr]^{N_j - M_j},
+\mathcal{H}_k \;=\; \bigl( (\tau^{(1)}, y^{(1)}),\ (\tau^{(2)}, y^{(2)}),\ \ldots \bigr),
+\end{equation}
+one entry per individual shot, recording which delay it was taken at and whether it returned a $1$.  $\mathcal{H}_k$ can be very long (up to forty entries for $K = 4$ at $n = 10$ per epoch) and it contains redundancy.  The redundancy comes from two structural facts about the Ramsey likelihood, Equation~\eqref{eq:ramsey}:
+
+\begin{enumerate}[nosep, leftmargin=*]
+\item \emph{Conditional independence.}  Given $\bx$ and the hardware $\bc$, different shots are independent.  The likelihood of the entire history factors into a product over shots.
+\item \emph{Conditional identity within a delay.}  Given $\bx$, all shots at the same delay $\tau_j$ have the same success probability $p(\bx, \tau_j;\, \bc)$.  They are therefore not merely independent but i.i.d.\ within each delay bin.
+\end{enumerate}
+
+Together these facts let us evaluate the likelihood of $\mathcal{H}_k$ by counting.  Let $N_j$ be the cumulative number of shots ever taken at delay $\tau_j$ in $\mathcal{H}_k$, and $M_j$ the cumulative number of those shots that returned a $1$.  Then
+\begin{equation}
+p(\mathcal{H}_k \mid \bx;\, \bc) \;=\; \prod_{j=1}^J p(\bx, \tau_j;\, \bc)^{M_j}\, \bigl[1 - p(\bx, \tau_j;\, \bc)\bigr]^{N_j - M_j}.
 \label{eq:likelihood_counts}
 \end{equation}
-where $J = 10$ (the number of candidate delays), $N_j$ is the cumulative number of shots ever taken at delay $\tau_j$, and $M_j$ is the cumulative number of those shots that returned a ``1''.  Every other piece of the measurement history drops out of the posterior.
+Every other aspect of the history --- the order of the shots, how they were split across epochs, how $n$ was partitioned between $1$-shot and $10$-shot bursts --- drops out of Equation~\eqref{eq:likelihood_counts}.
 
-So the posterior $\bb_k(\bx)$ is fully specified by the \emph{count-tuple}
+The pair $(\mathbf{N}, \mathbf{M}) = (N_1, \ldots, N_J,\ M_1, \ldots, M_J)$ is, by the Fisher--Neyman factorization theorem, a \emph{sufficient statistic} of the history for inference about $\bx$: any two histories that agree on $(\mathbf{N}, \mathbf{M})$ are indistinguishable from the point of view of $\bx$.  We arrange them into a single $2J$-integer object called the \emph{count-tuple},
 \begin{equation}
-\mathbf{n}_k \;=\; \bigl(N_1, M_1,\ N_2, M_2,\ \ldots,\ N_J, M_J\bigr),
+\mathbf{n}_k \;=\; \bigl(N_1, M_1,\ N_2, M_2,\ \ldots,\ N_J, M_J\bigr).
 \label{eq:count_tuple}
 \end{equation}
-together with the prior and the hardware.  We have gained an enormous amount: instead of tabulating $V_k$ over a space of densities, we tabulate it over a space of $2J = 20$-tuples of nonnegative integers.
+$\mathbf{n}_k$ is lossless (nothing about $\bx$ has been discarded), permutation-invariant (shot order does not appear), and bounded (each $N_j \le Kn_{\max} = 40$).
+
+\subsection{The belief reduces automatically}
+
+The belief at step $k$ is a functional of the history $\mathcal{H}_k$ through Bayes' rule:
+\begin{equation}
+\bb_k(\bx) \;=\; \frac{p_0(\bx)\, p(\mathcal{H}_k \mid \bx;\, \bc)}{\int p_0(\bx')\, p(\mathcal{H}_k \mid \bx';\, \bc)\, d\bx'}.
+\end{equation}
+But the numerator depends on $\mathcal{H}_k$ only through Equation~\eqref{eq:likelihood_counts}, which depends only on $\mathbf{n}_k$.  Consequently
+\begin{equation}
+\bb_k(\bx) \;=\; \bb(\bx \mid \mathbf{n}_k;\, \bc) \;\propto\; p_0(\bx) \prod_{j=1}^J p(\bx, \tau_j;\, \bc)^{M_j}\,\bigl[1 - p(\bx, \tau_j;\, \bc)\bigr]^{N_j - M_j}.
+\label{eq:belief_from_counts}
+\end{equation}
+The belief is a deterministic function of the count-tuple: once you know $\mathbf{n}$, you know $\bb$.  Two histories with the same count-tuple have the same belief, regardless of how the measurements were ordered or split.
+
+\subsection{The DP table reduces for free}
+
+Now the Bellman machinery inherits the reduction directly.  $V_k$ is a function of the belief; the belief is a function of the count-tuple; therefore $V_k$ is a function of the count-tuple: $V_k(\bb) = V_k(\mathbf{n})$.  The tabulation space collapses from the infinite-dimensional space of densities on $[0, \phi_{\max} \Phi_0]$ to the space of $2J$-integer tuples with bounded entries.
+
+The chain of reductions is:
+\begin{equation*}
+\underbrace{\mathcal{H}_k}_{\text{raw history, long list}}\ \longrightarrow\ \underbrace{\mathbf{n}_k}_{\text{count-tuple, } 2J \text{ integers}}\ \longrightarrow\ \underbrace{\bb_k}_{\text{posterior, density}}\ \longrightarrow\ \underbrace{V_k(\mathbf{n}_k)}_{\text{value function, one scalar per tuple}}.
+\end{equation*}
+The first arrow is the Fisher--Neyman reduction on the likelihood; the second arrow is Bayes' rule; the third arrow is the Bellman recursion.  Critically, the first arrow is the \emph{only} reduction; the rest are functional consequences.  This is the right way to think of it --- not that the belief miraculously compresses, but that the \emph{data} compresses because of a symmetry of the likelihood, and the belief (being a function of the data) inherits the compression automatically.
 
 \subsection{Reachability and the size of the DP table}
 
@@ -314,6 +488,64 @@ Two lessons worth taking away:
 \item \textbf{Reduction is essential in continuous-state problems.}  The qubit problem only becomes computable because the Ramsey likelihood has a permutation symmetry that collapses the posterior to a 20-integer tuple.  A generic continuous-state POMDP has no such luck and must be relaxed --- Gaussian-moment propagation (EKF), particle filters, or neural-belief-state methods --- at which point the DP is no longer exact.
 \item \textbf{Exactness is cheap in discrete-state problems.}  The radar problem runs directly on the natural probability-vector belief and returns a provably optimal policy without approximations, as long as the reachable belief set fits in memory.  At $K = 4$, $|\mathcal{X}| = 16$ it does; at $K = 20$ or $|\mathcal{X}| = 256$ it would not, and the same relaxation pathway as the qubit problem would be needed.
 \end{enumerate}
+
+\section{Belief augmentation: when the posterior is not enough}
+\label{sec:augmentation}
+
+Both examples in this tutorial share a quiet simplification: the reward is a functional of the terminal posterior $\bb_K$ alone.  In the qubit problem $-\mathrm{Var}(\bx \mid \bb_K)$ depends only on the shape of the posterior, and in the radar problem so does $-H(\bb_K)$.  Once the posterior is determined, the reward is determined --- no reference to which actions produced it.  This is what lets Step~2 of §\ref{sec:derivation} go through: $\bb_K$ serves as a sufficient statistic of the trajectory \emph{for the reward}, not just for $\bx$.
+
+Not every sensing reward has this property.  The main paper's Case~C uses the Fisher-information-aligned reward
+\begin{equation}
+\Phi(\bx, \bs_{1:K};\, \bc) \;=\; \tfrac{1}{2}\, \log \det J_N(\bx, \bs_{1:K};\, \bc),
+\label{eq:phi_logJ_tutorial}
+\end{equation}
+where the accumulated Fisher-information matrix is
+\begin{equation}
+J_N(\bx, \bs_{1:K};\, \bc) \;=\; J_0 + \sum_{k=1}^K n_k\, J_F(\bx, \tau_k;\, \bc),
+\end{equation}
+and $J_F$ is the per-shot Fisher matrix.  The issue is immediate: $J_N$ depends \emph{explicitly} on the action trajectory $\bs_{1:K} = ((\tau_1, n_1), \ldots)$, not just on the posterior those actions produced.  Two schedules that happen to land on the same $\bb_K$ via different $\{(\tau_k, n_k)\}$ choices give different $J_N$, hence different reward.
+
+In other words: for $\Phi_{\log J}$, $\bb_K$ is \emph{not} a sufficient statistic of the trajectory for the reward.  Step~2 of the derivation in §\ref{sec:derivation} fails on its face.  A direct application of Bellman's recursion on $\bb_k$ alone would miscompute the value function --- it would forget the schedule-dependent accumulator.
+
+\subsection{The fix: enlarge what ``belief'' means}
+
+The cure is to redefine the state of the DP so that whatever extra information the reward requires rides along.  For $\Phi_{\log J}$ we define the \emph{augmented belief}
+\begin{equation}
+\tilde{\bb}_k \;\coloneqq\; \bigl(\bb_k,\ J_k\bigr), \qquad J_k \;\coloneqq\; J_0 + \sum_{j=1}^k n_j\, J_F(\bx, \tau_j;\, \bc).
+\label{eq:augmented_belief}
+\end{equation}
+Two quantities now move together: the posterior over $\bx$, which still updates by Bayes' rule, and the accumulated Fisher matrix, which updates by additive accumulation:
+\begin{equation}
+J_{k+1} \;=\; J_k + n_{k+1}\, J_F(\bx, \tau_{k+1};\, \bc).
+\end{equation}
+The augmented update operator is
+\begin{equation}
+\tilde{T}\bigl(\tilde{\bb}, \bs, \by;\, \bc\bigr) \;=\; \bigl(\, T(\bb, \bs, \by;\, \bc),\ J + n\, J_F(\bx, \tau;\, \bc) \,\bigr),
+\end{equation}
+with $\bs = (\tau, n)$.  The reward at the terminal augmented belief is a pure functional of $\tilde{\bb}_K$:
+\begin{equation}
+\tilde{\Phi}_0(\tilde{\bb}_K;\, \bc) \;=\; \E_{\bx \mid \bb_K}\!\bigl[\tfrac{1}{2}\, \log \det J_K\bigr].
+\end{equation}
+With $(\bb, T, \Phi_0)$ replaced by $(\tilde{\bb}, \tilde{T}, \tilde{\Phi}_0)$, the four-step derivation of §\ref{sec:derivation} goes through unchanged --- in particular, $\tilde{\bb}_K$ \emph{is} a sufficient statistic of the trajectory for the augmented reward, so Step~2 is rescued.  Bellman's recursion now lives on $\tilde{\bb}$, and backward induction produces the correct $V_k(\tilde{\bb};\, \bc)$.
+
+\subsection{What augmentation costs and what it buys}
+
+The cost is bookkeeping: for a $d$-dimensional state $\bx$, $J_k$ is a symmetric $d \times d$ matrix, carrying $d(d+1)/2$ extra real numbers in the state.  In exact DP this multiplies the effective state-space dimensionality and the table size.  In moment-based DP (Case~C of the paper), where $\bb_k$ is already a compact Gaussian summary, the augmentation by $J_k$ is a mild expansion of a small tuple.
+
+The benefit is that the Bellman machinery proceeds identically to the unaugmented case.  The value function $V_k(\tilde{\bb};\, \bc)$ is well-posed, the recursion is exact, the argmax produces an optimal adaptive policy, and (importantly) the envelope-theorem outer gradient on $\bc$ that the companion paper exploits applies verbatim to the augmented belief.
+
+\subsection{A rule of thumb for when to augment}
+
+Look at the pointwise reward.  List every action-dependent quantity it references.  For each, ask: is it a functional of the posterior $\bb_K$ alone?  If yes, leave the belief unaugmented; if no, augment by whichever accumulator would make the reward a functional of the augmented belief.  Common triggers:
+
+\begin{itemize}[nosep, leftmargin=*]
+\item \textbf{Fisher-information rewards.}  $\log \det J_N$, $\mathrm{tr}\, J_N$, any function of an action-accumulated Fisher matrix.  Augment by $J_k$.
+\item \textbf{Cumulative cost or budget constraints.}  A reward that penalizes $\sum_k c(\bs_k)$ --- shot-count budgets, power budgets, time-resource constraints.  Augment by the running cost sum.
+\item \textbf{Path-dependent rewards.}  Rewards that integrate observations or actions over the trajectory (entropy production, work extraction, dwell-time penalties).  Augment by the relevant path integral.
+\item \textbf{Constraint indicators.}  ``Has the trajectory stayed in a safe set?''  Augment by a binary safety flag that latches off the first time the trajectory leaves the set.
+\end{itemize}
+
+The recipe is always the same: redefine the DP's state as (posterior, running accumulator), so that the reward is a functional of the new state and the Bayesian update $T$ is closed over the new state.  The tutorial's qubit and radar examples correspond to the trivial case where no accumulator is needed.
 
 \section{Connection to joint hardware-policy co-design}
 \label{sec:joint_dp}
