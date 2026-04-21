@@ -461,7 +461,7 @@ Case Study A is discrete-state and has no natural MSE metric; here we take the s
 
 \subsection{Problem setup}
 
-We consider the frequency-tunable transmon flux sensor of Danilin, Nugent \& Weides~\cite{danilin2024scqubit}.  The unknown is the external magnetic flux $\bx = \Phi_\mathrm{ext}$ threading a SQUID loop, with prior $\bx \sim \mathrm{Uniform}[0, \phi_{\max}\,\Phi_0]$ at $\phi_{\max} = 0.1$, the post-calibration uncertainty typical of a bias-tuned flux sensor operating around a known working point.  Ramsey interferometry at a fixed operating flux $\Phi^\star$ returns a Bernoulli outcome with likelihood
+We consider the frequency-tunable transmon flux sensor of Danilin, Nugent \& Weides~\cite{danilin2024scqubit}.  The unknown is the external magnetic flux $\bx = \Phi_\mathrm{ext}$ threading a SQUID loop, with prior $\bx \sim \mathrm{Uniform}[0, \phi_{\max}\,\Phi_0]$ at $\phi_{\max} = 0.1$ (the rationale for this operating point is discussed in §\ref{sec:scqubit_priorwidth}).  Ramsey interferometry at a fixed operating flux $\Phi^\star$ returns a Bernoulli outcome with likelihood
 \begin{equation}
 p(\by = 1 \mid \bx, \tau; \bc) = \tfrac{1}{2} + \tfrac{1}{2}\,\mathrm{th}(\bx, \bc)\,e^{-A(\bx, \bc)\tau - B(\bx, \bc)^2 \tau^2}\,\cos[\Delta\omega(\bx, \bc)\tau],
 \label{eq:ramsey_likelihood}
@@ -522,6 +522,11 @@ $z$-score & $\mathbf{+132\sigma}$ \\
 \end{center}
 
 The CRB lower bound $J_P^{-1} \approx 10^{-9}$ is five-to-six orders of magnitude below both empirical MSEs, a reminder that the asymptotic CRB is loose for finite-horizon biased posterior-mean estimators on bounded-support priors~\cite{tsang2016quantum, reginatto2019crb}.  Neither design approaches the CRB lower bound; the comparison between the two is nevertheless clean and statistically decisive.
+
+\subsection{Why $\phi_{\max} = 0.1$: aliasing, horizon, and PCRB validity}
+\label{sec:scqubit_priorwidth}
+
+The prior width $\phi_{\max}$ interacts with the tractable horizon $K = 4$ through Ramsey aliasing.  The likelihood~\eqref{eq:ramsey_likelihood} is periodic in $\Delta\omega(\bx)\,\tau$, so a prior that spans many Ramsey fringes yields a multimodal posterior that can be disambiguated only by measurements at sufficiently varied $\tau$ --- to leading order, at least $\log_2(N_\text{fringes})$ distinct delays are required.  At $\phi_{\max} \to \Phi_0/2$ (uninformative prior) the support spans many fringes and four epochs are too few for either a fixed or an adaptive schedule to resolve them; both joint-DP and joint-PCRB converge to comparable aliasing-floor MSE and the adaptive margin shrinks.  At $\phi_{\max}$ well below this the prior is narrow enough that aliasing is essentially absent, both methods operate far below the floor, and the joint-DP margin grows rapidly.  Separately, the PCRB is a local/asymptotic bound that elides posterior multimodality, so at large $\phi_{\max}$ it is mis-specified as a baseline: the comparison would be doubly uninformative (joint-DP $K$-limited, joint-PCRB outside its regime of validity).  Choosing $\phi_{\max} = 0.1$ sits just inside the regime where joint-DP's adaptive finesse becomes observable at $K = 4$ while keeping the PCRB baseline a valid reference --- a representative rather than extremal test of co-design quality.
 
 
 %===============================================================================
