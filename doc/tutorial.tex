@@ -1,0 +1,356 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{bm}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+% light-weight shorthands matching the companion paper
+\newcommand{\bc}{\bm{c}}
+\newcommand{\bx}{\bm{x}}
+\newcommand{\by}{\bm{y}}
+\newcommand{\bs}{\bm{s}}
+\newcommand{\bb}{\bm{b}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+
+\title{A Crash Course on Sequential Decision Making,\\
+       Bellman's Principle, and Bellman's Recursion\\[4pt]
+       \large (Companion tutorial: qubit flux sensor and radar beam search)}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This tutorial is a self-contained pedagogical companion to the joint-DP framework of the main paper.  It builds the vocabulary of sequential Bayesian decision making from scratch --- states, beliefs, actions, policies, rewards --- states Bellman's principle of optimality in plain language and in formulas, and works the associated backward-induction recursion in full on two representative problems: the superconducting-qubit Ramsey flux sensor (continuous state, belief compressed to a count-tuple) and the radar beam-search POMDP (discrete state, belief lives natively on a probability simplex).  No prior exposure to reinforcement learning or Bellman equations is assumed; basic probability and elementary linear algebra suffice.
+\end{abstract}
+
+\tableofcontents
+
+\section{What sequential decision making is, and why it needs its own theory}
+\label{sec:intro}
+
+A single Bayesian measurement is a one-shot decision: pick an experimental setting, record a datum, update a posterior, stop.  A \emph{sequential} measurement is a cascade of such decisions, with the crucial feature that each action is chosen \emph{after} seeing the outcomes of all previous ones.  This freedom to condition is what adaptive sensing trades on: a radar that scans slowly and widely is worth less than one that points at where the previous hit suggested a target might be; a quantum sensor that always uses the same Ramsey delay wastes information that a shorter first probe could have unlocked.
+
+The mathematical awkwardness is that the optimal next action depends on whatever the posterior happens to look like when it is time to pick it --- and the posterior depends on every previous choice and every previous outcome, which are themselves random.  You cannot just ``optimize over action sequences'' the way you optimize over a single experimental setting, because an action sequence that performs well against one realization of the data performs poorly against another.  The right object to optimize is a \emph{policy}: a rule that maps whatever you currently believe to whatever you should do next.  Policies live in a much larger space than action sequences, and the infrastructure for finding the best one is dynamic programming --- the subject of this tutorial.
+
+Two running examples carry the load.  The first is a superconducting-qubit Ramsey flux sensor: the unknown is a continuous scalar (the external flux), each action is a pair (Ramsey delay, repetition count), and each outcome is a Binomial count.  The second is a radar beam-search problem: the unknown is which of sixteen cells on a ring contains a target, each action is a beam pointing, and each outcome is a binary detection.  Both have a four-step measurement horizon.  The first forces us to confront a continuous-belief-space obstacle and solve it with a sufficient-statistic reduction; the second is natively finite and lets us see the DP in its rawest form.
+
+\section{The building blocks}
+\label{sec:blocks}
+
+\subsection{The hidden state and the prior}
+
+Nature draws a value $\bx$ from a known prior $p_0(\bx)$.  This value is fixed for the duration of the experiment but unknown to us.  In the qubit problem $\bx = \Phi_\mathrm{ext}$, a real number in some bounded interval; in the radar problem $\bx \in \{1, 2, \ldots, 16\}$, a discrete label for which cell the target is in.
+
+\subsection{Actions, observations, and the likelihood}
+
+At each of $K$ epochs we choose an action $\bs_k$ from an action set $\mathcal{S}$ and receive an observation $\by_k$ drawn from the likelihood
+\begin{equation}
+\by_k \sim p(\by \mid \bx, \bs_k;\, \bc),
+\label{eq:likelihood}
+\end{equation}
+where $\bc$ is the physical hardware that parametrizes the likelihood.  In the qubit problem the action is $(\tau, n)$ --- a Ramsey delay and a repetition count --- and the observation is the number of ``1'' outcomes, distributed as Binomial$(n, p(\bx, \tau; \bc))$.  In the radar problem the action is a cell to point the beam at and the observation is a bit: $0$ for miss, $1$ for detection.
+
+\subsection{The belief and its update}
+
+After observing $k$ epochs of data we know more about $\bx$ than the prior specified.  Our state of knowledge is the posterior
+\begin{equation}
+\bb_k(\bx) \;=\; p(\bx \mid \bs_{1:k}, \by_{1:k};\, \bc),
+\end{equation}
+called the \emph{belief} at step $k$.  It is obtained from the prior by recursively applying Bayes' rule: $\bb_0 = p_0$, and after each new measurement
+\begin{equation}
+\bb_{k}(\bx) \;=\; \frac{p(\by_k \mid \bx, \bs_k;\, \bc)\, \bb_{k-1}(\bx)}{\int p(\by_k \mid \bx', \bs_k;\, \bc)\, \bb_{k-1}(\bx')\, d\bx'}.
+\label{eq:bayes}
+\end{equation}
+We denote the mapping defined by Equation~\eqref{eq:bayes} by $T$: $\bb_k = T(\bb_{k-1}, \bs_k, \by_k;\, \bc)$.  Two facts about the belief that we will use repeatedly:
+
+\begin{enumerate}[nosep, leftmargin=*]
+\item The belief is a sufficient statistic of the history for inference about $\bx$.  Any expectation involving $\bx$ and conditioning on the history only needs $\bb_k$, not the raw $(\bs_{1:k}, \by_{1:k})$.
+\item The belief is the natural state variable for the optimization problem.  A well-posed policy is a function of the current belief, $\bs_k = \pi(\bb_{k-1})$, rather than of the raw history.
+\end{enumerate}
+
+\subsection{The reward and the objective}
+
+We need a scalar criterion to rank policies.  A pointwise reward $\Phi(\bx, \bs_{1:K};\, \bc)$ is a function that returns a number for each realization of the unknown state, the action sequence, and the hardware.  In the qubit problem we use the negative terminal posterior variance (the Bayesian MSE of the posterior-mean estimator is its prior average); in the radar problem we use the mutual information, equivalent to the negative terminal posterior entropy.
+
+The \emph{value} of a policy $\pi$ is the expected reward when $\bx$ is drawn from the prior, actions are chosen by $\pi$, and observations are sampled from the likelihood:
+\begin{equation}
+V(\pi) \;=\; \E_{\bx \sim p_0}\, \E_{\by_{1:K} \mid \bx, \pi,\, \bc}\!\bigl[\Phi(\bx, \bs_{1:K}^\pi;\, \bc)\bigr].
+\label{eq:V_pi}
+\end{equation}
+The superscript on $\bs^\pi$ is a reminder that the action sequence is not fixed --- each $\bs_k$ is produced by applying $\pi$ to the current belief, which depends on the random trajectory $(\by_{1:k-1})$.
+
+The \emph{optimal policy} is any $\pi^\star$ that maximizes $V(\pi)$.  Solving for $\pi^\star$ is the central task of sequential decision theory.
+
+\subsection{Why we cannot just optimize over action sequences}
+
+If the horizon were $K=1$ the optimal policy would reduce to a single best action $\bs^\star = \argmax_{\bs} \E_{\bx, \by}[\Phi(\bx, \bs; \bc)]$ --- ordinary Bayesian optimal experimental design.  For $K \ge 2$ two obstructions appear.  First, the optimal $\bs_2$ depends on $\by_1$, which is random.  So there is no single ``best $\bs_2$''; the best choice is a \emph{function} of $\by_1$.  Second, the optimal $\bs_1$ should anticipate how its outcome will shape the best $\bs_2$ --- in other words, $\bs_1$ must account for the option value of information.  Optimizing each epoch separately in a greedy or myopic fashion misses both of these couplings.
+
+The language that lets us talk about this coupling is Bellman's.
+
+\section{Bellman's principle of optimality}
+\label{sec:bellman_principle}
+
+\subsection{The principle in plain language}
+
+An optimal policy has the following property.  If you follow it up to some moment, reach whatever belief you happen to reach, and then ask ``what is the best I can still do from here?'' --- the continuation of the optimal policy from that belief onward is itself an optimal policy for the sub-problem starting at that belief.  Nothing the first part of the policy did will have rendered the second part suboptimal.
+
+That is almost circular, but the content is sharp: the globally optimal policy is \emph{recursive}.  You can assemble it by solving the sub-problems (one step before the end, then two before, then three, and so on) and gluing their optimal pieces together.
+
+\subsection{The principle in formulas}
+
+Fix the hardware $\bc$.  Define the \emph{value-to-go} function
+\begin{equation}
+V_k(\bb) \;=\; \max_{\pi}\, \E\bigl[\Phi_0(\bx, \bb_K;\, \bc) \,\big|\, \bb_k = \bb,\ \text{policy $\pi$ from step $k$ onward}\bigr],
+\label{eq:V_k_def}
+\end{equation}
+where $\Phi_0(\bx, \bb_K; \bc)$ is the reward written as a function of the unknown state and the terminal belief (for our two examples $\Phi_0$ is $-(\bx - \hat{x})^2$ for the qubit, or $\log \bb_K(\bx) - \log p_0(\bx)$ for the radar; see Appendix~\ref{app:phi0}).
+
+$V_k(\bb)$ is the best expected score an optimal agent can still achieve if the current belief is $\bb$ and there are $K - k$ measurements still to take.  Bellman's principle says that this function satisfies the recursion
+\begin{align}
+V_K(\bb) &\;=\; \E_{\bx \mid \bb}\!\bigl[\Phi_0(\bx, \bb;\, \bc)\bigr], \label{eq:bellman_terminal}\\
+V_k(\bb) &\;=\; \max_{\bs \in \mathcal{S}}\; \E_{\by \mid \bb, \bs,\, \bc}\!\bigl[V_{k+1}\bigl(T(\bb, \bs, \by;\, \bc)\bigr)\bigr], \quad k = K-1, \ldots, 0.
+\label{eq:bellman_general}
+\end{align}
+Equation~\eqref{eq:bellman_terminal} is the \emph{terminal condition}: at step $K$ the experiment is over and the value-to-go collapses to the reward evaluated at whatever belief we have arrived at.  Equation~\eqref{eq:bellman_general} is the \emph{Bellman backup}: to know the value-to-go at belief $\bb$ with $K - k$ steps left, try every action, for each one compute the expected continuation value (which is $V_{k+1}$ evaluated at the next belief, averaged over the observation that the action would produce), and take the best.  The argmax is the optimal action at belief $\bb$ with $K - k$ steps left:
+\begin{equation}
+\pi^\star_k(\bb) \;=\; \argmax_{\bs \in \mathcal{S}}\; \E_{\by \mid \bb, \bs,\, \bc}\!\bigl[V_{k+1}\bigl(T(\bb, \bs, \by;\, \bc)\bigr)\bigr].
+\label{eq:pi_star}
+\end{equation}
+Reading $\pi^\star_0, \pi^\star_1, \ldots, \pi^\star_{K-1}$ off the recursion gives the globally optimal adaptive policy.
+
+\subsection{Why this is called \emph{backward} induction}
+
+The only equation in the recursion that contains no unknowns is Equation~\eqref{eq:bellman_terminal} --- the terminal one.  There is no future to integrate over; only the present belief and the present reward.  Once $V_K$ is a known function, Equation~\eqref{eq:bellman_general} at $k = K-1$ becomes solvable, because its right-hand side only references $V_K$.  That gives $V_{K-1}$, which feeds $V_{K-2}$, and so on, back to $V_0$.  The value function is constructed layer by layer, from the end of the experiment to the beginning.  This is ``backward induction on the horizon.''
+
+\subsection{Value iteration is a different thing}
+
+For completeness: Bellman's recursion as stated here is the \emph{finite-horizon} DP method.  The name ``value iteration'' usually refers to its infinite-horizon cousin, in which one repeatedly applies a Bellman operator to a single function $V$ on beliefs and waits for convergence to a fixed point.  Convergence there is by contraction (discount factor $< 1$).  In the finite-horizon case there is no iteration to convergence --- the terminal condition anchors the recursion and $K$ backward sweeps suffice exactly.  All three case studies in the companion paper are finite-horizon, and so is this tutorial.
+
+\subsection{Where the computation goes}
+
+In principle, the recursion is a finite calculation: there are $K$ layers and each layer is a max over actions of an expectation over observations.  In practice the obstruction is that $\bb$ is a continuous object (a probability density).  You cannot tabulate $V_k$ on the infinite space of possible beliefs.  Some reduction is needed:
+
+\begin{itemize}[nosep, leftmargin=*]
+\item A sufficient statistic of $\bb$ that lives in a finite or bounded space.  (The qubit example does this.)
+\item A finitely parametrized model family for $\bb$, e.g.\ Gaussian moments.  (Case~C of the paper does this; the tutorial does not pursue it.)
+\item A discrete state space in which $\bb$ is already a finite vector.  (The radar example.)
+\end{itemize}
+
+The two worked examples that follow show the first and third of these in detail.
+
+\section{Example 1: Qubit flux sensor (continuous state, count-tuple reduction)}
+\label{sec:qubit}
+
+\subsection{Problem statement}
+
+An external magnetic flux $\Phi_\mathrm{ext}$ threads a SQUID loop.  Its unknown value $\bx = \Phi_\mathrm{ext}$ is drawn from a uniform prior on $[0, \phi_{\max}\, \Phi_0]$ with $\phi_{\max} = 0.1$.  At each of $K = 4$ epochs we pick a Ramsey delay $\tau_j$ from a fixed menu of ten log-spaced delays in $[10, 320]$~ns and a repetition count $n \in \{1, 10\}$, then take $n$ Ramsey shots at that delay.  The likelihood for a single shot is
+\begin{equation}
+p(\by = 1 \mid \bx, \tau;\, \bc) \;=\; \tfrac{1}{2} + \tfrac{1}{2}\,\mathrm{th}(\bx, \bc)\, e^{-A(\bx, \bc)\,\tau - B(\bx, \bc)^2\, \tau^2}\, \cos\bigl[\Delta\omega(\bx, \bc)\, \tau\bigr],
+\label{eq:ramsey}
+\end{equation}
+where $\mathrm{th}, A, B, \Delta\omega$ are closed-form expressions in $\bx$ and the hardware $\bc$.  The outcome of $n$ shots at a fixed delay is Binomial$(n, p)$.  The reward is negative terminal posterior variance, $\Phi_0(\bb_K) = -\mathrm{Var}(\bx \mid \bb_K)$.
+
+\subsection{The belief is continuous, but has a lossless finite reduction}
+
+At any point in the experiment, the belief $\bb_k(\bx)$ is a density on the interval $[0, \phi_{\max}\, \Phi_0]$.  Trying to tabulate $V_k(\bb)$ over all such densities is hopeless --- the space is infinite-dimensional.
+
+The saving observation is this.  The Ramsey likelihood, Equation~\eqref{eq:ramsey}, depends on the action only through $\tau$.  Shots at the same delay give independent Bernoulli outcomes with the same success probability (conditional on $\bx$); the belief update after $n$ shots at delay $\tau$ is a function only of $n$ and the total number of ones observed, not of their order or of when within the experiment they were taken.  Consequently the likelihood factor that enters Bayes' rule after any sequence of measurements is
+\begin{equation}
+\prod_{j=1}^J p(\bx, \tau_j; \bc)^{M_j}\, \bigl[1 - p(\bx, \tau_j; \bc)\bigr]^{N_j - M_j},
+\label{eq:likelihood_counts}
+\end{equation}
+where $J = 10$ (the number of candidate delays), $N_j$ is the cumulative number of shots ever taken at delay $\tau_j$, and $M_j$ is the cumulative number of those shots that returned a ``1''.  Every other piece of the measurement history drops out of the posterior.
+
+So the posterior $\bb_k(\bx)$ is fully specified by the \emph{count-tuple}
+\begin{equation}
+\mathbf{n}_k \;=\; \bigl(N_1, M_1,\ N_2, M_2,\ \ldots,\ N_J, M_J\bigr),
+\label{eq:count_tuple}
+\end{equation}
+together with the prior and the hardware.  We have gained an enormous amount: instead of tabulating $V_k$ over a space of densities, we tabulate it over a space of $2J = 20$-tuples of nonnegative integers.
+
+\subsection{Reachability and the size of the DP table}
+
+The count-tuple $\mathbf{n}_k$ is bounded: at $K = 4$ epochs with at most $n = 10$ shots each, the total shot count $\sum_j N_j$ is at most $40$ and the tuple is sparse (at most four bins touched, because there are at most four epochs).  The set of reachable count-tuples across all four epochs, as enumerated by a breadth-first search from the empty tuple, is approximately $10^7$ distinct tuples.  Each entry is a 64-bit float (the value-to-go).  The table fits in memory.
+
+\subsection{Backward induction on count-tuples, in detail}
+
+\paragraph{Posterior from a count-tuple.}  To evaluate any expectation the DP needs, we must be able to turn a count-tuple into a posterior.  Discretize $\bx$ on a grid of $K_\Phi = 256$ points $\bx^{(1)}, \ldots, \bx^{(K_\Phi)}$ uniformly spaced across $[0, \phi_{\max} \Phi_0]$.  The posterior at the $i$-th grid point, given count-tuple $\mathbf{n}$, is
+\begin{equation}
+\bb(\bx^{(i)} \mid \mathbf{n}) \;\propto\; p_0(\bx^{(i)}) \prod_{j=1}^J p(\bx^{(i)}, \tau_j; \bc)^{M_j}\, \bigl[1 - p(\bx^{(i)}, \tau_j; \bc)\bigr]^{N_j - M_j},
+\label{eq:posterior_from_counts}
+\end{equation}
+with the constant of proportionality fixed by $\sum_i \bb(\bx^{(i)} \mid \mathbf{n}) = 1$.  The posterior variance and the outcome probabilities needed below are both computed from Equation~\eqref{eq:posterior_from_counts} on the fly.
+
+\paragraph{Marginal outcome probability.}  If the current posterior (given $\mathbf{n}$) is $\bb(\bx \mid \mathbf{n})$ and we take an action $(\tau, n)$, the distribution over the number of ``1''s is
+\begin{equation}
+\Pr(m \mid \mathbf{n}, \tau, n) \;=\; \sum_i \bb(\bx^{(i)} \mid \mathbf{n})\; \mathrm{Binomial}\bigl(m \,\big|\, n,\ p(\bx^{(i)}, \tau; \bc)\bigr).
+\label{eq:marginal_outcome}
+\end{equation}
+This is the marginal likelihood that will serve as the weighting in the Bellman backup's expectation.
+
+\paragraph{Child tuple.}  If we take $(\tau_j, n)$ and observe $m$ ``1'' outcomes, the new count-tuple has the same entries as $\mathbf{n}$ except $(N_j, M_j)$ becomes $(N_j + n,\, M_j + m)$.  We write this $\mathbf{n}'(\mathbf{n}, j, n, m)$.
+
+\paragraph{Bellman backup.}  Combining the pieces, the recursion is
+\begin{align}
+V_K(\mathbf{n}) &\;=\; -\mathrm{Var}\bigl(\bx \mid \mathbf{n}\bigr), \label{eq:qubit_terminal}\\
+V_k(\mathbf{n}) &\;=\; \max_{\substack{j \in \{1, \ldots, 10\}\\ n \in \{1, 10\}}}\;
+\sum_{m = 0}^{n}
+\Pr(m \mid \mathbf{n}, \tau_j, n)\; V_{k+1}\bigl(\mathbf{n}'(\mathbf{n}, j, n, m)\bigr),
+\label{eq:qubit_backup}
+\end{align}
+for $k = K - 1, \ldots, 0$.  The optimal adaptive policy is $\pi^\star_k(\mathbf{n}) = (\tau_{j^\star}, n^\star)$, the argmax of Equation~\eqref{eq:qubit_backup}.  The joint-DP value is $V^\star = V_0(\mathbf{0})$ evaluated at the all-zero tuple.
+
+\subsection{A miniature trace}
+
+To make Equations~\eqref{eq:qubit_terminal}--\eqref{eq:qubit_backup} concrete, shrink the problem: $K = 2$, $J = 2$ delays, $n \in \{1\}$ only.  There are four candidate actions total, $(\tau_1, 1), (\tau_2, 1)$ repeated at each epoch; twelve distinct child tuples at epoch $2$ (two delays times six possible aggregate counts of zero or one across the two shots --- but since $n=1$ at each step the reachable tuples after one epoch are $\{(1,0,0,0), (1,1,0,0), (0,0,1,0), (0,0,1,1)\}$, four of them, each representing a different shot location and outcome).  Starting from the all-zero tuple:
+
+\begin{enumerate}[nosep, leftmargin=*]
+\item \emph{Terminal layer $k = 2$.}  For each of the at most $4 + 4 \times 4 = 20$ reachable tuples, compute the posterior variance from Equation~\eqref{eq:posterior_from_counts} and store $V_2(\mathbf{n}) = -\mathrm{Var}$.
+\item \emph{Layer $k = 1$.}  For each of the four tuples reachable after one epoch, try both remaining actions.  For each, compute the two child tuples (outcomes $m = 0$ and $m = 1$), look up their $V_2$ values, and compute the marginal-outcome-weighted average.  Take the best of the two actions.
+\item \emph{Root $k = 0$.}  Start at $\mathbf{n} = \mathbf{0}$.  Try both actions.  For each, compute the two child tuples at $k = 1$, look up their $V_1$, and average.  Take the best.  The result is $V^\star$ at the initial belief; the argmax tells us the optimal first action.
+\end{enumerate}
+
+For $K = 4$, $J = 10$, $n \in \{1, 10\}$ the identical loop runs over $\sim 10^7$ tuples and takes minutes on a single thread (the DP is embarrassingly memoized, each tuple visited once).  The logic is unchanged.
+
+\subsection{What the count-tuple reduction bought us}
+
+Without the reduction, a brute-force playout tree at $K = 4$, $|\mathcal{S}| = 20$, and up to $11$ outcomes per action would have $(20 \times 11)^4 \approx 2 \times 10^9$ leaves.  With the reduction, a permutation of playouts that produces the same count-tuple collapses to one table entry; the reachable state space shrinks by roughly two orders of magnitude.  The exactness of the reduction --- no information about $\bx$ is lost by representing a history as counts --- is what makes this a \emph{lossless} speedup rather than an approximation.
+
+\section{Example 2: Radar beam search (discrete state, finite-belief DP)}
+\label{sec:radar}
+
+\subsection{Problem statement}
+
+A target sits in one of sixteen cells arranged on a ring: $\bx \in \{1, \ldots, 16\}$, with uniform prior $p_0(\bx) = 1/16$.  At each of $K = 4$ epochs we point a beam at some cell $\bs_k \in \{1, \ldots, 16\}$ and observe $\by_k \in \{0, 1\}$ with Bernoulli likelihood
+\begin{equation}
+p(\by_k = 1 \mid \bx, \bs_k;\, \bc) \;=\; p_\mathrm{FA} + (p_\mathrm{D} - p_\mathrm{FA}) \cdot G_\bc(\theta_{\bs_k} - \varphi_{\bx}),
+\label{eq:radar_likelihood}
+\end{equation}
+with $p_\mathrm{D} = 0.9$, $p_\mathrm{FA} = 0.05$, cell bearings $\varphi_\bx = 2\pi(\bx - 1)/16$, and $G_\bc$ a top-hat beam pattern of integer width $m$ (the hardware design variable).  The reward is the mutual information $I(\bx; \by_{1:K})$, which equals the prior entropy minus the expected terminal posterior entropy; maximizing it is equivalent to minimizing the expected terminal posterior entropy.
+
+\subsection{The belief is a probability vector}
+
+Since $\bx$ is discrete with $|\mathcal{X}| = 16$, the belief $\bb_k$ is a probability vector in the $15$-simplex.  It is already finite-dimensional; no reduction is needed.  The Bayes update $T$ is elementary: at belief $\bb$, action $\bs$, outcome $\by$,
+\begin{equation}
+\bb'(\bx) \;=\; \frac{p(\by \mid \bx, \bs;\, \bc)\, \bb(\bx)}{\sum_{\bx'} p(\by \mid \bx', \bs;\, \bc)\, \bb(\bx')}.
+\label{eq:radar_bayes}
+\end{equation}
+
+The DP is now a straight implementation of Equations~\eqref{eq:bellman_terminal}--\eqref{eq:bellman_general} on beliefs.
+
+\subsection{Reachable beliefs and the DP table}
+
+Here the tabulation strategy is not to enumerate all probability vectors (uncountably many) but to enumerate the \emph{reachable} beliefs --- those that can actually arise from the uniform prior by a sequence of allowed actions and allowed outcomes.  At $K = 4$ with binary outcomes and $|\mathcal{S}| = 16$, the number of reachable beliefs across all four epochs is bounded by $16^4 \times 2^4 = 10^6$; in practice many fewer because many action-outcome sequences lead to the same belief.  A breadth-first traversal from $\bb_0 = p_0$ records every reachable belief once and assigns it an index in a table.
+
+Alternatively, in the special case of the top-hat beam, the belief at any point has at most a constant number of distinct values --- the cells inside the beam, the cells outside, conditioned on each detection history --- so the reachable belief has a closed-form structure.  But conceptually, the DP is just ``belief in, value out.''
+
+\subsection{Backward induction on beliefs, in detail}
+
+Let $\mathcal{B}_k$ be the set of beliefs reachable exactly at step $k$ (so $\mathcal{B}_0 = \{p_0\}$).
+
+\paragraph{Terminal layer.}  For every $\bb \in \mathcal{B}_K$,
+\begin{equation}
+V_K(\bb) \;=\; \sum_{\bx = 1}^{16} \bb(\bx)\, \log \bb(\bx) - \text{(prior entropy constant)},
+\label{eq:radar_terminal}
+\end{equation}
+the negative posterior entropy (plus a constant that cancels in the argmax).  This is the reward for that terminal belief.
+
+\paragraph{Inductive step.}  For $k = K-1, K-2, \ldots, 0$ and each $\bb \in \mathcal{B}_k$:
+\begin{equation}
+V_k(\bb) \;=\; \max_{\bs \in \{1, \ldots, 16\}}\; \sum_{\by \in \{0, 1\}} \Pr(\by \mid \bb, \bs;\, \bc)\; V_{k+1}\bigl(T(\bb, \bs, \by;\, \bc)\bigr),
+\label{eq:radar_backup}
+\end{equation}
+where $\Pr(\by \mid \bb, \bs;\, \bc) = \sum_\bx \bb(\bx)\, p(\by \mid \bx, \bs; \bc)$ is the marginal outcome probability under the current belief.  The argmax is the optimal adaptive action at belief $\bb$ with $K - k$ steps left.
+
+\paragraph{Root.}  $V^\star = V_0(p_0)$.  The globally optimal policy is the collection $\{\pi^\star_k : \bb \mapsto \argmax_\bs \ldots\}$ for $k = 0, \ldots, K-1$.
+
+\subsection{A miniature trace: one cell, one beam, $K = 2$}
+
+To see the structure of an optimal adaptive radar policy, consider the simplification $K = 2$ with a narrow top-hat beam that covers exactly one cell ($m = 1$).  From the uniform prior:
+
+\begin{enumerate}[nosep, leftmargin=*]
+\item At epoch $1$, for any choice of pointing cell $\bs_1$, all $16$ cells are equally plausible.  The Bellman backup says try every $\bs_1$; by symmetry they are all equivalent, so pick $\bs_1 = 1$ without loss of generality.
+\item Two outcomes are possible.  If $\by_1 = 1$, the posterior concentrates on cell $1$ up to the false-alarm rate; the remaining cells are weighted by $p_\mathrm{FA} / [p_\mathrm{D} (1 - p_\mathrm{FA}) + \ldots]$.  If $\by_1 = 0$, the posterior shifts weight slightly away from cell $1$.
+\item At epoch $2$, the Bellman backup tries every $\bs_2$.  After a detection at cell $1$, the best $\bs_2$ is to point away from cell $1$ at whichever cell now carries the second-highest belief (the MI gain is maximized by sampling from a cell you are uncertain about).  After a miss at cell $1$, the best $\bs_2$ is similarly to point elsewhere.
+\end{enumerate}
+
+In words: the argmax at epoch $2$ is \emph{different} depending on whether $\by_1 = 0$ or $\by_1 = 1$.  That is the adaptive gain.  A fixed schedule of $(\bs_1 = 1, \bs_2 = 2)$ commits to cell $2$ before seeing $\by_1$ and thus cannot exploit the information in the outcome.
+
+For the full $K = 4$, $m = 9$ problem (the in-family optimum of the companion paper's Section~5), the Bellman backup produces an adaptive policy that behaves like binary search on the posterior support: the first beam splits the ring in half; each subsequent beam targets the half whose posterior weight is highest, narrowing by roughly a factor of two per step.
+
+\section{What the two examples share, and where they differ}
+\label{sec:comparison}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+ & \textbf{Qubit (Case~B)} & \textbf{Radar (Case~A)} \\
+\midrule
+State space $\mathcal{X}$           & continuous, $[0, \phi_{\max}\Phi_0]$  & discrete, $\{1, \ldots, 16\}$ \\
+Belief object                       & density on $\mathcal{X}$              & probability vector in $\R^{16}$ \\
+Belief reduction                    & count-tuple (20 integers)             & (none needed) \\
+Action set $\mathcal{S}$            & 10 delays $\times$ 2 rep counts       & 16 pointing cells \\
+Observation $\by$                   & Binomial$(n, p)$                       & Bernoulli \\
+Outcome count per action            & 2 or 11                                & 2 \\
+Horizon $K$                         & 4                                      & 4 \\
+Reward                              & $-\mathrm{Var}(\bx \mid \bb_K)$       & $-H(\bb_K)$ (equiv.\ MI) \\
+DP table size                       & $\sim 10^7$ count-tuples              & $\sim 10^6$ reachable beliefs \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The commonalities are load-bearing.  Both problems fit the POMDP template, both reward families are scalar functionals of the terminal belief, both Bellman recursions take the form of Equation~\eqref{eq:bellman_general}, and both are solved exactly by backward induction.  The divergences are in the shape of the belief and the size of the DP table, both of which are consequences of the state-space dimensionality.
+
+Two lessons worth taking away:
+
+\begin{enumerate}[nosep, leftmargin=*]
+\item \textbf{Reduction is essential in continuous-state problems.}  The qubit problem only becomes computable because the Ramsey likelihood has a permutation symmetry that collapses the posterior to a 20-integer tuple.  A generic continuous-state POMDP has no such luck and must be relaxed --- Gaussian-moment propagation (EKF), particle filters, or neural-belief-state methods --- at which point the DP is no longer exact.
+\item \textbf{Exactness is cheap in discrete-state problems.}  The radar problem runs directly on the natural probability-vector belief and returns a provably optimal policy without approximations, as long as the reachable belief set fits in memory.  At $K = 4$, $|\mathcal{X}| = 16$ it does; at $K = 20$ or $|\mathcal{X}| = 256$ it would not, and the same relaxation pathway as the qubit problem would be needed.
+\end{enumerate}
+
+\section{Connection to joint hardware-policy co-design}
+\label{sec:joint_dp}
+
+Everything in this tutorial assumes the hardware $\bc$ is fixed: the DP produces the optimal adaptive policy $\pi^\star(\bc)$ for whichever hardware was handed in.  The companion paper wraps this inner DP inside an outer optimization over $\bc$: gradient descent on $V^\star(\bc) = V_0(p_0; \bc)$.  Three observations make the outer optimization tractable given the inner DP:
+
+\begin{itemize}[nosep, leftmargin=*]
+\item \textbf{Envelope theorem.}  The derivative of $V^\star(\bc)$ with respect to $\bc$, taken at a point where the inner policy is Bellman-optimal, does not require differentiating through the inner argmax.  The inner policy is treated as a constant function of $\bc$ for the purpose of the outer gradient.  Only the explicit $\bc$-dependence of the running reward and the belief update matters.
+\item \textbf{Policy-iteration warm-starting.}  As $\bc$ drifts under outer gradient steps, the previously computed $\pi^\star(\bc_{\mathrm{old}})$ is near-optimal for $\bc_{\mathrm{new}}$.  The inner DP does not need to be resolved from scratch at every outer iteration; a partial update (a policy-iteration step) suffices most of the time.
+\item \textbf{Decoupling of problem sizes.}  The cost of the outer loop scales with $d_c$ (the dimension of the hardware parameter vector); the cost of the inner loop scales with the DP table size.  These are largely independent, which is what makes $d_c \sim 10^5$ (the photonic case) compatible with inner DPs that fit in memory.
+\end{itemize}
+
+The interested reader should turn to Sections~3 and~4 of the companion paper for the envelope-theorem statement and the relaxation hierarchy that kicks in when the inner DP is not tractable even once.  This tutorial has covered only the tractable-inner-DP case, which corresponds to the paper's rungs~1 and~2 (Case~Studies~A and~B).
+
+\section{Further reading and standard references}
+\label{sec:reading}
+
+\begin{itemize}[nosep, leftmargin=*]
+\item \textbf{Classical DP.}  Bellman, \emph{Dynamic Programming}, 1957.  Bertsekas, \emph{Dynamic Programming and Optimal Control}, volumes I and II, especially the finite-horizon chapters.
+\item \textbf{POMDPs.}  Kaelbling, Littman \& Cassandra, ``Planning and acting in partially observable stochastic domains,'' \emph{Artificial Intelligence}, 1998.  Smallwood \& Sondik, ``The optimal control of partially observable Markov processes over a finite horizon,'' \emph{Operations Research}, 1973.
+\item \textbf{Bayesian optimal experimental design (one-step).}  Chaloner \& Verdinelli, ``Bayesian experimental design: a review,'' \emph{Statistical Science}, 1995.  Lindley, \emph{Making Decisions}, 1971.
+\item \textbf{Sequential OED.}  Huan \& Marzouk, ``Sequential Bayesian optimal experimental design,'' \emph{Journal of Computational Physics}, 2016.  Kreucher \& Kastella, ``Sensor management using an active sensing approach,'' \emph{Signal Processing}, 2005.
+\item \textbf{Reinforcement learning (the large-$K$, neural-policy regime).}  Sutton \& Barto, \emph{Reinforcement Learning: An Introduction}, 2018.
+\end{itemize}
+
+\appendix
+
+\section{On $\Phi_0$ and the reward conversion from pointwise to belief-level}
+\label{app:phi0}
+
+The pointwise reward $\Phi(\bx, \bs_{1:K};\, \bc)$ takes $\bx$ as an argument; the belief-level reward the DP actually consumes is $\E_{\bx \mid \bb_K}[\Phi_0(\bx, \bb_K;\, \bc)]$, which takes only $\bb_K$ and $\bc$.  The conversion is exactly one integration against the posterior.  For the two rewards used in this tutorial:
+
+\begin{itemize}[nosep, leftmargin=*]
+\item \textbf{Posterior variance.}  $\Phi(\bx, \bs_{1:K}; \bc) = -(\bx - \hat{x}(\bb_K))^2$ with $\hat{x}(\bb_K) = \E[\bx \mid \bb_K]$ the posterior mean.  Integrating gives $\E_{\bx \mid \bb_K}[-(\bx - \hat{x})^2] = -\mathrm{Var}(\bx \mid \bb_K)$, a pure functional of $\bb_K$.
+\item \textbf{Mutual information.}  $\Phi_0(\bx, \bb_K; \bc) = \log \bb_K(\bx) - \log p_0(\bx)$.  Integrating gives $\E_{\bx \mid \bb_K}[\log(\bb_K/p_0)] = \mathrm{KL}(\bb_K \Vert p_0)$.  Averaging further over $\bb_K$ under the prior gives the mutual information $I(\bx; \by_{1:K})$.
+\end{itemize}
+
+A third case (Case~C of the companion paper) uses $\Phi_0 = \tfrac{1}{2} \log \det J_N(\bx, \bs_{1:K}; \bc)$, where the Fisher-information matrix $J_N$ depends on the action trajectory explicitly.  In that case the ``belief'' is augmented to carry the accumulated $J_N$ as an extra piece of state, so that the action-dependence folds into the belief and $\Phi_0$ becomes a function of the augmented belief alone.
+
+\end{document}
