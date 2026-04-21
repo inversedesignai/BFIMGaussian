@@ -260,6 +260,50 @@ The second term vanishes at the optimum by the first-order optimality condition 
 \end{equation}
 The policy Jacobian $d\pi^\star/d\bc$ does not appear.
 
+\subsection{Unfolding the envelope gradient through the Bellman recursion}
+\label{sec:envelope_unfolded}
+
+Equation~\eqref{eq:envelope_gradient} gives the envelope gradient in its abstract form.  Making it operational requires unfolding through the Bellman recursion of Equations~\eqref{eq:bellman_terminal}--\eqref{eq:bellman} to identify the concrete paths by which $\bc$ enters $V^\star$.  The result is a backward-recursion formula for $\partial V_k / \partial \bc$ that mirrors the Bellman recursion for $V_k$, and that can be computed by reverse-mode automatic differentiation with a single structural step: freeze the argmax.
+
+Define the $Q$-function
+\begin{equation}
+Q_k(\bb, \bs_k;\, \bc) \;\coloneqq\; \E_{\by_k \mid \bb, \bs_k, \bc}\!\bigl[V_{k+1}\bigl(T(\bb, \bs_k, \by_k;\, \bc);\, \bc\bigr)\bigr],
+\label{eq:Q_def_paper}
+\end{equation}
+so that the Bellman recursion reads $V_k(\bb;\, \bc) = \max_{\bs_k} Q_k(\bb, \bs_k;\, \bc)$ with $\bs_k^\star(\bb;\, \bc) \coloneqq \argmax_{\bs_k} Q_k$.  The total derivative of $V_k$ with respect to $\bc$ splits into an indirect piece (via $\bs_k^\star$) and a direct piece:
+\begin{equation}
+\frac{\partial V_k}{\partial \bc}(\bb;\, \bc)
+\;=\; \underbrace{\frac{\partial Q_k}{\partial \bs_k}(\bb, \bs_k^\star;\, \bc) \cdot \frac{\partial \bs_k^\star}{\partial \bc}(\bb;\, \bc)}_{= 0 \text{ at the argmax}}
+\;+\; \frac{\partial Q_k}{\partial \bc}(\bb, \bs_k^\star;\, \bc).
+\end{equation}
+The first term vanishes at an interior argmax by first-order optimality ($\partial Q_k / \partial \bs_k = 0$ at $\bs_k^\star$).  What survives is the partial derivative of $Q_k$ holding $\bs_k^\star$ fixed --- the per-step envelope identity
+\begin{equation}
+\frac{\partial V_k}{\partial \bc}(\bb;\, \bc) \;=\; \frac{\partial Q_k}{\partial \bc}(\bb, \bs_k^\star;\, \bc).
+\label{eq:envelope_per_step}
+\end{equation}
+
+Unfolding $\partial Q_k / \partial \bc$ using the product and chain rules, three contributions enter:
+\begin{align}
+\frac{\partial V_k}{\partial \bc}(\bb;\, \bc) \;=\; \E_{\by_k \mid \bb, \bs_k^\star, \bc}\!\Biggl[
+&\;\underbrace{\frac{\partial \log p(\by_k \mid \bb, \bs_k^\star, \bc)}{\partial \bc}\, V_{k+1}\bigl(T(\cdots);\, \bc\bigr)}_{\text{(i) score / outcome-likelihood term}} \notag \\
+& + \underbrace{\frac{\partial V_{k+1}}{\partial \bb}\bigl(T;\, \bc\bigr) \cdot \frac{\partial T(\bb, \bs_k^\star, \by_k;\, \bc)}{\partial \bc}}_{\text{(ii) belief-update term}} \notag \\
+& + \underbrace{\frac{\partial V_{k+1}}{\partial \bc}\bigl(T;\, \bc\bigr)}_{\text{(iii) recursive term}}\;\Biggr],
+\label{eq:dV_unfolded}
+\end{align}
+with terminal condition $\partial V_K / \partial \bc = \partial \Phi_0(\bx, \bb_K;\, \bc) / \partial \bc$ at the terminal belief.  The three terms pick up the three ways $\bc$ enters the Bellman backup once the argmax is frozen: through the outcome distribution (i), through the Bayesian belief update $T$ (ii), and through the recursive dependence of $V_{k+1}$ itself (iii).
+
+Equation~\eqref{eq:dV_unfolded} mirrors Equation~\eqref{eq:bellman}: same DP graph, same backward sweep order, same memoization structure.  If $V_k$ fits in memory --- whether as an exact hash table, a count-tuple dictionary, or a Gaussian-moment parametrization --- so does $\partial V_k / \partial \bc$.
+
+\paragraph{The operational recipe: argmax-freeze, then reverse-mode AD.}  One does not implement Equation~\eqref{eq:dV_unfolded} by hand.  The workflow is:
+\begin{enumerate}[nosep, leftmargin=*]
+\item \textbf{Forward pass.}  Run backward induction from $k = K$ down to $k = 0$, populating $V_k$ and recording $\bs_k^\star$ at every reachable belief summary.  No AD tape is active.
+\item \textbf{Gradient pass.}  Re-evaluate $V_0(p_0;\, \bc)$ by substituting the recorded $\bs_k^\star$ in place of $\max_{\bs_k}$.  The resulting expression is argmax-free and, by Equation~\eqref{eq:envelope_gradient}, identically equal to $V^\star(\bc)$.
+\item \textbf{Reverse-mode AD.}  Apply an AD system to the gradient-pass code.  Because the expression is composed of closed-form primitives in $\bc$ (the likelihood, the belief update, the terminal reward) and $\bc$-free combinators (sums, products, argmax lookups), AD returns $\partial V_0 / \partial \bc$ exactly with no custom rule for the Bellman $\max$.
+\end{enumerate}
+Freezing the argmax turns the non-smooth max-containing recursion into an ordinary differentiable expression --- that is the operational content of the envelope theorem.  Without it, AD would try to differentiate through the $\max$ and produce subgradient terms that Equation~\eqref{eq:envelope_gradient} tells us are already zero at the optimum.
+
+\paragraph{Concrete realizations across case studies.}  In Case~Study~A (radar, discrete belief), the per-step envelope gradient reduces to a finite sum over reachable beliefs; $\partial \Pr / \partial \bc$ and $\partial T / \partial \bc$ have closed forms in the beam-pattern parameter.  In Case~Study~B (qubit, count-tuple state), the only $\bc$-carrying primitive in the entire DP is the Ramsey likelihood of Equation~\eqref{eq:ramsey_likelihood}; all of the count-tuple combinatorics, action grid, and memoization are $\bc$-free, so the reverse-mode AD graph consists of one closed-form function composed through the DP tree via the chain rule.  In Case~Study~C (photonic, Gaussian-posterior surrogate), the envelope theorem specializes to the implicit-function-theorem adjoint over the inner sensor-parameter argmax, and the per-step $\partial Q_k / \partial \bc$ becomes a closed-form expression in the FDFD $S$-matrix derivatives; see §\ref{sec:photonic}.
+
 \subsection{Implications for tractability}
 
 Equation~\eqref{eq:envelope_gradient} is the workhorse of the paper.  Four consequences:

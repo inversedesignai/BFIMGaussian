@@ -126,7 +126,7 @@ Equation~\eqref{eq:bellman_terminal} is the \emph{terminal condition}: at step $
 \end{equation}
 Reading $\pi^\star_0, \pi^\star_1, \ldots, \pi^\star_{K-1}$ off the recursion gives the globally optimal adaptive policy.
 
-\subsection{Deriving the recursion from $V(\pi)$}
+\subsection{Deriving the recursion from \texorpdfstring{$V(\pi)$}{V(pi)}}
 \label{sec:derivation}
 
 We stated the recursion above.  Now we derive it --- starting from Equation~\eqref{eq:V_pi}, the expected reward under a fixed policy --- in four steps.  Each step isolates one ingredient: change of conditioning, sufficiency of the posterior, trajectory factorization through the belief update, and Bellman's principle applied as an interchange of max and expectation.
@@ -445,7 +445,7 @@ where $\Pr(\by \mid \bb, \bs;\, \bc) = \sum_\bx \bb(\bx)\, p(\by \mid \bx, \bs; 
 
 \paragraph{Root.}  $V^\star = V_0(p_0)$.  The globally optimal policy is the collection $\{\pi^\star_k : \bb \mapsto \argmax_\bs \ldots\}$ for $k = 0, \ldots, K-1$.
 
-\subsection{A miniature trace: one cell, one beam, $K = 2$}
+\subsection{A miniature trace: one cell, one beam, \texorpdfstring{$K = 2$}{K=2}}
 
 To see the structure of an optimal adaptive radar policy, consider the simplification $K = 2$ with a narrow top-hat beam that covers exactly one cell ($m = 1$).  From the uniform prior:
 
@@ -550,15 +550,100 @@ The recipe is always the same: redefine the DP's state as (posterior, running ac
 \section{Connection to joint hardware-policy co-design}
 \label{sec:joint_dp}
 
-Everything in this tutorial assumes the hardware $\bc$ is fixed: the DP produces the optimal adaptive policy $\pi^\star(\bc)$ for whichever hardware was handed in.  The companion paper wraps this inner DP inside an outer optimization over $\bc$: gradient descent on $V^\star(\bc) = V_0(p_0; \bc)$.  Three observations make the outer optimization tractable given the inner DP:
+Everything in this tutorial so far has assumed the hardware $\bc$ is fixed: the DP produces the optimal adaptive policy $\pi^\star(\bc)$ for whichever hardware was handed in.  The companion paper wraps this inner DP inside an outer optimization over $\bc$ --- gradient descent on
+\begin{equation}
+V^\star(\bc) \;\coloneqq\; V_0(p_0;\, \bc).
+\end{equation}
+This section describes how the outer gradient $\partial V^\star / \partial \bc$ is computed, and why --- despite the Bellman recursion being a max-of-expectations nested $K$ levels deep --- the gradient comes out of ordinary reverse-mode automatic differentiation with a single structural trick.
+
+\subsection{Three enabling observations}
 
 \begin{itemize}[nosep, leftmargin=*]
-\item \textbf{Envelope theorem.}  The derivative of $V^\star(\bc)$ with respect to $\bc$, taken at a point where the inner policy is Bellman-optimal, does not require differentiating through the inner argmax.  The inner policy is treated as a constant function of $\bc$ for the purpose of the outer gradient.  Only the explicit $\bc$-dependence of the running reward and the belief update matters.
-\item \textbf{Policy-iteration warm-starting.}  As $\bc$ drifts under outer gradient steps, the previously computed $\pi^\star(\bc_{\mathrm{old}})$ is near-optimal for $\bc_{\mathrm{new}}$.  The inner DP does not need to be resolved from scratch at every outer iteration; a partial update (a policy-iteration step) suffices most of the time.
-\item \textbf{Decoupling of problem sizes.}  The cost of the outer loop scales with $d_c$ (the dimension of the hardware parameter vector); the cost of the inner loop scales with the DP table size.  These are largely independent, which is what makes $d_c \sim 10^5$ (the photonic case) compatible with inner DPs that fit in memory.
+\item \textbf{Envelope theorem.}  The derivative of $V^\star(\bc)$ at a point where the inner policy is Bellman-optimal does not require differentiating through the argmax.  The inner policy is treated as a constant function of $\bc$ when taking the outer gradient; only the \emph{explicit} $\bc$-dependence of the reward and the belief update matters.
+\item \textbf{Policy-iteration warm-starting.}  As $\bc$ drifts under outer gradient steps, the previously computed $\pi^\star(\bc_{\mathrm{old}})$ is near-optimal for $\bc_{\mathrm{new}}$.  A full rebuild of the inner DP is not needed every outer step; a partial update suffices.
+\item \textbf{Decoupling of problem sizes.}  The cost of the outer loop scales with $d_c$ (the dimension of $\bc$); the cost of the inner loop scales with the DP table size.  These are largely independent, which is why $d_c \sim 10^5$ (the photonic case) can coexist with inner DPs that fit in memory.
 \end{itemize}
 
-The interested reader should turn to Sections~3 and~4 of the companion paper for the envelope-theorem statement and the relaxation hierarchy that kicks in when the inner DP is not tractable even once.  This tutorial has covered only the tractable-inner-DP case, which corresponds to the paper's rungs~1 and~2 (Case~Studies~A and~B).
+\subsection{Differentiating the Bellman recursion through \texorpdfstring{$\bc$}{c}}
+
+The central obstruction to a mechanical gradient calculation is the $\max$ in the Bellman backup, Equation~\eqref{eq:bellman_general}.  The $\max$ is non-smooth, and a naive differentiation through it would pick up subgradient contributions corresponding to how the argmax itself shifts with $\bc$.  The envelope theorem says those contributions vanish at the optimum.  We spell out what remains.
+
+\paragraph{The envelope theorem, formally.}  Define the ``Q-function'' at step $k$,
+\begin{equation}
+Q_k(\bb, \bs;\, \bc) \;\coloneqq\; \E_{\by_k \mid \bb, \bs, \bc}\!\bigl[V_{k+1}(T(\bb, \bs, \by_k;\, \bc);\, \bc)\bigr],
+\label{eq:Q_def}
+\end{equation}
+so that $V_k(\bb;\, \bc) = \max_{\bs_k} Q_k(\bb, \bs_k;\, \bc)$ and $\bs_k^\star(\bb;\, \bc) = \argmax_{\bs_k} Q_k(\bb, \bs_k;\, \bc)$.  The total derivative of $V_k$ with respect to $\bc$ splits into an indirect piece (via $\bs_k^\star$) and a direct piece:
+\begin{equation}
+\frac{\partial V_k}{\partial \bc}(\bb;\, \bc)
+\;=\; \underbrace{\frac{\partial Q_k}{\partial \bs_k}(\bb, \bs_k^\star;\, \bc) \cdot \frac{\partial \bs_k^\star}{\partial \bc}(\bb;\, \bc)}_{= 0 \ \text{at the argmax}}
+\;+\; \frac{\partial Q_k}{\partial \bc}(\bb, \bs_k^\star;\, \bc).
+\end{equation}
+The first term vanishes because $\partial Q_k / \partial \bs_k = 0$ at an interior argmax (the first-order optimality condition); what survives is just the partial derivative of $Q_k$ with $\bs_k$ held fixed at $\bs_k^\star$:
+\begin{equation}
+\boxed{\ \frac{\partial V_k}{\partial \bc}(\bb;\, \bc) \;=\; \frac{\partial Q_k}{\partial \bc}(\bb, \bs_k^\star;\, \bc).\ }
+\label{eq:envelope_tutorial}
+\end{equation}
+Equation~\eqref{eq:envelope_tutorial} is the operational form of the envelope theorem: to differentiate $V_k$ with respect to $\bc$, freeze the argmax and differentiate the integrand.  No argmax sensitivity is needed.
+
+\paragraph{Three contributions to $\partial Q_k / \partial \bc$.}  Write $Q_k$ as an explicit sum over outcomes (discrete $\by_k$ for the qubit and radar problems, integral otherwise):
+\begin{equation}
+Q_k(\bb, \bs_k^\star;\, \bc) \;=\; \sum_{\by_k}\, \Pr(\by_k \mid \bb, \bs_k^\star, \bc)\, V_{k+1}\bigl(T(\bb, \bs_k^\star, \by_k;\, \bc);\, \bc\bigr).
+\end{equation}
+Applying the product and chain rules with $\bs_k^\star$ held fixed,
+\begin{align}
+\frac{\partial Q_k}{\partial \bc} \;=\; \sum_{\by_k} \biggl[ &\underbrace{\frac{\partial \Pr(\by_k \mid \bb, \bs_k^\star, \bc)}{\partial \bc}\, V_{k+1}\bigl(T(\cdots);\, \bc\bigr)}_{\text{(i) outcome-probability term}} \notag \\
+&\; +\; \Pr(\by_k \mid \cdots)\, \underbrace{\frac{\partial V_{k+1}}{\partial \bb}\bigl(T;\, \bc\bigr) \cdot \frac{\partial T(\bb, \bs_k^\star, \by_k;\, \bc)}{\partial \bc}}_{\text{(ii) belief-update term}} \notag \\
+&\; +\; \Pr(\by_k \mid \cdots)\, \underbrace{\frac{\partial V_{k+1}}{\partial \bc}\bigl(T;\, \bc\bigr)}_{\text{(iii) recursive term}} \biggr].
+\label{eq:dV_unfolded}
+\end{align}
+Three pieces of the $\bc$-dependence enter:
+\begin{enumerate}[nosep, leftmargin=*]
+\item \textbf{Outcome-probability (i).}  $\bc$ changes the likelihood of the measurement $\by_k$, which re-weights the future continuations.
+\item \textbf{Belief-update (ii).}  $\bc$ enters the Bayesian update $T$ through the likelihood factor, so the posterior landed on after observing $\by_k$ shifts with $\bc$.
+\item \textbf{Recursive (iii).}  $V_{k+1}$ itself depends on $\bc$ --- this piece is picked up by the same formula applied at step $k+1$, which is the recursion that gives the gradient its backward-induction structure.
+\end{enumerate}
+The terminal gradient is $\partial V_K / \partial \bc = \partial \Phi_0^{\mathrm{belief}}(\bb;\, \bc) / \partial \bc$, obtained by differentiating the reward at the terminal belief with respect to its own $\bc$ arguments.
+
+Equation~\eqref{eq:dV_unfolded} mirrors the Bellman recursion itself: same DP graph, same memoization, same backward order.  If $V$ fits in memory, so does $\partial V / \partial \bc$.
+
+\subsection{The operational recipe: freeze the argmax, then AD}
+
+In practice one does \emph{not} implement Equation~\eqref{eq:dV_unfolded} by hand.  Instead the envelope theorem lets reverse-mode AD do the entire calculation in a single sweep, provided the argmax is frozen first.  The recipe:
+
+\begin{enumerate}[nosep, leftmargin=*]
+\item \textbf{Forward pass (no AD).}  Run the backward induction from $k = K$ down to $k = 0$, populating $V_k(\mathbf{n};\, \bc)$ in a memoization dictionary.  At each reachable $(k, \mathbf{n})$, \emph{record the argmax action $\bs_k^\star(\mathbf{n};\, \bc)$} alongside the value.  No AD tape is active during this pass.
+\item \textbf{Gradient pass (AD-traced).}  Re-evaluate $V_0(p_0;\, \bc)$ by traversing the DP graph a second time --- but substitute the previously recorded $\bs_k^\star$ in place of the $\max_{\bs_k}$.  The expression being evaluated is now argmax-free:
+\begin{equation}
+V_0(p_0;\, \bc) \;=\; \sum_{\text{paths}} \Bigl[\prod_{k=1}^K \Pr(\by_k \mid \bb_{k-1}, \bs_k^\star, \bc)\Bigr]\, \Phi_0^{\mathrm{belief}}(\bb_K;\, \bc).
+\label{eq:argmax_frozen}
+\end{equation}
+By Equation~\eqref{eq:envelope_tutorial} the value computed is numerically identical to the forward-pass value.
+\item \textbf{Reverse-mode AD.}  Wrap Equation~\eqref{eq:argmax_frozen} in \texttt{Zygote.pullback} (or an equivalent reverse-mode AD system) and apply the pullback.  Because every primitive in the expression is either closed-form in $\bc$ or $\bc$-free, AD returns the exact $\partial V_0 / \partial \bc$ without any custom rule.
+\end{enumerate}
+
+The essential point: \emph{freezing the argmax turns the Bellman recursion into an ordinary differentiable expression}.  Without that step, AD would try to differentiate through the $\max$, producing subgradient terms that the envelope theorem already tells us are zero at the optimum.  With that step, the non-smooth $\max$ disappears from the AD graph entirely.
+
+\subsection{What is \texorpdfstring{$\bc$}{c}-dependent in the qubit problem}
+
+To make Equation~\eqref{eq:dV_unfolded} concrete: in the Ramsey flux sensor of §\ref{sec:qubit}, only one primitive carries $\bc$ in the entire DP --- the Ramsey single-shot likelihood
+\begin{equation*}
+p(\bx, \tau;\, \bc) \;=\; \tfrac{1}{2} + \tfrac{1}{2}\,\mathrm{th}(\bx, \bc)\, e^{-A(\bx, \bc)\,\tau - B(\bx, \bc)^2 \tau^2}\, \cos\bigl[\Delta\omega(\bx, \bc)\, \tau\bigr],
+\end{equation*}
+whose four rate/coefficient parameters $(\mathrm{th}, A, B, \Delta\omega)$ are closed-form functions of the seven hardware components of $\bc$.  Every other object in the DP inherits its $\bc$-dependence from this single primitive:
+
+\begin{itemize}[nosep, leftmargin=*]
+\item The marginal outcome probability $\Pr(m \mid \mathbf{n}, \tau, n_\text{shot};\, \bc)$ (Equation~\eqref{eq:marginal_outcome}) is a finite sum of Binomial factors evaluated at $p(\bx_i, \tau;\, \bc)$; its $\bc$-gradient comes through $p$.
+\item The belief $\bb(\bx \mid \mathbf{n};\, \bc)$ (Equation~\eqref{eq:belief_from_counts}) is a normalized product of Ramsey factors; its $\bc$-gradient is the log-likelihood-ratio score weighted by the unnormalized posterior and renormalized.
+\item The terminal reward $V_K(\mathbf{n};\, \bc) = -\mathrm{Var}(\bx \mid \mathbf{n};\, \bc)$ depends on $\bc$ only through its dependence on $\bb$.
+\item The count-tuple state space, the action grid $\{(\tau_j, n_\text{shot}) : j, n_\text{shot}\}$, and the combinatorial child-tuple update $\mathbf{n} \mapsto \mathbf{n}'$ are $\bc$-free.
+\end{itemize}
+
+Consequently the AD graph for $\partial V_0 / \partial \bc$ contains a single $\bc$-dependent primitive (the Ramsey function), composed through the DP tree with the chain rule doing all of the bookkeeping.  No custom \texttt{rrule} for the Bellman $\max$ operator is needed --- that is the entire operational payoff of the envelope theorem.
+
+\bigskip
+
+The interested reader should turn to Sections~3 and~4 of the companion paper for the envelope-theorem statement in its full generality and the relaxation hierarchy that kicks in when the inner DP is not tractable even once.  This tutorial has covered only the tractable-inner-DP case, which corresponds to the paper's rungs~1 and~2 (Case~Studies~A and~B).
 
 \section{Further reading and standard references}
 \label{sec:reading}
@@ -573,7 +658,7 @@ The interested reader should turn to Sections~3 and~4 of the companion paper for
 
 \appendix
 
-\section{On $\Phi_0$ and the reward conversion from pointwise to belief-level}
+\section{On \texorpdfstring{$\Phi_0$}{Phi\_0} and the reward conversion from pointwise to belief-level}
 \label{app:phi0}
 
 The pointwise reward $\Phi(\bx, \bs_{1:K};\, \bc)$ takes $\bx$ as an argument; the belief-level reward the DP actually consumes is $\E_{\bx \mid \bb_K}[\Phi_0(\bx, \bb_K;\, \bc)]$, which takes only $\bb_K$ and $\bc$.  The conversion is exactly one integration against the posterior.  For the two rewards used in this tutorial:
