@@ -292,16 +292,84 @@ Two structural facts about this expression are what make the interchange go thro
 
 \textbf{Observation 2 ($\pi'$ is a function, not a value): $\pi'$ spans a function space.}  A continuation policy takes a belief and returns an action, $\pi' : \mathcal{B} \to \mathcal{S}$.  The belief at which $\pi'$ is evaluated, $T(\bb, \bs_k, \by_{k+1};\, \bc)$, depends on $\by_{k+1}$, so different realizations of $\by_{k+1}$ cause $\pi'$ to be evaluated at different beliefs, where it is allowed to take different action values.  The $\max$ over $\pi'$ is therefore a $\max$ over a \emph{function space}, not over a single action value.
 
-\subparagraph{Step 4e --- The interchange (load-bearing step).}  By Observation 2, the pointwise-in-$\by_{k+1}$ argmax of the integrand
+\paragraph{The interchange lemma.}  Before completing Step 4e, we isolate the abstract identity that does the work in a stand-alone lemma.  Step 4e will then be a one-line application.
+
+\begin{center}
+\fbox{\parbox{0.95\textwidth}{
+\textbf{Lemma (max--integral interchange over a function space).}  Let $Y$ be a measure space with non-negative measure $\mu$, $A$ a set (the ``action space''), and $g: Y \times A \to \R$ a measurable function.  Let $\mathcal{C}$ be a class of admissible measurable functions $\phi: Y \to A$ such that $\int g(y, \phi(y))\, d\mu(y)$ is well-defined for every $\phi \in \mathcal{C}$.  Then
 \begin{equation}
-\pi^\star(\by_{k+1}) \;\coloneqq\; \argmax_{\pi'}\, \bigl[\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\, p(\by_{k+1} \mid \bb, \bs_k, \bc)\, \bigr]
+\max_{\phi \in \mathcal{C}}\, \int g(y, \phi(y))\, d\mu(y) \;=\; \int \max_{a \in A}\, g(y, a)\, d\mu(y)
+\label{eq:interchange_lemma}
 \end{equation}
-is an admissible element of the policy class (it is a function of $\by_{k+1}$, and the continuation policies we are maximizing over are precisely such functions).  Consequently, the $\max$ commutes with the integral:
+if and only if
+\begin{enumerate}[nosep, label=(\roman*)]
+\item \textbf{(attainment)} for each $y \in Y$, the pointwise argmax $a^\star(y) \coloneqq \argmax_{a \in A}\, g(y, a)$ exists, and
+\item \textbf{(admissibility)} the assembled function $a^\star(\cdot)$ lies in $\mathcal{C}$.
+\end{enumerate}
+
+\vspace{2pt}
+\textbf{Proof.}  One inequality always holds; the other requires (i) and (ii).
+
+\emph{Step A (LHS $\leq$ RHS, unconditional).}  For any admissible $\phi \in \mathcal{C}$ and any $y \in Y$,
+\begin{equation*}
+g(y, \phi(y)) \;\leq\; \max_{a \in A}\, g(y, a),
+\end{equation*}
+by definition of the pointwise maximum.  Integrating both sides against $\mu \geq 0$ preserves the inequality,
+\begin{equation*}
+\int g(y, \phi(y))\, d\mu(y) \;\leq\; \int \max_{a \in A}\, g(y, a)\, d\mu(y).
+\end{equation*}
+The right-hand side does not depend on $\phi$, so it bounds the max over $\phi$ as well:
+\begin{equation*}
+\max_{\phi \in \mathcal{C}}\, \int g(y, \phi(y))\, d\mu(y) \;\leq\; \int \max_{a \in A}\, g(y, a)\, d\mu(y).
+\end{equation*}
+
+\emph{Step B (LHS $\geq$ RHS under (i) and (ii)).}  Define $\phi^\star \coloneqq a^\star$.  By (i), $\phi^\star(y)$ is well-defined at every $y$; by (ii), $\phi^\star \in \mathcal{C}$.  At every $y$,
+\begin{equation*}
+g(y, \phi^\star(y)) \;=\; g(y, a^\star(y)) \;=\; \max_{a \in A}\, g(y, a),
+\end{equation*}
+with the first equality by definition of $\phi^\star$ and the second by definition of $a^\star$ via (i).  Integrating,
+\begin{equation*}
+\int g(y, \phi^\star(y))\, d\mu(y) \;=\; \int \max_{a \in A}\, g(y, a)\, d\mu(y).
+\end{equation*}
+Since $\phi^\star \in \mathcal{C}$, the max over $\mathcal{C}$ is at least this value:
+\begin{equation*}
+\max_{\phi \in \mathcal{C}}\, \int g(y, \phi(y))\, d\mu(y) \;\geq\; \int g(y, \phi^\star(y))\, d\mu(y) \;=\; \int \max_{a \in A}\, g(y, a)\, d\mu(y).
+\end{equation*}
+
+\emph{Step C (combine).}  Step A gives LHS $\leq$ RHS; Step B gives LHS $\geq$ RHS.  Together, LHS $=$ RHS, which is Equation~\eqref{eq:interchange_lemma}.
+
+\emph{Step D (strict inequality when (i) or (ii) fails).}  If (i) fails on a $\mu$-positive set of $y$'s, the RHS integrand uses a $\sup$ rather than an attained $\max$ at those $y$'s, and no $\phi \in \mathcal{C}$ can match it everywhere; LHS is strictly less than RHS by the sup gap.  If (ii) fails --- $a^\star$ exists pointwise but is not in $\mathcal{C}$ --- then no $\phi \in \mathcal{C}$ achieves the pointwise max at every $y$, and again LHS is strictly less than RHS.  $\square$
+
+\vspace{4pt}
+\textbf{Operational reading of the conditions.}
+\begin{itemize}[nosep, leftmargin=*]
+\item \textbf{(i) Attainment} says the inner max over actions is \emph{achieved} (not just approximated) at each $y$.  Holds automatically when $A$ is finite or when $A$ is compact and $g(y, \cdot)$ is upper semicontinuous.
+\item \textbf{(ii) Admissibility} says the pointwise-argmax function, which in general depends on $y$, must itself be an admissible element of $\mathcal{C}$.  Equivalently, $\mathcal{C}$ must be a function class rich enough to include all such $y$-dependent choices.  This is satisfied when $\mathcal{C}$ is the class of all measurable $\phi: Y \to A$, and it fails if $\mathcal{C}$ is restricted --- e.g., to constant functions (``fixed schedules''), in which case LHS $<$ RHS strictly.
+\end{itemize}
+}}
+\end{center}
+
+\subparagraph{Step 4e --- The interchange (load-bearing step).}  Apply the lemma with
+\begin{itemize}[nosep, leftmargin=*]
+\item $Y$ = the space of possible values of $\by_{k+1}$;
+\item measure $d\mu(\by_{k+1}) = p(\by_{k+1} \mid \bb, \bs_k, \bc)\, d\by_{k+1}$ (the outcome distribution, non-negative and $\pi'$-free by Observation 1);
+\item $A$ = the space of admissible continuation policies from step $k+1$ onward;
+\item $\mathcal{C}$ = the class of all measurable continuation policies (equivalently, history-measurable functions from step-$k+1$ beliefs to actions through step $K-1$);
+\item $g(\by_{k+1}, \pi') = U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)$.
+\end{itemize}
+Both conditions of the lemma are satisfied.  \emph{(i) Attainment}: for each $\by_{k+1}$, the inner problem $\max_{\pi'} U^{\pi'}_{k+1}(T(\cdots);\, \bc)$ is exactly the Bellman sub-problem at step $k+1$, which is attained whenever the inner action set is finite (as in all case studies in this tutorial) or compact with continuous $U^{\pi'}_{k+1}$.  \emph{(ii) Admissibility}: the pointwise argmax
+\begin{equation*}
+\pi^\star(\by_{k+1}) \;\coloneqq\; \argmax_{\pi'}\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)
+\end{equation*}
+is a $\by_{k+1}$-dependent continuation, which Observation 2 tells us is admissible (adaptive continuations can depend on the realized $\by_{k+1}$).
+
+The lemma therefore gives
 \begin{equation}
-\max_{\pi'} \int U^{\pi'}_{k+1}\, p\, d\by_{k+1} \;=\; \int \max_{\pi'}\, \bigl[\, U^{\pi'}_{k+1}\, p\, \bigr]\, d\by_{k+1}.
+\max_{\pi'}\, \int U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\, p(\by_{k+1} \mid \bb, \bs_k, \bc)\, d\by_{k+1}
+\;=\; \int \max_{\pi'}\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\, p(\by_{k+1} \mid \bb, \bs_k, \bc)\, d\by_{k+1}.
 \label{eq:interchange}
 \end{equation}
-This is the heart of the derivation.  It holds because the set of admissible $\pi'$'s is a function space rich enough to contain the pointwise argmax.  If $\pi'$ were constrained to be a single action value (non-adaptive), this interchange would \emph{fail}, and the $\leq$ in the generic inequality $\max_{\pi'} \int \leq \int \max_{\pi'}$ could be strict.
+(The weight $p(\by_{k+1} \mid \bb, \bs_k, \bc)$ on the right is pulled out of the $\max_{\pi'}$ because it is a non-negative $\pi'$-free constant, exactly as Observation 1 allows.  The lemma does the interchange; this factor-out is the easy follow-on step.)  If the admissibility condition failed --- if $\pi'$ were restricted to a non-adaptive class such as constant schedules --- the lemma's condition (ii) would be violated and the interchange would produce strict inequality.
 
 \subparagraph{Step 4f --- Pull $p$ out of the inner $\max$ (easy step).}  By Observation 1, $p(\by_{k+1} \mid \bb, \bs_k, \bc)$ is a $\pi'$-free non-negative constant as far as the inner $\max_{\pi'}$ is concerned.  Non-negative constants commute with $\max$:
 \begin{equation}
