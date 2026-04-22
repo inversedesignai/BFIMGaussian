@@ -295,7 +295,7 @@ Two structural facts about this expression are what make the interchange go thro
 \paragraph{The interchange lemma.}  Before completing Step 4e, we isolate the abstract identity that does the work in a stand-alone lemma.  Step 4e will then be a one-line application.
 
 \begin{center}
-\fbox{\parbox{0.95\textwidth}{
+\fbox{\parbox{0.9\textwidth}{
 \textbf{Lemma (max--integral interchange over a function space).}  Let $Y$ be a measure space with non-negative measure $\mu$, $A$ a set (the ``action space''), and $g: Y \times A \to \R$ a measurable function.  Let $\mathcal{C}$ be a class of admissible measurable functions $\phi: Y \to A$ such that $\int g(y, \phi(y))\, d\mu(y)$ is well-defined for every $\phi \in \mathcal{C}$.  Then
 \begin{equation}
 \max_{\phi \in \mathcal{C}}\, \int g(y, \phi(y))\, d\mu(y) \;=\; \int \max_{a \in A}\, g(y, a)\, d\mu(y)
@@ -332,9 +332,11 @@ with the first equality by definition of $\phi^\star$ and the second by definiti
 \int g(y, \phi^\star(y))\, d\mu(y) \;=\; \int \max_{a \in A}\, g(y, a)\, d\mu(y).
 \end{equation*}
 Since $\phi^\star \in \mathcal{C}$, the max over $\mathcal{C}$ is at least this value:
-\begin{equation*}
-\max_{\phi \in \mathcal{C}}\, \int g(y, \phi(y))\, d\mu(y) \;\geq\; \int g(y, \phi^\star(y))\, d\mu(y) \;=\; \int \max_{a \in A}\, g(y, a)\, d\mu(y).
-\end{equation*}
+\begin{align*}
+\max_{\phi \in \mathcal{C}}\, \int g(y, \phi(y))\, d\mu(y)
+&\;\geq\; \int g(y, \phi^\star(y))\, d\mu(y) \\
+&\;=\; \int \max_{a \in A}\, g(y, a)\, d\mu(y).
+\end{align*}
 
 \emph{Step C (combine).}  Step A gives LHS $\leq$ RHS; Step B gives LHS $\geq$ RHS.  Together, LHS $=$ RHS, which is Equation~\eqref{eq:interchange_lemma}.
 
@@ -364,11 +366,11 @@ Both conditions of the lemma are satisfied.  \emph{(i) Attainment}: for each $\b
 is a $\by_{k+1}$-dependent continuation, which Observation 2 tells us is admissible (adaptive continuations can depend on the realized $\by_{k+1}$).
 
 The lemma therefore gives
-\begin{equation}
-\max_{\pi'}\, \int U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\, p(\by_{k+1} \mid \bb, \bs_k, \bc)\, d\by_{k+1}
-\;=\; \int \max_{\pi'}\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\, p(\by_{k+1} \mid \bb, \bs_k, \bc)\, d\by_{k+1}.
+\begin{align}
+&\max_{\pi'}\, \int U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\, p(\by_{k+1} \mid \bb, \bs_k, \bc)\, d\by_{k+1} \notag \\
+&\qquad\;=\; \int \max_{\pi'}\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\, p(\by_{k+1} \mid \bb, \bs_k, \bc)\, d\by_{k+1}.
 \label{eq:interchange}
-\end{equation}
+\end{align}
 (The weight $p(\by_{k+1} \mid \bb, \bs_k, \bc)$ on the right is pulled out of the $\max_{\pi'}$ because it is a non-negative $\pi'$-free constant, exactly as Observation 1 allows.  The lemma does the interchange; this factor-out is the easy follow-on step.)  If the admissibility condition failed --- if $\pi'$ were restricted to a non-adaptive class such as constant schedules --- the lemma's condition (ii) would be violated and the interchange would produce strict inequality.
 
 \subparagraph{Step 4f --- Pull $p$ out of the inner $\max$ (easy step).}  By Observation 1, $p(\by_{k+1} \mid \bb, \bs_k, \bc)$ is a $\pi'$-free non-negative constant as far as the inner $\max_{\pi'}$ is concerned.  Non-negative constants commute with $\max$:
