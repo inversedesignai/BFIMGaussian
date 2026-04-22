@@ -607,6 +607,55 @@ The terminal gradient is $\partial V_K / \partial \bc = \partial \Phi_0^{\mathrm
 
 Equation~\eqref{eq:dV_unfolded} mirrors the Bellman recursion itself: same DP graph, same memoization, same backward order.  If $V$ fits in memory, so does $\partial V / \partial \bc$.
 
+\subsection{A parallel recursion for \texorpdfstring{$\partial V_k / \partial \bb$}{dV\_k/db}}
+\label{sec:dV_db}
+
+Equation~\eqref{eq:dV_unfolded} contains a factor $\partial V_{k+1} / \partial \bb$ inside the belief-update term (ii).  Conceptually this is a gradient of the value function with respect to its belief argument, and it satisfies its own backward recursion --- a cleanly analogous story to the $\partial V_k / \partial \bc$ one.  We derive it here because the derivation is short and makes explicit what the belief-update term in Equation~\eqref{eq:dV_unfolded} is actually using.
+
+\paragraph{Envelope identity for $\bb$.}  The same envelope-theorem argument applies with $\bb$ in place of $\bc$.  Differentiating $V_k(\bb; \bc) = Q_k(\bb, \bs_k^\star(\bb; \bc); \bc)$ with respect to $\bb$,
+\begin{equation}
+\frac{\partial V_k}{\partial \bb}(\bb;\, \bc) \;=\; \underbrace{\frac{\partial Q_k}{\partial \bs_k}(\bb, \bs_k^\star; \bc) \cdot \frac{\partial \bs_k^\star}{\partial \bb}(\bb; \bc)}_{= 0 \text{ at the argmax}} \;+\; \frac{\partial Q_k}{\partial \bb}(\bb, \bs_k^\star; \bc).
+\end{equation}
+The indirect piece vanishes by first-order optimality at $\bs_k^\star$, and the direct partial is what we need:
+\begin{equation}
+\frac{\partial V_k}{\partial \bb}(\bb;\, \bc) \;=\; \frac{\partial Q_k}{\partial \bb}(\bb, \bs_k^\star; \bc).
+\label{eq:env_identity_b}
+\end{equation}
+
+\paragraph{Unfolding.}  Write $Q_k$ as a sum over outcomes (as in §\ref{sec:derivation}),
+\begin{equation}
+Q_k(\bb, \bs_k^\star;\, \bc) \;=\; \sum_{\by_k}\, \Pr(\by_k \mid \bb, \bs_k^\star, \bc)\, V_{k+1}\bigl(T(\bb, \bs_k^\star, \by_k;\, \bc);\, \bc\bigr),
+\end{equation}
+and differentiate with respect to $\bb$ using the product and chain rules:
+\begin{align}
+\frac{\partial V_k}{\partial \bb}(\bb;\, \bc) \;=\; \sum_{\by_k} \biggl[\,
+&\underbrace{\frac{\partial \Pr(\by_k \mid \bb, \bs_k^\star, \bc)}{\partial \bb}\, V_{k+1}\bigl(T(\cdots);\, \bc\bigr)}_{\text{(I) outcome-probability through }\bb} \notag\\
+& +\; \Pr(\by_k \mid \cdots)\, \underbrace{\frac{\partial V_{k+1}}{\partial \bb}\bigl(T(\cdots);\, \bc\bigr) \cdot \frac{\partial T(\bb, \bs_k^\star, \by_k;\, \bc)}{\partial \bb}}_{\text{(II) belief-update through }\bb}\, \biggr]
+\label{eq:dV_db_unfolded}
+\end{align}
+with terminal condition
+\begin{equation}
+\frac{\partial V_K}{\partial \bb}(\bb;\, \bc) \;=\; \frac{\partial \Phi_0^{\mathrm{belief}}(\bb;\, \bc)}{\partial \bb}.
+\label{eq:dV_db_terminal}
+\end{equation}
+
+Equation~\eqref{eq:dV_db_unfolded} is a proper recursion: $\partial V_k / \partial \bb$ at the current belief is expressed in terms of $\partial V_{k+1} / \partial \bb$ at child beliefs $T(\bb, \bs_k^\star, \by_k;\, \bc)$, initialized by Equation~\eqref{eq:dV_db_terminal}.  It runs on the same DP graph and the same backward sweep as the value recursion itself.
+
+\paragraph{Structural comparison to $\partial V_k / \partial \bc$.}  Two observations:
+\begin{itemize}[nosep, leftmargin=*]
+\item \textbf{Two terms survive, not three.}  Equation~\eqref{eq:dV_unfolded} (the $\bc$-gradient) has three contributions because $\bc$ enters in three places: the outcome distribution, the belief update, and the recursive $V_{k+1}$.  Equation~\eqref{eq:dV_db_unfolded} (the $\bb$-gradient) has only two, because $\bb$ enters only in the outcome distribution (through marginalization) and in the belief update (through Bayes' rule).  There is no ``recursive-through-$\bb$'' term separate from the belief-update path: $V_{k+1}$ only receives $\bb$ via $T$, so the recursive dependence already lives inside term (II).
+\item \textbf{Both recursions share the same DP graph.}  At every reachable $(k, \bb)$ where $V_k$ is tabulated, both $\partial V_k / \partial \bc$ (Equation~\eqref{eq:dV_unfolded}) and $\partial V_k / \partial \bb$ (Equation~\eqref{eq:dV_db_unfolded}) are evaluated as cotangents on the same graph.  In practice, reverse-mode AD returns both simultaneously as intermediate cotangents during the single backward sweep through the argmax-frozen recursion.
+\end{itemize}
+
+\paragraph{The Jacobian $\partial T / \partial \bb$.}  The belief-update Jacobian in term (II) is the Jacobian of Bayes' rule.  For discrete $\bx$ with belief vector $\bb = (b_1, \ldots, b_{K_\Phi})$, the update is $T(\bb)(x) = b(x)\, p(\by \mid x, \bs; \bc) / Z$ with $Z = \sum_{x'} b(x')\, p(\by \mid x', \bs; \bc)$, and a short calculation with the quotient rule gives
+\begin{equation}
+\frac{\partial T(\bb)(x)}{\partial b(x')} \;=\; \frac{p(\by \mid x, \bs; \bc)}{Z}\, \Bigl[\,\delta_{xx'} \;-\; \frac{b(x)\, p(\by \mid x', \bs; \bc)}{Z}\,\Bigr].
+\label{eq:dT_db}
+\end{equation}
+One almost never writes Equation~\eqref{eq:dT_db} out in code; reverse-mode AD composes it automatically through the division in Bayes' rule.  The formula is useful for checking structure: $\partial T / \partial \bb$ is a rank-one perturbation of a diagonal matrix, which means the belief-update term (II) in Equation~\eqref{eq:dV_db_unfolded} has a simple form (a marginal-likelihood-weighted sum of a diagonal and a rank-one contribution).
+
+\paragraph{When the recursion collapses.}  In the count-tuple formulation of §\ref{sec:qubit}, the ``belief'' is replaced by the discrete integer tuple $\mathbf{n}$, and the ``belief update'' is the combinatorial operation of appending $(n_\text{shot}, m)$ to bin $j$.  $\partial / \partial \mathbf{n}$ does not exist as a gradient (the tuple is discrete), and $\partial T / \partial \mathbf{n}$ is trivially null.  Equation~\eqref{eq:dV_db_unfolded} simply does not apply --- which is fine, because Equation~\eqref{eq:dV_unfolded}'s term (ii) also vanishes in that representation and all $\bc$-dependence flows through terms (i) and (iii) as already noted.  The $\partial V_k / \partial \bb$ recursion is the machinery that fills in term (ii) when the belief \emph{is} treated as a continuous-argument object, which is what the Case~C Gaussian-moment DP of the companion paper actually does.
+
 \subsection{The operational recipe: freeze the argmax, then AD}
 
 In practice one does \emph{not} implement Equation~\eqref{eq:dV_unfolded} by hand.  Instead the envelope theorem lets reverse-mode AD do the entire calculation in a single sweep, provided the argmax is frozen first.  The recipe:
