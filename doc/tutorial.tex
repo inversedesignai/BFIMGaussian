@@ -246,26 +246,99 @@ which is the policy-evaluation recursion.  Shifting the index by one ($k - 1 \to
 \end{enumerate}
 No optimization is used anywhere in this derivation; Equation~\eqref{eq:U_recursion} is a valid identity for every fixed policy $\pi$.  The backward recursion for $U^\pi$ is therefore the right-hand object to carry into Step~4, where we maximize over $\pi$ to turn it into the Bellman recursion for $V_k$.
 
-\paragraph{Step 4: Maximize over $\pi$ (Bellman's principle).}  Let $V_k(\bb;\, \bc) \coloneqq \max_\pi U^\pi_k(\bb;\, \bc)$, the value-to-go under the \emph{optimal} continuation from belief $\bb$ at step $k$.  The recursion for $V_k$ requires commuting $\max_\pi$ with the one-step $\E_{\by_{k+1}}$ in Equation~\eqref{eq:U_recursion}, and this commutation is the one delicate move in the whole derivation.
+\paragraph{Step 4: Maximize over $\pi$ (Bellman's principle).}  We now take $\max$ over $\pi$ of the policy-evaluation recursion of Step 3 to get the Bellman recursion.  The step has eight substeps; we go through each one.
 
-Done naively it is wrong.  If $\pi$ were a single fixed function, $\max_\pi \E_{\by}[f(\pi, \by)]$ and $\E_{\by}[\max_\pi f(\pi, \by)]$ need not agree.  The step Bellman relies on is that $\pi$ is \emph{decomposable}.  Split the policy at step $k$ into its action at the current belief and the rest:
+\subparagraph{Step 4a --- Definition.}  Define
 \begin{equation}
-\pi \;=\; (\bs_k, \pi'), \qquad \bs_k = \pi(\bb), \qquad \pi' = \text{the restriction of } \pi \text{ to steps } k+1, \ldots, K-1.
+V_k(\bb;\, \bc) \;\coloneqq\; \max_\pi\, U^\pi_k(\bb;\, \bc),
+\label{eq:V_k_from_U}
 \end{equation}
-The one-step expectation in Equation~\eqref{eq:U_recursion} depends on $\bs_k$ (which fixes the measurement distribution) and on $\pi'$ (which determines $U^{\pi'}_{k+1}$).  Maximizing jointly,
+the value-to-go under the \emph{optimal} continuation from belief $\bb$ at step $k$.  Our goal is a recursion for $V_k$ in terms of $V_{k+1}$.
+
+\subparagraph{Step 4b --- What goes wrong if we apply $\max_\pi$ naively.}  The policy-evaluation recursion Equation~\eqref{eq:U_recursion} reads
 \begin{equation}
-V_k(\bb;\, \bc) \;=\; \max_{\bs_k \in \mathcal{S}}\; \max_{\pi'}\; \E_{\by_{k+1} \mid \bb, \bs_k,\, \bc}\!\bigl[\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc)\bigr) \,\bigr].
+U^\pi_k(\bb;\, \bc) \;=\; \E_{\by_{k+1} \mid \bb, \pi(\bb),\, \bc}\!\bigl[\,U^\pi_{k+1}\bigl(T(\bb, \pi(\bb), \by_{k+1};\, \bc);\, \bc\bigr)\,\bigr].
+\end{equation}
+If we try to take $\max_\pi$ of both sides and naively push it through $\E_{\by_{k+1}}$, we would need
+\begin{equation}
+\max_\pi\, \int f(\pi, \by)\, p(\by)\, d\by \;\stackrel{?}{=}\; \int \max_\pi\, \bigl[f(\pi, \by)\, p(\by)\bigr]\, d\by.
+\end{equation}
+In general these are not equal --- the $\max$ and the integral do not commute for an arbitrary family of functions indexed by $\pi$.  So we have to argue why they commute in our setting.  The argument has two ingredients: the \emph{decomposability} of $\pi$, and the \emph{causality} of the measurement.
+
+\subparagraph{Step 4c --- Decompose $\pi$.}  At step $k$, a policy $\pi$ determines two pieces of information:
+\begin{itemize}[nosep, leftmargin=*]
+\item The action at the current belief, $\bs_k = \pi(\bb)$ --- a single value in the action set.
+\item The continuation $\pi'$ from step $k+1$ onward --- a function that maps future beliefs to future actions at steps $k+1, k+2, \ldots, K-1$.
+\end{itemize}
+Write this as $\pi = (\bs_k, \pi')$.  Substituting into the policy-evaluation recursion,
+\begin{equation}
+U^\pi_k(\bb;\, \bc) \;=\; \E_{\by_{k+1} \mid \bb, \bs_k,\, \bc}\!\bigl[\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\,\bigr],
+\end{equation}
+where the right-hand side now depends on $\pi$ only through the pair $(\bs_k, \pi')$.  Maximizing over $\pi$ is therefore equivalent to maximizing jointly over $(\bs_k, \pi')$:
+\begin{equation}
+V_k(\bb;\, \bc) \;=\; \max_{\bs_k \in \mathcal{S}}\,\max_{\pi'}\; \E_{\by_{k+1} \mid \bb, \bs_k,\, \bc}\!\bigl[\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\,\bigr].
 \label{eq:double_max_tutorial}
 \end{equation}
-Now $\max_{\pi'}$ \emph{can} be pushed inside $\E_{\by_{k+1}}$: adaptive continuations are by construction history-dependent functions, so the maximizer $\pi'$ is allowed to depend on the realized $\by_{k+1}$.  Picking the best $\pi'$ for each $\by_{k+1}$ and then averaging gives the same number as maximizing over $\pi'$ before averaging.  This is the \emph{interchange of max and expectation over history-measurable policies} --- it would \emph{fail} if $\pi'$ were restricted to be non-adaptive.  Applying the interchange,
+Fix $\bs_k$ for the remainder of Steps 4d--4f; we will return to the outer $\max_{\bs_k}$ at the end.
+
+\subparagraph{Step 4d --- Two observations about $(y_{k+1}, \pi')$.}  Write the one-step expectation out as an integral:
 \begin{equation}
-V_k(\bb;\, \bc) \;=\; \max_{\bs_k}\; \E_{\by_{k+1} \mid \bb, \bs_k,\, \bc}\!\bigl[\,\max_{\pi'}\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc)\bigr) \,\bigr],
+\max_{\pi'} \int U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\, p(\by_{k+1} \mid \bb, \bs_k, \bc)\, d\by_{k+1}.
+\label{eq:max_integral}
 \end{equation}
-and substituting $\max_{\pi'} U^{\pi'}_{k+1} = V_{k+1}$ gives Equation~\eqref{eq:bellman_general} exactly.  The terminal condition Equation~\eqref{eq:bellman_terminal} is immediate from Equation~\eqref{eq:U_terminal}: at the last step there is no further action to take, so $V_K = U^\pi_K$ is independent of $\pi$.
+Two structural facts about this expression are what make the interchange go through.
 
-Evaluating at $k = 0$, $\bb = p_0$ recovers $V^\star = \max_\pi V(\pi) = V_0(p_0;\, \bc)$, closing the loop from Equation~\eqref{eq:V_pi} to Equations~\eqref{eq:bellman_terminal}--\eqref{eq:bellman_general}.
+\textbf{Observation 1 (causality): $p(\by_{k+1} \mid \bb, \bs_k, \bc)$ does not depend on $\pi'$.}  The measurement $\by_{k+1}$ is drawn from the likelihood $p(\cdot \mid \bb, \bs_k, \bc)$, which depends only on the current belief $\bb$ and the current action $\bs_k$ --- not on the continuation $\pi'$.  Causally, $\by_{k+1}$ is generated \emph{before} $\pi'$ is applied; the continuation policy only enters the picture once $T(\bb, \bs_k, \by_{k+1};\, \bc)$ has been computed.  So $p(\by_{k+1} \mid \bb, \bs_k, \bc)$ is a $\pi'$-free non-negative weight.
 
-\paragraph{Where the adaptive-versus-fixed distinction lives.}  The only non-trivial move in the derivation is the interchange of $\max_{\pi'}$ with $\E_{\by_{k+1}}$ in Step 4.  That interchange is valid \emph{because} adaptive continuations are allowed to depend on the data.  If we restricted $\pi'$ to be a fixed schedule of actions (non-adaptive), $\max_{\pi'}$ would \emph{not} commute with $\E_{\by_{k+1}}$, and the Bellman recursion would not simplify.  What one would recover instead is the \emph{fixed-schedule} value $V_{\text{fixed}}$, strictly smaller than $V_{\text{adaptive}}$ in general.  The gap between the two --- the ``adaptive gain'' that the companion paper's EVPI analysis quantifies --- is in a precise sense the value of this interchange being legitimate.
+\textbf{Observation 2 ($\pi'$ is a function, not a value): $\pi'$ spans a function space.}  A continuation policy takes a belief and returns an action, $\pi' : \mathcal{B} \to \mathcal{S}$.  The belief at which $\pi'$ is evaluated, $T(\bb, \bs_k, \by_{k+1};\, \bc)$, depends on $\by_{k+1}$, so different realizations of $\by_{k+1}$ cause $\pi'$ to be evaluated at different beliefs, where it is allowed to take different action values.  The $\max$ over $\pi'$ is therefore a $\max$ over a \emph{function space}, not over a single action value.
+
+\subparagraph{Step 4e --- The interchange (load-bearing step).}  By Observation 2, the pointwise-in-$\by_{k+1}$ argmax of the integrand
+\begin{equation}
+\pi^\star(\by_{k+1}) \;\coloneqq\; \argmax_{\pi'}\, \bigl[\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\, p(\by_{k+1} \mid \bb, \bs_k, \bc)\, \bigr]
+\end{equation}
+is an admissible element of the policy class (it is a function of $\by_{k+1}$, and the continuation policies we are maximizing over are precisely such functions).  Consequently, the $\max$ commutes with the integral:
+\begin{equation}
+\max_{\pi'} \int U^{\pi'}_{k+1}\, p\, d\by_{k+1} \;=\; \int \max_{\pi'}\, \bigl[\, U^{\pi'}_{k+1}\, p\, \bigr]\, d\by_{k+1}.
+\label{eq:interchange}
+\end{equation}
+This is the heart of the derivation.  It holds because the set of admissible $\pi'$'s is a function space rich enough to contain the pointwise argmax.  If $\pi'$ were constrained to be a single action value (non-adaptive), this interchange would \emph{fail}, and the $\leq$ in the generic inequality $\max_{\pi'} \int \leq \int \max_{\pi'}$ could be strict.
+
+\subparagraph{Step 4f --- Pull $p$ out of the inner $\max$ (easy step).}  By Observation 1, $p(\by_{k+1} \mid \bb, \bs_k, \bc)$ is a $\pi'$-free non-negative constant as far as the inner $\max_{\pi'}$ is concerned.  Non-negative constants commute with $\max$:
+\begin{equation}
+\max_{\pi'}\, \bigl[\, U^{\pi'}_{k+1}\, p(\by_{k+1} \mid \bb, \bs_k, \bc)\, \bigr] \;=\; p(\by_{k+1} \mid \bb, \bs_k, \bc)\, \max_{\pi'}\, U^{\pi'}_{k+1}.
+\label{eq:factor_out}
+\end{equation}
+Substituting Equation~\eqref{eq:factor_out} into Equation~\eqref{eq:interchange}:
+\begin{align}
+\max_{\pi'}\, \E_{\by_{k+1} \mid \bb, \bs_k, \bc}\!\bigl[\, U^{\pi'}_{k+1}\, \bigr]
+\;&=\; \int p(\by_{k+1} \mid \bb, \bs_k, \bc)\, \max_{\pi'}\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\, d\by_{k+1} \notag \\
+\;&=\; \E_{\by_{k+1} \mid \bb, \bs_k, \bc}\!\bigl[\, \max_{\pi'}\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\, \bigr].
+\label{eq:max_inside_E}
+\end{align}
+
+\subparagraph{Step 4g --- Substitute the definition of $V_{k+1}$.}  By Equation~\eqref{eq:V_k_from_U} applied at step $k+1$,
+\begin{equation}
+\max_{\pi'}\, U^{\pi'}_{k+1}(\bb';\, \bc) \;=\; V_{k+1}(\bb';\, \bc)\qquad \text{for any belief } \bb'.
+\end{equation}
+Applied at $\bb' = T(\bb, \bs_k, \by_{k+1};\, \bc)$ inside the expectation of Equation~\eqref{eq:max_inside_E}:
+\begin{equation}
+\max_{\pi'}\, U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr) \;=\; V_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr).
+\end{equation}
+So Equation~\eqref{eq:max_inside_E} becomes
+\begin{equation}
+\max_{\pi'}\, \E_{\by_{k+1} \mid \bb, \bs_k, \bc}\!\bigl[\, U^{\pi'}_{k+1}\, \bigr]
+\;=\; \E_{\by_{k+1} \mid \bb, \bs_k, \bc}\!\bigl[\, V_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\, \bigr].
+\end{equation}
+
+\subparagraph{Step 4h --- Put the outer $\max_{\bs_k}$ back and finish.}  Substituting into Equation~\eqref{eq:double_max_tutorial}:
+\begin{equation}
+V_k(\bb;\, \bc) \;=\; \max_{\bs_k \in \mathcal{S}}\; \E_{\by_{k+1} \mid \bb, \bs_k, \bc}\!\bigl[\, V_{k+1}\bigl(T(\bb, \bs_k, \by_{k+1};\, \bc);\, \bc\bigr)\, \bigr],
+\end{equation}
+which is exactly the Bellman recursion, Equation~\eqref{eq:bellman_general}.  The terminal condition Equation~\eqref{eq:bellman_terminal} is immediate from Equation~\eqref{eq:U_terminal}: at step $K$ there is no further action to take, $U^\pi_K(\bb;\, \bc)$ does not depend on $\pi$, so $V_K(\bb;\, \bc) = \max_\pi U^\pi_K(\bb;\, \bc) = U^\pi_K(\bb;\, \bc) = \E_{\bx \mid \bb}[\Phi_0(\bx, \bb;\, \bc)]$.
+
+Evaluating the Bellman recursion at $k = 0$, $\bb = p_0$ recovers $V^\star = \max_\pi V(\pi) = V_0(p_0;\, \bc)$, closing the loop from Equation~\eqref{eq:V_pi} to Equations~\eqref{eq:bellman_terminal}--\eqref{eq:bellman_general}.
+
+\paragraph{Where the adaptive-versus-fixed distinction lives.}  The only non-trivial move in the derivation is Step 4e, the interchange of $\max_{\pi'}$ with $\E_{\by_{k+1}}$.  That interchange is valid \emph{because} $\pi'$ is admissible as a $\by_{k+1}$-measurable function (Observation 2), so the pointwise argmax over $\by_{k+1}$ is a legitimate element of the class we are maximizing over.  If we restricted $\pi'$ to a fixed schedule of actions (non-adaptive), Observation 2 would fail, $\max_{\pi'}$ would \emph{not} commute with $\E_{\by_{k+1}}$, and the Bellman recursion would not simplify.  What one would recover instead is the \emph{fixed-schedule} value $V_{\text{fixed}}$, strictly smaller than $V_{\text{adaptive}}$ in general.  The gap between the two --- the ``adaptive gain'' that the companion paper's EVPI analysis quantifies --- is in a precise sense the value of Step 4e being legitimate.
 
 \subsection{Why this is called \emph{backward} induction}
 
