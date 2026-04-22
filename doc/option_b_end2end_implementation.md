@@ -8,7 +8,9 @@ Starting point: the joint-DP framework of the companion paper. Inner problem is 
 
 Option B is a different kind of relaxation: instead of prescribing the inner policy, **parameterize the value function with a neural network and train the network, the hardware, and the inner policy jointly end-to-end** against the deployment-aligned loss. The Bellman structure is preserved (backward induction, Bayesian belief update, argmax policy); only the value function's representation is parametric.
 
-This note is a pragmatic implementation sketch specialized to photonic topology optimization. It assumes familiarity with the existing FDFD + Taylor-expansion + EKF pipeline in [BFIMGaussian.jl](../BFIMGaussian.jl) and [SimGeomBroadBand.jl](../SimGeomBroadBand.jl).
+This note is deliberately agnostic to the choice of belief representation. The framework works with any Bayesian filter `T` that is differentiable end-to-end: exact posterior on a grid, particle filter, moment-propagation filter (EKF/UKF), Fourier-basis filter, or a learned sufficient-statistic encoder. The only requirements are: (i) the belief is summarizable by a finite-dimensional vector of known shape; (ii) `T` is differentiable (via closed form, via a reparameterization trick, or via a custom rrule).
+
+This note is a pragmatic implementation sketch specialized to photonic topology optimization. It assumes familiarity with the existing FDFD + Taylor-expansion pipeline in [SimGeomBroadBand.jl](../SimGeomBroadBand.jl).
 
 ## Summary
 
@@ -23,10 +25,10 @@ Parameters optimized jointly:
 Loss (end-to-end):
 
 ```
-L(θ, w, c) = E_{x_0, y_{1:K}} [ || μ_K - x_0 ||² / || x_0 ||² ]
+L(θ, w, c) = E_{x_0, y_{1:K}} [ Φ_0(x_0, b_K; c) ]
 ```
 
-the expected relative squared error of the EKF posterior-mean estimator after `K` measurement epochs, under the inner argmax policy derived from the NN value function.
+the expected pointwise reward at the terminal belief `b_K`, under the inner argmax policy derived from the NN value function. The reward `Φ_0` is whatever the deployment metric of the application dictates — posterior-variance (Bayesian MSE), log-determinant of the posterior Fisher matrix, negative posterior entropy, etc.
 
 Training:
 
@@ -35,88 +37,99 @@ for outer_iter in 1..N:
     (θ, w, c) <- (θ, w, c) - η · ∇_{(θ, w, c)} L̂
 ```
 
-where `L̂` is a Monte-Carlo estimate of `L` over a mini-batch of episodes, and the gradient is computed by reverse-mode AD through the fully-unrolled differentiable DP + EKF pipeline, with envelope-theorem handling of the per-step argmax.
+where `L̂` is a Monte-Carlo estimate of `L` over a mini-batch of episodes, and the gradient is computed by reverse-mode AD through the fully-unrolled differentiable DP pipeline, with envelope-theorem handling of the per-step argmax.
 
 ## Architecture
 
-### 1. Belief summary
+### 1. Belief representation
 
-The belief `b_k` at epoch `k` is represented by the EKF's Gaussian moments:
+The belief `b_k` at epoch `k` is an application-chosen object. Four common choices and their belief-summary vectors `b_vec ∈ ℝ^{d_b}`:
 
-```
-b_k  =  (μ_k, Σ_k)      μ_k ∈ ℝ⁴,   Σ_k ∈ ℝ^{4×4} symmetric PSD
-```
+| Belief representation | `b_vec` | Differentiable? |
+|---|---|---|
+| Exact posterior on a state grid | Values of `b_k` at `N_grid` points | Yes, straightforward. |
+| Gaussian moments (EKF/UKF) | `(μ_k, vec(chol Σ_k))`, `d_b = d_x + d_x(d_x+1)/2` | Yes, via Joseph-form updates. |
+| Particle set `{(x_i, w_i)}_{i=1}^N` | Sorted summary: sample quantiles + moments; or permutation-invariant pooling (Deep Sets) | Partial — resampling step needs Gumbel or straight-through. |
+| Orthogonal-basis expansion | Coefficients in a chosen basis (e.g., Fourier, Hermite) | Yes, via closed-form projection updates. |
 
-This is the same representation used in Case C of the paper. For a 4-dim state, this is a 4 + 10 = 14-dim summary (mean + 10 unique entries of the Cholesky factor of `Σ_k`).
+Pick one representation and stick with it for the entire training run; the NN encoder is tied to the chosen `b_vec` layout. Mixing representations across training phases requires retraining the encoder.
 
-**Recommended input encoding for the NN:**
+For the photonic topology problem, we flag the three most relevant options:
 
-```
-b_k_vec  =  concat(μ_k, vec_lower_tri(chol(Σ_k)), log(trace(Σ_k)))
-```
+- **Particle filter** with `N_particles ≈ 10^3–10^4`, if the true posterior is multimodal (e.g., under degenerate scattering geometries). Permutation-invariant pooling on the particle set gives `b_vec`.
+- **Grid** with `N_grid = 256` points per state dimension, if `d_x` is small (`d_x ≤ 4` in Case C).
+- **Moment-based** (Gaussian), if the posterior is well-approximated by a single Gaussian. Cheapest; fewer dimensions in `b_vec`.
 
-— flatten the mean and the Cholesky factor of the covariance, plus one auxiliary log-scale feature to give the network an easy handle on uncertainty magnitude.
+The rest of this note treats `b_vec` as a black-box `d_b`-dim vector produced by the chosen representation. Swap implementations without touching the downstream architecture.
 
 ### 2. Shared feature encoder `φ_θ`
 
 A small MLP:
 
 ```
-φ_θ :  ℝ^{14}   →   ℝ^{d_feat}
+φ_θ :  ℝ^{d_b}   →   ℝ^{d_feat}
 ```
 
-with `d_feat = 64` or `128`. Architecture: 3–4 hidden layers, width 128–256, with activation functions that preserve positivity/monotonicity where useful (e.g., GELU or SiLU). No dropout (deterministic value approximation).
+with `d_feat = 64` or `128`. Architecture: 3–4 hidden layers, width 128–256, with GELU or SiLU activations. No dropout (deterministic value approximation).
 
 **Why a shared encoder.** The value function at different `k` should share structure — the belief means the same thing at every epoch; what differs is the continuation horizon. A shared feature encoder `φ_θ` with per-epoch linear heads `w_k` captures this without forcing all `V_k` to be the same function.
 
-**Hardware `c` does not enter `φ_θ`.** `c` enters the computation graph through the EKF (via the FDFD-derived S-matrix derivatives) and the action-selection argmax. The feature encoder sees only the belief summary; it does not see `c` directly. This matters for generalization: you want `φ_θ` trained once to work across all `c` visited during outer-loop optimization, not retrained at every outer step.
+**Hardware `c` does not enter `φ_θ`.** `c` enters the computation graph through the Bayesian update (via the FDFD-derived likelihood) and the action-selection argmax. The feature encoder sees only the belief summary; it does not see `c` directly. This matters for generalization: you want `φ_θ` trained once to work across all `c` visited during outer-loop optimization, not retrained at every outer step.
 
 ### 3. Per-layer linear heads `w_k`
 
 For each epoch `k`:
 
 ```
-V_{θ, w}(b_k, k)  =  w_k · φ_θ(b_k)
+V_{θ, w}(b_k, k)  =  w_k · φ_θ(b_vec(b_k))
 ```
 
-`w_k ∈ ℝ^{d_feat}`, so `K` heads total (`K` = 3 in Case C). Storage is negligible compared to `θ` or `c`.
+`w_k ∈ ℝ^{d_feat}`, so `K` heads total. Storage is negligible compared to `θ` or `c`.
 
 ### 4. Policy
 
 The inner policy is the Bellman argmax over the NN Q-function:
 
 ```
-Q_{θ, w}(b_k, s, k)  =  E_{y_{k+1} | b_k, s, c} [ w_{k+1} · φ_θ(T(b_k, s, y_{k+1}; c)) ]
+Q_{θ, w}(b_k, s, k)  =  E_{y_{k+1} | b_k, s, c} [ w_{k+1} · φ_θ(b_vec(T(b_k, s, y_{k+1}; c))) ]
 
 s_k*  =  argmax_{s ∈ 𝒮} Q_{θ, w}(b_k, s, k)
 ```
 
-Computed by grid search + L-BFGS local refinement (same as the current Case C pipeline for the BFIM-trace argmax). The inner optimization is `c`-dependent via `T`.
+For continuous action space `𝒮`, use grid search + L-BFGS local refinement (same as the current pipeline). For discrete `𝒮`, enumerate.
+
+The inner expectation over `y_{k+1}` is computed either by closed-form marginalization (available when the belief representation and likelihood are conjugate, e.g., Gaussian-Gaussian), by low-order quadrature (Gauss–Hermite for continuous `y` with smooth likelihoods), or by Monte Carlo with a modest sample count (≈ 8–16 reparameterized samples).
 
 ## Loss function
 
 ### Deployment-aligned objective
 
 ```
-L(θ, w, c)  =  E_{x_0 ~ p_0} E_{y_{1:K} | x_0, π_{θ,w}, c}
-                  [ || μ_K - x_0 ||² / || x_0 ||² ]
+L(θ, w, c)  =  E_{x_0 ~ p_0}\, E_{y_{1:K} | x_0, π_{θ,w}, c}
+                  [ Φ_0(x_0, b_K; c) ]
 ```
 
-— the relative squared error of the posterior-mean estimator at the terminal belief, averaged over the prior and the data, under the NN-argmax policy.
+— the expected pointwise reward at the terminal belief `b_K`, averaged over the prior and the data, under the NN-argmax policy `π_{θ, w}`.
 
-Relative (not absolute) squared error is already the Case C convention. It handles the small-`Dn` regime where absolute error would be dominated by the problem's overall scale.
+`Φ_0` is the application-chosen reward that the deployment metric reduces to. For a few common deployment metrics:
+
+- **Bayesian MSE** (posterior-mean estimator deployed on a continuous state): `Φ_0 = -(μ̂_K - x_0)² / x_0²` (relative-squared error, following the existing Case C convention).
+- **Mutual information** (discrete state, classification-like deployment): `Φ_0 = log b_K(x_0) - log p_0(x_0)`.
+- **Fisher-log-det** (asymptotic-regime surrogate): `Φ_0 = ½ log det J_K(x_0, s_{1:K}, c)` with `J_K` the accumulated Fisher-information matrix (belief-augmentation required, see §7 of the companion tutorial).
+
+Pick whichever matches the deployment metric of the application. All three fit the same differentiable-DP machinery.
 
 ### Optional auxiliary Bellman residual
 
 For stability, add a regularizer:
 
 ```
-L_bellman(θ, w, c)  =  (1/K) Σ_{k=0}^{K-1} E_{b_k} [ (w_k · φ_θ(b_k) - ỹ_k)² ]
+L_bellman(θ, w, c)  =  (1/K) Σ_{k=0}^{K-1} E_{b_k} [ (w_k · φ_θ(b_vec(b_k)) - ỹ_k)² ]
 
-ỹ_k  =  max_s E_{y_{k+1} | b_k, s, c} [ w_{k+1} · φ_θ(T(b_k, s, y_{k+1}; c)) ]    (target; detached from gradient)
+ỹ_k  =  max_s E_{y_{k+1} | b_k, s, c} [ w_{k+1} · φ_θ(b_vec(T(b_k, s, y_{k+1}; c))) ]    (target; detached from gradient)
 ```
 
-with `ỹ_K := -trace(Σ_K)` (terminal reward, negative-posterior-variance). Total loss:
+with `ỹ_K := E_{x | b_K}[Φ_0(x, b_K; c)]` (terminal reward). Total loss:
 
 ```
 L_total  =  L_deployment  +  λ · L_bellman
@@ -126,16 +139,16 @@ with `λ ~ 0.01 – 0.1` (tune).
 
 **Why the auxiliary loss helps.** Without it, `V_{θ, w}` only has to produce the right argmax — its absolute values are unconstrained, and the network can drift into regimes where the value landscape is non-informative even though the argmax is correct. The Bellman residual anchors the value function to be Bellman-consistent, which keeps the gradient signal stable across outer iterations. Early in training the deployment loss has high variance; the Bellman residual provides a dense, low-variance signal that regularizes the feature encoder.
 
-The target `ỹ_k` is computed with the *current* `(θ, w, c)` but treated as a constant (detached / `stop_gradient`) when computing the gradient — this is standard bootstrapped-target practice. In Julia, use `Zygote.ignore(...)` or `StopGradient` around the target computation.
+The target `ỹ_k` is computed with the *current* `(θ, w, c)` but treated as a constant (detached / `stop_gradient`) when computing the gradient — standard bootstrapped-target practice. In Julia, wrap the target computation in `Zygote.ignore(...)`.
 
 ## Differentiable DP unrolling
 
-The full computation graph from `c, θ, w` to `L_deployment`:
+The full computation graph from `(c, θ, w)` to `L_deployment`:
 
 ```
-┌───────────────────────────────────────────────────────────────────────┐
-│  INPUT:  c (90K pixels),  θ (NN weights),  w_{0:K-1} (per-k heads)    │
-└───────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  INPUT:  c (90K pixels),  θ (NN weights),  w_{0:K-1} (per-k heads)   │
+└──────────────────────────────────────────────────────────────────────┘
           │
           │  density filter + tanh(β·) projection              ← standard
           ▼
@@ -143,33 +156,32 @@ The full computation graph from `c, θ, w` to `L_deployment`:
           │
           │  FDFD solve at 20 frequencies, per-cell S-matrix Taylor expansion
           ▼
-      {S_0, ∂S/∂n, ∂²S/∂n²} at each cell, each frequency       ← c-dependent primitive
+      {S_0, ∂S/∂n, ∂²S/∂n²} at each cell, each frequency      ← c-dependent primitive
           │
-          │  sample x_0 ~ p_0 (prior over Δn ∈ ℝ⁴)
-          │  initialize b_0 = p_0 (Gaussian)
+          │  sample x_0 ~ p_0
+          │  initialize b_0 = p_0
           ▼
-┌─────── DP loop (k = 0, 1, ..., K-1) ──────────────────────────────────┐
-│                                                                       │
-│  for each candidate s in grid × LBFGS over (φ_1, φ_2):                │
-│      compute E_{y|b_k, s, c}[w_{k+1} · φ_θ(T(b_k, s, y; c))]          │
-│          via Gaussian-Gaussian marginalization (closed form for EKF)  │
-│      Q_k(s) = that expectation                                        │
-│  s_k* = argmax_s Q_k(s)               ← record, freeze in gradient    │
-│                                                                       │
-│  sample y_{k+1} ~ p(·|b_k, s_k*, c)   ← stochastic, reparameterize    │
-│  b_{k+1} = EKF_update(b_k, s_k*, y_{k+1}; c)                          │
-│                                                                       │
-└───────────────────────────────────────────────────────────────────────┘
+┌──────── DP loop (k = 0, 1, ..., K-1) ────────────────────────────────┐
+│                                                                      │
+│  for each candidate s in grid × LBFGS over actions:                  │
+│      compute E_{y|b_k, s, c}[w_{k+1} · φ_θ(b_vec(T(b_k, s, y; c)))]  │
+│          via conjugate marginalization, quadrature, or MC            │
+│      Q_k(s) = that expectation                                       │
+│  s_k* = argmax_s Q_k(s)               ← record, freeze in gradient   │
+│                                                                      │
+│  sample y_{k+1} ~ p(·|b_k, s_k*, c)   ← reparameterized              │
+│  b_{k+1} = T(b_k, s_k*, y_{k+1}; c)   ← Bayesian update              │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
           │
           ▼
-      μ_K = mean of terminal belief
+      Φ_0(x_0, b_K; c)
           │
-          │  L = ||μ_K - x_0||² / ||x_0||²
           ▼
       L_deployment
 ```
 
-Three points where differentiability is non-trivial:
+Three points where differentiability is non-trivial.
 
 ### Argmax over `s` (envelope theorem, sharp max)
 
@@ -180,7 +192,7 @@ Use the paper's §4 recipe:
 
 This avoids differentiating through the argmax and gives the exact envelope-theorem gradient for the outer parameters `(θ, w, c)` at the Bellman-optimal `s_k*`.
 
-In Julia/Zygote pseudocode:
+In Julia/Zygote:
 
 ```julia
 # Forward pass: find argmax, no AD tape active
@@ -189,46 +201,54 @@ s_star = Zygote.ignore() do
 end
 
 # Gradient pass: evaluate integrand with s_star substituted, AD active
-Q_at_sstar = expected_next_value(b_k, s_star, c, w_next, θ)  # this is what carries gradient
+Q_at_sstar = expected_next_value(b_k, s_star, c, w_next, θ)
 ```
 
 ### Observation sampling `y_{k+1}`
 
-The observation is `y_{k+1} ∈ ℝ^8` (8 port powers) with additive Gaussian noise. Reparameterize:
+Sample `y_{k+1}` via reparameterization appropriate to the likelihood family, so gradient flows through `c` via the likelihood's parameters:
 
-```
-y_{k+1}  =  mean_y(b_k, s_k*, c)  +  Σ_y(b_k, s_k*, c)^{1/2} · ε,       ε ~ N(0, I_8)
-```
+- **Continuous `y` with Gaussian likelihood.** `y_{k+1} = mean_y(b_k, s, c) + chol(Σ_y(b_k, s, c)) · ε` with `ε ~ N(0, I)` drawn outside the tape.
+- **Continuous `y` with non-Gaussian likelihood.** Use inverse-CDF if the CDF is differentiable: `y_{k+1} = F^{-1}(u; b_k, s, c)` with `u ~ U(0, 1)`.
+- **Discrete `y`.** Use Gumbel-softmax with a small temperature τ (anneal τ → 0 across training), or marginalize analytically if the outcome alphabet is small.
 
-Draw `ε` once per episode (outside the AD tape), then compute `y_{k+1}` as a deterministic function of `(b_k, s_k*, c, ε)`. Gradient flows through `mean_y` and `Σ_y^{1/2}`, which are closed-form functions of the S-matrix coefficients (and hence of `c`).
+Draw the random noise once per episode outside the AD tape; compute `y_{k+1}` as a deterministic function of `(b_k, s_k*, c, noise)`. Gradient flows through the likelihood parameters, which depend on `c` through the FDFD S-matrices.
 
-### Belief update `T` (EKF)
+### Belief update `T` (Bayesian)
 
-The EKF update is a closed-form sequence of matrix operations (Kalman gain, posterior mean, posterior covariance via Joseph form). Fully differentiable in `(b_k, s_k*, y_{k+1}, c)`. No custom rule needed — Zygote's default rules for linear algebra compose correctly through the Joseph form, matching the paper's existing custom `rrule` for the simple case.
+Whatever filter you chose in §2.1, it must be differentiable in `(b_k, s_k*, y_{k+1}, c)`. Four options recap:
+
+- **Grid / exact.** Bayes' rule as pointwise multiplication with the likelihood, followed by normalization. Fully differentiable under Zygote; no custom rrule needed.
+- **Particle filter.** Weight update is differentiable; resampling is not. Use differentiable resampling (Gumbel-softmax over categorical) or straight-through estimator during backprop. Alternatively, avoid resampling during training (accept particle-weight degeneracy for the training objective).
+- **Moment-propagation (EKF/UKF).** Closed-form Jacobian / sigma-point updates; fully differentiable via standard linear algebra rrules.
+- **Basis expansion.** Project the posterior onto the basis after multiplying by the likelihood. Differentiable if the projection is closed-form.
+
+Write `T` as a clean Julia function `belief_update(b_k, s_k, y_k, c) -> b_{k+1}` and Zygote will handle the rest (possibly with a custom rrule for resampling if you go the particle-filter route).
 
 ## Integration with the existing photonic forward model
 
-The current pipeline in [SimGeomBroadBand.jl](../SimGeomBroadBand.jl) + [BFIMGaussian.jl](../BFIMGaussian.jl) already provides:
+The current pipeline in [SimGeomBroadBand.jl](../SimGeomBroadBand.jl) provides:
 
 1. **`batch_solve`** — parallel multi-frequency FDFD with the custom `rrule` for Wirtinger adjoint. Returns S-matrices; gradient w.r.t. `ε_geom` available.
 2. **`getSmatrices`** — extracts normalized S, dS/dn, d2S/dn2.
 3. **`powers_only`** — per-cell powers from the Taylor expansion.
-4. **`ekf_update`** — EKF step with custom rrule.
-5. **`get_sopt` + IFT rrule** — inner sensor-parameter argmax, differentiated via the implicit function theorem.
+4. Existing rungs' belief-update primitives (EKF in [BFIMGaussian.jl](../BFIMGaussian.jl); A-optimal covariance update in [PosteriorCovGaussian.jl](../PosteriorCovGaussian.jl)).
+5. **`get_sopt`** + IFT rrule — inner sensor-parameter argmax, differentiated via the implicit function theorem.
 
-Option B replaces `get_sopt` (and its surrogate `log det J` reward) with:
+Option B reuses (1)–(3) as-is (the photonic physics is unchanged). It replaces (5)'s objective with a callback-style NN objective, and replaces (4) with whichever filter the chosen belief representation requires:
 
 ```
-s_opt_NN(b_k, c, w_{k+1}, θ)  =  argmax_s E_{y|b_k, s, c}[ w_{k+1} · φ_θ(T(b_k, s, y; c)) ]
+s_opt_NN(b_k, c, w_{k+1}, θ)  =  argmax_s E_{y | b_k, s, c}[ w_{k+1} · φ_θ(b_vec(T(b_k, s, y; c))) ]
 ```
 
-That is: the objective that `get_sopt` optimizes becomes `E[NN value at next belief]` instead of `log det J at current belief`. The IFT rrule structure is the same — implicit differentiation at the inner argmax — but the cotangent propagation now flows through the NN and into `(θ, w_{k+1})` in addition to `c`.
+The IFT rrule structure is the same — implicit differentiation at the inner argmax — but the cotangent propagation now flows through the NN and into `(θ, w_{k+1})` in addition to `c`.
 
 **Action items for integration:**
 
-1. Port `get_sopt` to a version that takes a callback objective `φ_θ` as argument. Grid search + LBFGS unchanged.
-2. Ensure the custom IFT rrule's Hessian computation handles the NN objective's second derivatives (use a Hessian-vector product via Zygote-over-Zygote or use a structured approximation).
-3. Replace the terminal reward `log det J_N` with the posterior-mean MSE. This loses the closed-form `log det` gradient but gains the deployment-aligned objective.
+1. Port `get_sopt` to a version that takes a callback objective as argument. Grid search + LBFGS unchanged.
+2. Ensure the custom IFT rrule's Hessian computation handles the NN objective's second derivatives (use a Hessian-vector product via Zygote-over-Zygote or a structured approximation).
+3. Implement the belief-update function `T` for whichever representation you chose in §2.1. Register a custom rrule if reverse-mode AD through it needs help (e.g., particle-filter resampling).
+4. Replace the terminal reward with the application-chosen `Φ_0`.
 
 ## Training procedure
 
@@ -239,12 +259,12 @@ That is: the objective that `get_sopt` optimizes becomes `E[NN value at next bel
 
 ### Mini-batching
 
-- **Inner loop:** `n_episodes = 20` per gradient estimate (same as existing Case C). Each episode is one draw of `(x_0, ε_{1:K})` and one forward pass through the DP.
+- **Inner loop:** `n_episodes = 20` per gradient estimate (same as existing Case C). Each episode is one draw of `(x_0, noise_{1:K})` and one forward pass through the DP.
 - **Outer loop:** `N_outer = 10^3 – 10^4` iterations.
 
 ### Resampling schedule
 
-- Fresh `(x_0, ε_{1:K})` every outer iteration (`resample_every=1`, as in existing Case C).
+- Fresh `(x_0, noise_{1:K})` every outer iteration (`resample_every=1`).
 - Fresh FDFD solve every outer iteration (can't be avoided — `c` changes, so S-matrices change).
 
 ### Initialization
@@ -255,163 +275,165 @@ That is: the objective that `get_sopt` optimizes becomes `E[NN value at next bel
 
 ### Continuation on `β`
 
-Same as the current Case C pipeline: β increases along a schedule `16 → 32 → 64 → 128 → 256` triggered by loss plateaus. This controls the density-filter + tanh projection sharpness and is essential for producing a manufacturable binary final geometry.
+Same as the current Case C pipeline: `β` increases along a schedule `16 → 32 → 64 → 128 → 256` triggered by loss plateaus. This controls the density-filter + tanh projection sharpness and is essential for producing a manufacturable binary final geometry.
 
-### Warm-start from rung 4
+### Warm-start from an existing rung
 
-One practical shortcut: initialize `θ` and `w_k` by first training a few hundred iterations of rung 4 (the existing Case C BFIM-trace EKF pipeline) to convergence, then switch to Option B training. This gives the NN a sensible starting value function based on the Fisher-information surrogate, after which end-to-end training refines it toward the true MSE objective. Expect ~2× speedup in convergence.
+One practical shortcut: initialize `θ` and `w_k` by first training a few hundred iterations of an existing rung (e.g., rung 4's BFIM-trace + EKF) to convergence, then switch to Option B training. This gives the NN a sensible starting value function based on the rung's surrogate reward, after which end-to-end training refines it toward the true deployment objective. Expect a 2× speedup in convergence.
 
-## Gradient flow diagram
+## Gradient flow
 
 ```
-L_deployment  ← ||μ_K - x_0||² / ||x_0||²
+L_deployment  ← Φ_0(x_0, b_K; c)
     ↑
-    │  through:  μ_K (terminal belief mean)
-    │            ← EKF updates at k=K-1, K-2, ..., 0
-    │            ← each EKF update depends on:  b_{k-1}, s_k*, y_k, c
+    │  through:  b_K (terminal belief)
+    │            ← belief updates T at k=K-1, K-2, ..., 0
+    │            ← each T depends on:  b_{k-1}, s_k*, y_k, c
     │            ← s_k* is frozen (argmax recorded in forward, substituted in gradient)
-    │            ← y_k = mean_y + Σ_y^{1/2} · ε  (reparameterized)
-    │            ← mean_y, Σ_y depend on c via S-matrix Taylor coefficients
+    │            ← y_k = reparameterized sample from the likelihood at c
+    │            ← the likelihood depends on c via S-matrix Taylor coefficients
     │
-    │  through:  the Q-function Q_k(s_k*) = w_{k+1} · φ_θ(T(b_k, s_k*, y_k; c))
+    │  through:  the Q-function Q_k(s_k*) = w_{k+1} · φ_θ(b_vec(T(b_k, s_k*, y_k; c)))
     │            (appears implicitly via the argmax-frozen recipe)
     │
-    ├→ ∇_c L   ... propagates through EKF, Σ_y, and S-matrix chain
-    │            (uses FDFD adjoint; identical to existing Case C)
+    ├→ ∇_c L   ... propagates through T and the S-matrix chain
+    │            (uses FDFD adjoint)
     │
     ├→ ∇_θ L   ... propagates through φ_θ wherever the NN value is invoked
     │            (standard reverse-mode AD; one backward pass per Zygote call)
     │
-    └→ ∇_{w_k} L  ... through the k-th linear head, per-epoch
-                 (small; just an outer product with the incoming cotangent)
+    └→ ∇_{w_k} L  ... through the k-th linear head
+                 (outer product with the incoming cotangent)
 ```
 
-## Key potential failure modes and mitigations
+## Failure modes and mitigations
 
 | Failure mode | Symptom | Mitigation |
 |---|---|---|
 | **Hardware-light pathology** | `c` stays near initialization while NN overfits. | Bellman residual regularizer; per-component box-width preconditioning on `c`; two-timescale training (`c` on faster clock than `θ`). |
-| **Value-function collapse** | `V_{θ,w}(b) ≈ const` across beliefs — no signal for argmax. | Auxiliary Bellman residual loss; terminal-reward anchor `ỹ_K = -trace(Σ_K)`. |
-| **Non-monotone loss** | Deployment loss oscillates as outer iterations progress. | Lower `η`; add policy-iteration warm-starting (re-solve inner argmax less frequently); larger `n_episodes`. |
+| **Value-function collapse** | `V_{θ,w}(b) ≈ const` across beliefs — no signal for argmax. | Auxiliary Bellman residual loss; terminal anchor `ỹ_K = E_{x \| b_K}[Φ_0]`. |
+| **Non-monotone loss** | Deployment loss oscillates as outer iterations progress. | Lower `η`; policy-iteration warm-starting; larger `n_episodes`. |
 | **FDFD gradient explosion** | `∇_c L` has occasional huge values. | Gradient clipping; density filter acts as a regularizer; check for resonances in the geometry. |
-| **Binary-gap**: loss drops during β-continuation | Loss plateaus then spikes at each β doubling. | Expected — existing autotune schedule handles this. |
+| **Binary-gap**: loss spikes during β-continuation | Loss plateaus then spikes at each β doubling. | Expected — existing autotune schedule handles this. |
 | **Argmax-frozen gradient mismatch** | Gradient doesn't match finite-differences. | Verify with FD check at small `c` perturbation; the envelope theorem gradient is exact only at the true argmax; ensure the LBFGS inner-step converges tightly. |
+| **Particle-filter gradient leak** (if using particle belief) | Backprop returns NaN or zero through the resampling step. | Use Gumbel-softmax resampling with small τ; or skip resampling during training and accept particle-weight degeneracy. |
+| **Grid-belief memory blow-up** (if using grid belief) | OOM on larger `d_x` or finer `N_grid`. | Fall back to moment-based or particle representation for larger `d_x`. |
 
 ## Diagnostics
 
 Track these every outer iteration:
 
-1. **Deployment loss (MSE relative error)** — primary metric, moving average over 20 iterations.
-2. **Bellman residual** — if using auxiliary loss, this should decrease roughly monotonically.
-3. **EKF posterior-variance at step K** — should decrease with training (proxy for informativeness).
-4. **Mean argmax action `s_k*`** — should shift toward a structured pattern; check for policy collapse (same `s*` for all `b`).
+1. **Deployment loss** — primary metric, moving average over 20 iterations.
+2. **Bellman residual** — if using auxiliary loss, should decrease roughly monotonically.
+3. **Terminal belief quality** — application-specific: posterior variance, entropy, or `Φ_0` value.
+4. **Mean argmax action `s_k*`** — should shift toward a structured pattern; watch for policy collapse (same `s*` for all `b`).
 5. **Binary fraction of `c_proj`** — at each β, track fraction of pixels that are `> 0.99` or `< 0.01` (cleanly binary). Target `> 95%` at `β = 256`.
 6. **Gradient norms `||∇_c L||, ||∇_θ L||, ||∇_w L||`** — relative magnitudes inform preconditioning.
 
 Monte-Carlo evaluation every 100 outer iterations:
 
-- Deploy current `(c, θ, w)` on 200 episodes with `K_deploy = 10` EKF steps.
-- Compare to rung 4 (existing Case C) on the same episode seeds.
-- Report posterior-mean relative error, BFIM trace, and episode loss.
+- Deploy current `(c, θ, w)` on 200 episodes with `K_deploy` measurement steps.
+- Compare to the best existing rung on the same episode seeds.
+- Report the deployment metric (MSE, MI, log-det-FIM — whichever matches `Φ_0`).
 
 ## Code scaffold
 
-Pseudo-Julia, sketching the pieces (names matching the existing codebase):
+Pseudo-Julia, with the belief representation treated as a plug-in interface:
 
 ```julia
-# --- value function architecture ---
+# --- plug-in belief interface ---
+abstract type AbstractBelief end
+
+belief_to_vector(b::AbstractBelief) = # returns b_vec ∈ ℝ^{d_b}
+belief_update(b::AbstractBelief, s, y, c) = # returns b_next  (differentiable)
+belief_to_reward(b::AbstractBelief, x0, c) = # Φ_0 evaluated at terminal belief
+sample_observation(b::AbstractBelief, s, c, noise) = # reparameterized y
+
+# --- value function ---
 struct ValueNN
-    encoder    # Flux.Chain for φ_θ
+    encoder    # Flux.Chain for φ_θ: ℝ^{d_b} → ℝ^{d_feat}
     heads      # Vector of Vector{Float32}, one per k
 end
 
-function v_value(vnn::ValueNN, b::Belief, k::Int)
-    b_vec = belief_to_vector(b)
-    feats = vnn.encoder(b_vec)
-    return dot(vnn.heads[k+1], feats)  # 1-indexed in Julia
-end
+v_value(vnn, b, k) = dot(vnn.heads[k+1], vnn.encoder(belief_to_vector(b)))
 
-function q_value(vnn, b::Belief, s::Action, c, k::Int)
-    # Expected next-belief value under Gaussian outcome distribution
-    # E_{y | b, s, c} [ V(T(b, s, y; c), k+1) ]
-    # Closed-form under EKF: propagate b → b_next given predicted y
-    μ_y, Σ_y = predicted_observation(b, s, c)
-    # For Gaussian integrand, marginalize via Gauss-Hermite quadrature or MC
-    return mc_expectation(ε -> begin
-        y = μ_y + cholesky(Σ_y).L * ε
-        b_next = ekf_update(b, s, y, c)
-        return v_value(vnn, b_next, k+1)
-    end, n_samples=8)
+function q_value(vnn, b, s, c, k; n_samples = 8)
+    # Estimate E_{y | b, s, c}[V(T(b, s, y; c), k+1)]
+    # by reparameterized quadrature or Monte Carlo
+    return mean([begin
+        noise = sample_noise()  # outside tape, in caller
+        y = sample_observation(b, s, c, noise)
+        b_next = belief_update(b, s, y, c)
+        v_value(vnn, b_next, k+1)
+    end for _ in 1:n_samples])
 end
 
 # --- inner argmax with envelope-theorem freeze ---
-function inner_argmax_NN(b::Belief, c, vnn, k::Int)
-    # Forward (no AD): find s*
+function inner_argmax_NN(b, c, vnn, k)
     s_star = Zygote.ignore() do
         s_grid = action_grid()
-        s_coarse = argmax(s -> q_value(vnn, b, s, c, k), s_grid)
-        s_star = lbfgs_refine(s -> -q_value(vnn, b, s, c, k), s_coarse)
-        return s_star
+        s0 = argmax(s -> q_value(vnn, b, s, c, k), s_grid)
+        lbfgs_refine(s -> -q_value(vnn, b, s, c, k), s0)
     end
-    # Gradient (AD active): re-evaluate at s*, freeze s*
     q_at_sstar = q_value(vnn, b, s_star, c, k)
     return s_star, q_at_sstar
 end
 
 # --- episode forward pass ---
-function episode_loss(vnn, c, x0, ε_traj)
-    b = prior_belief()
+function episode_loss(vnn, c, x0, noise_traj)
+    b = prior_belief(x0)  # initial belief (state-independent in practice)
     for k in 0:(K-1)
         s_star, _ = inner_argmax_NN(b, c, vnn, k)
-        y = predicted_observation_reparam(b, s_star, c, ε_traj[k+1])
-        b = ekf_update(b, s_star, y, c)
+        y = sample_observation(b, s_star, c, noise_traj[k+1])
+        b = belief_update(b, s_star, y, c)
     end
-    μ_K = mean(b)
-    return sum(((μ_K .- x0) ./ x0) .^ 2)
+    return -belief_to_reward(b, x0, c)  # negate if minimizing
 end
 
 # --- outer loop ---
-function outer_loop(vnn, c, opt_state, n_outer)
+function outer_loop(vnn, c, opt_state, n_outer; λ_bellman = 0.05)
     for it in 1:n_outer
-        x0_batch = sample_prior(n_episodes)
-        ε_batch = [sample_noise(K) for _ in 1:n_episodes]
-        
+        x0_batch = [sample_prior() for _ in 1:n_episodes]
+        noise_batch = [[sample_noise() for _ in 1:K] for _ in 1:n_episodes]
+
         loss_fn = (vnn, c) -> begin
             c_proj = project_and_filter(c, current_β)
             # Recompute FDFD + Taylor at new c
             smatrices = batch_solve(c_proj)
-            L_dep = mean(episode_loss(vnn, smatrices, x0_batch[i], ε_batch[i]) 
+            L_dep = mean(episode_loss(vnn, smatrices, x0_batch[i], noise_batch[i])
                          for i in 1:n_episodes)
             if λ_bellman > 0
-                L_bel = bellman_residual(vnn, smatrices, x0_batch, ε_batch)
+                L_bel = bellman_residual(vnn, smatrices, x0_batch, noise_batch)
                 return L_dep + λ_bellman * L_bel
             end
             return L_dep
         end
-        
+
         grads = Zygote.gradient(loss_fn, vnn, c)
         update!(opt_state, (vnn, c), grads)
-        
-        # β continuation
         maybe_advance_β!()
     end
 end
 ```
 
-## Extensions worth exploring
+The five `belief_*` functions are the only things that change when swapping belief representations. Everything downstream is agnostic.
+
+## Extensions
 
 - **Larger `K_train`.** Current Case C uses `K_train = 3`. End-to-end training scales more gracefully with `K` than exact DP does, so `K_train = 10` or more is plausible.
-- **Non-Gaussian belief.** Replace EKF with a particle filter for multimodal posteriors; the NN value function can take a particle-set-based belief encoding (permutation-invariant network, e.g., Deep Sets).
-- **Dynamical state.** Extend `T` with a state-transition model for drifting perturbations; the framework survives unchanged if the belief update is differentiable.
+- **Multimodal belief.** Particle filter with permutation-invariant encoder (Deep Sets) as `belief_to_vector`. Requires differentiable resampling (Gumbel-softmax) or straight-through estimator.
+- **Dynamical state.** Extend `T` with a state-transition model for drifting perturbations; the framework survives unchanged if the belief update remains differentiable.
 - **Continuous action space with reparameterized policy.** Replace grid + LBFGS argmax with a stochastic policy parameterized by its own small NN, trained by reparameterization + Gumbel-softmax. Moves toward actor-critic but keeps the exact value-function structure.
+- **Learned sufficient-statistic encoder.** If the chosen belief representation does not fit the problem well, train a separate encoder that maps raw observation histories directly to `b_vec`. Sacrifices exact Bayesian-filter interpretability for representational flexibility.
 
-## Reference checklist before implementation
+## Pre-implementation checklist
 
-- [ ] Verify that the existing `ekf_update` rrule propagates gradients cleanly when the inner argmax is frozen (write a finite-difference check on a toy `(b, c)` pair).
-- [ ] Profile `q_value` — the inner expectation over `y` is the hottest loop. 8-point Gauss-Hermite should give adequate accuracy; benchmark vs. MC with 50+ samples.
+- [ ] Choose a belief representation (§2.1) and implement the four plug-in functions: `belief_to_vector`, `belief_update`, `belief_to_reward`, `sample_observation`. Finite-difference check each.
+- [ ] Verify that `belief_update` propagates gradients cleanly end-to-end (write an FD check on a toy `(b, c)` pair).
+- [ ] Profile `q_value` — the inner expectation over `y` is the hottest loop. 8-point Gauss–Hermite should give adequate accuracy for smooth continuous likelihoods; benchmark vs. MC with 50+ samples.
 - [ ] Confirm that `Zygote.ignore()` around the LBFGS inner-step actually prevents the tape from growing (Zygote has had known bugs here in older versions).
 - [ ] Match the current Case C's preconditioner for `c` (box-width normalization); confirm it's correct for the new loss.
-- [ ] Plan a baseline comparison: Option B vs. current Case C (rung 4) on identical physical parameters, 200-episode MC deployment. Expect Option B to match or beat rung 4 at sufficient training.
+- [ ] Plan a baseline comparison: Option B vs. the existing best rung on identical physical parameters, 200-episode MC deployment. Expect Option B to match or beat the baseline at sufficient training.
 
 ## References
 
