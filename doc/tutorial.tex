@@ -4,6 +4,7 @@
 \usepackage{amsmath, amssymb, amsthm}
 \usepackage{mathtools}
 \usepackage{bm}
+\usepackage{framed}
 \usepackage{enumitem}
 \usepackage{booktabs}
 \usepackage{hyperref}
@@ -294,9 +295,8 @@ Two structural facts about this expression are what make the interchange go thro
 
 \paragraph{The interchange lemma.}  Before completing Step 4e, we isolate the abstract identity that does the work in a stand-alone lemma.  Step 4e will then be a one-line application.
 
-\begin{center}
-\fbox{\parbox{0.9\textwidth}{
-\textbf{Lemma (max--integral interchange over a function space).}  Let $Y$ be a measure space with non-negative measure $\mu$, $A$ a set (the ``action space''), and $g: Y \times A \to \R$ a measurable function.  Let $\mathcal{C}$ be a class of admissible measurable functions $\phi: Y \to A$ such that $\int g(y, \phi(y))\, d\mu(y)$ is well-defined for every $\phi \in \mathcal{C}$.  Then
+\begin{framed}
+\noindent\textbf{Lemma (max--integral interchange over a function space).}  Let $Y$ be a measure space with non-negative measure $\mu$, $A$ a set (the ``action space''), and $g: Y \times A \to \R$ a measurable function.  Let $\mathcal{C}$ be a class of admissible measurable functions $\phi: Y \to A$ such that $\int g(y, \phi(y))\, d\mu(y)$ is well-defined for every $\phi \in \mathcal{C}$.  Then
 \begin{equation}
 \max_{\phi \in \mathcal{C}}\, \int g(y, \phi(y))\, d\mu(y) \;=\; \int \max_{a \in A}\, g(y, a)\, d\mu(y)
 \label{eq:interchange_lemma}
@@ -348,8 +348,7 @@ Since $\phi^\star \in \mathcal{C}$, the max over $\mathcal{C}$ is at least this 
 \item \textbf{(i) Attainment} says the inner max over actions is \emph{achieved} (not just approximated) at each $y$.  Holds automatically when $A$ is finite or when $A$ is compact and $g(y, \cdot)$ is upper semicontinuous.
 \item \textbf{(ii) Admissibility} says the pointwise-argmax function, which in general depends on $y$, must itself be an admissible element of $\mathcal{C}$.  Equivalently, $\mathcal{C}$ must be a function class rich enough to include all such $y$-dependent choices.  This is satisfied when $\mathcal{C}$ is the class of all measurable $\phi: Y \to A$, and it fails if $\mathcal{C}$ is restricted --- e.g., to constant functions (``fixed schedules''), in which case LHS $<$ RHS strictly.
 \end{itemize}
-}}
-\end{center}
+\end{framed}
 
 \subparagraph{Step 4e --- The interchange (load-bearing step).}  Apply the lemma with
 \begin{itemize}[nosep, leftmargin=*]
