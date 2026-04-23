@@ -225,6 +225,34 @@ Whatever filter you chose in §2.1, it must be differentiable in `(b_k, s_k*, y_
 
 Write `T` as a clean Julia function `belief_update(b_k, s_k, y_k, c) -> b_{k+1}` and Zygote will handle the rest (possibly with a custom rrule for resampling if you go the particle-filter route).
 
+## On the implicit function theorem
+
+The existing Case C pipeline in [BFIMGaussian.jl](../BFIMGaussian.jl) uses an IFT-based custom rrule for the inner sensor-parameter argmax (`_get_sopt` and its pullback). A natural question: is IFT involved in Option B?
+
+**Short answer: not strictly, though it could be.**
+
+In Option B as described, the envelope-theorem argmax-freeze recipe (§5.1) handles the inner optimization without IFT. The forward pass records `s_k*` with no tape; the gradient pass substitutes it in and runs reverse-mode AD. No Hessian-vector products; no custom rrule for the argmax.
+
+**When envelope-freeze is exact.** At convergence of the NN, if `Q_{θ,w}` is the true Bellman Q-function for the deployment loss, then `s_k* = argmax Q_{θ,w}` is the true Bellman-optimal action. The envelope theorem then gives the exact outer gradient with `s_k*` frozen — identical to what IFT would produce at the inner argmax. No contribution from `ds_k*/dc` is needed.
+
+**When envelope-freeze is approximate.** Away from NN convergence, `Q_{θ,w}` is an approximation to the true Bellman Q, and `s_k* = argmax Q_{θ,w}` is a sub-optimal action w.r.t. the deployment loss. The exact outer gradient has a correction term `(∂L_deployment/∂s_k*) · (ds_k*/dc)` that the envelope-freeze recipe drops. This correction is first-order small in the NN approximation error (paper §4.3 point 2) and shrinks as training converges, but it is not literally zero at intermediate iterations.
+
+**When to switch to IFT.** If you want exactness even at non-converged NN, differentiate through the inner argmax via the implicit function theorem, reproducing Case C's machinery:
+
+```
+ds_k*/dc       =  -(∂²Q_{θ,w}/∂s²)⁻¹ · (∂²Q_{θ,w}/∂s∂c)
+ds_k*/dθ       =  -(∂²Q_{θ,w}/∂s²)⁻¹ · (∂²Q_{θ,w}/∂s∂θ)
+ds_k*/dw_{k+1} =  -(∂²Q_{θ,w}/∂s²)⁻¹ · (∂²Q_{θ,w}/∂s∂w_{k+1})
+```
+
+and chain-rule these into the outer gradient. Trades the simplicity of the envelope-freeze recipe for an exact gradient at the cost of a Hessian-vector product at every inner argmax (computable via `Zygote.hessian` or Hessian-free methods). The `get_sopt` pullback in [BFIMGaussian.jl](../BFIMGaussian.jl) already does this for Case C's BFIM-trace objective; for Option B you'd generalize its inner objective to be the NN Q-function instead.
+
+**Recommendation.** Start with the envelope-freeze recipe. Switch to IFT only if training is unstable in a way that suggests gradient bias from sub-optimal inner argmax — usually visible as outer-loop oscillation that does not decrease when you lower the learning rate. For most problems, the first-order correction that IFT would add is smaller than the Monte-Carlo noise in the batch-wise deployment loss estimate, and IFT's overhead buys nothing.
+
+**Not an IFT setup: the training is joint, not bi-level.** `(θ, w, c)` are all free variables updated simultaneously. There is no outer-over-inner loop that would make `(θ, w)` implicit functions of `c`. If you instead chose a bi-level setup — inner: fit `(θ, w)` to convergence given `c`; outer: update `c` given the converged inner fit — then `dθ*/dc` and `dw*/dc` would be proper IFT gradients through the inner fit's first-order condition `∂L_bellman/∂(θ, w) = 0`. This is the classical hyperparameter-optimization recipe (Pedregosa 2016, Blondel et al. 2022's JAXopt), and works but adds a layer of complexity that joint training usually avoids without sacrificing optimality.
+
+**Not an IFT setup: the belief update `T`.** `T` is closed-form Bayes' rule — pointwise multiplication of the prior by the likelihood, followed by normalization. No inner optimization, no implicit function, no IFT. Zygote's default rules handle it via division-through-normalizer. The only exception is particle-filter resampling, which requires a custom rule for different reasons (categorical sampling), not IFT.
+
 ## Integration with the existing photonic forward model
 
 The current pipeline in [SimGeomBroadBand.jl](../SimGeomBroadBand.jl) provides:
