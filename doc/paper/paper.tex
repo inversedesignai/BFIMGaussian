@@ -105,7 +105,7 @@ Equation~\eqref{eq:joint_opt} is the sole formal statement in the paper; what va
 
 For the posterior-mean estimator on continuous $\bx$, the tower-law identity $\E[(\hat\bx_{\text{pm}} - \bx)^2] = \E[\mathrm{Var}(\bx \mid \bb_K)]$ makes the Bayesian MSE a special case of $V(\bc, \pi)$ with $\Phi = -\mathrm{Var}(\bx \mid \bb_K)$.  Section~\ref{sec:phi_family} develops this and two alternative $\Phi$ choices used by the other case studies.
 
-\paragraph{Two-level structure (joint-DP).}  When $\Pi$ is the full space of adaptive policies, the inner $\argmax_\pi$ in Equation~\eqref{eq:joint_opt} is solved by the Bellman recursion on the belief state $\bb_k$ (derivation from Equation~\eqref{eq:V_def} in Appendix~\ref{app:bellman_derivation}),
+\paragraph{Two-level structure (joint-DP).}  When $\Pi$ is the full space of adaptive policies, the inner $\argmax_\pi$ in Equation~\eqref{eq:joint_opt} is solved by the Bellman recursion on the belief state $\bb_k$ (full derivation from Equation~\eqref{eq:V_def} in the accompanying supplement),
 \begin{align}
 V_K(\bb;\, \bc) &\;=\; \E_{\bx \mid \bb}\!\left[\,\Phi_0(\bx, \bb;\, \bc)\,\right], \label{eq:bellman_terminal}\\
 V_k(\bb;\, \bc) &\;=\; \max_{\bs_k \in \mathcal{S}}\; \E_{\by_k \mid \bb, \bs_k, \bc}\!\left[\,V_{k+1}\!\bigl(T(\bb, \bs_k, \by_k;\, \bc);\, \bc\bigr)\,\right], \quad k = K-1, \ldots, 0,
@@ -686,54 +686,6 @@ For any sensor whose physical hardware is designed once but whose measurement po
 \paragraph{Code and data.}  The Julia implementation of all three case studies, including the exact Bellman DP with count-statistic memoization (Case Studies A and B), the sharp-max differentiable-DP outer Adam with per-component box-width preconditioning, the MSE-terminal reward (\texttt{Bellman.jl}, \texttt{Gradient.jl}, \texttt{JointOpt.jl}), the joint PCRB baseline (\texttt{PCRB.jl}), and the photonic BFIM+EKF surrogate (\texttt{SimGeomBroadBand.jl}, \texttt{BFIMGaussian.jl}, \texttt{PhEnd2End.jl}), is publicly available.  Numerical outputs of all tables in Sections~\ref{sec:radar}--\ref{sec:photonic} are serialized and shipped with the source; reproducing any table requires a single Julia invocation.
 
 \paragraph{Acknowledgments.}  [redacted for blind review; funding, collaborators, and facility acknowledgments here.]
-
-%===============================================================================
-\appendix
-\section{Derivation of the Bellman recursion from \texorpdfstring{$V(\bc, \pi)$}{V(c, pi)}}
-\label{app:bellman_derivation}
-%===============================================================================
-
-This appendix derives Equations~\eqref{eq:bellman_terminal}--\eqref{eq:bellman} from Equation~\eqref{eq:V_def}, isolating the three ingredients --- change of conditioning, sufficiency of the posterior, and Bellman's principle of optimality --- that together produce the reduction.
-
-\paragraph{Step 1: Change of conditioning.}  Equation~\eqref{eq:V_def} writes the objective as a nested expectation over the prior and the data trajectory.  Swap the order using the law of total expectation --- condition on the data rather than on the state:
-\begin{equation}
-V(\bc, \pi) \;=\; \E_{\by_{1:K} \mid \pi, \bc}\!\left[\,\E_{\bx \mid \by_{1:K}, \bc}\!\bigl[\Phi(\bx, \bs_{1:K}^\pi, \bc)\bigr]\,\right].
-\label{eq:V_cond}
-\end{equation}
-The inner expectation conditions on the complete measurement history.
-
-\paragraph{Step 2: Sufficiency of the posterior.}  The terminal posterior
-\begin{equation}
-\bb_K(\bx) \;\coloneqq\; p(\bx \mid \by_{1:K}, \bs_{1:K}, \bc)
-\end{equation}
-is a sufficient statistic of the history for inference about $\bx$: every expectation of a function of $\bx$ given the history may be re-expressed as an expectation given the posterior,
-\begin{equation}
-\E_{\bx \mid \by_{1:K}, \bc}\!\bigl[\Phi(\bx, \bs_{1:K}^\pi, \bc)\bigr] \;=\; \E_{\bx \mid \bb_K}\!\bigl[\Phi_0(\bx, \bb_K;\, \bc)\bigr],
-\end{equation}
-where $\Phi_0$ is the pointwise reward re-indexed by the terminal belief.  For $\Phi_{\text{Var}}$ and $\Phi_{\text{MI}}$ the schedule dependence drops out once the posterior is fixed; for $\Phi_{\log J}$ the belief is augmented to carry the accumulated Fisher matrix so that schedule-dependent accumulators ride along with the posterior (see §\ref{sec:phi_family}).
-
-\paragraph{Step 3: Trajectory factorization via the belief update.}  Any data trajectory $\by_{1:K}$ can be drawn one step at a time by iterating the Bayesian belief update $T$ (Equation~\eqref{eq:belief_update}), with each new observation sampled conditional on the current belief and action.  Applied to the trajectory expectation in Equation~\eqref{eq:V_cond}, this gives, for any fixed policy $\pi$, the \emph{policy-evaluation} recursion
-\begin{align}
-U^\pi_K(\bb;\, \bc) &\;=\; \E_{\bx \mid \bb}\!\bigl[\Phi_0(\bx, \bb;\, \bc)\bigr], \label{eq:policy_eval_terminal}\\
-U^\pi_k(\bb;\, \bc) &\;=\; \E_{\by_k \mid \bb, \pi(\bb), \bc}\!\bigl[U^\pi_{k+1}\bigl(T(\bb, \pi(\bb), \by_k;\, \bc);\, \bc\bigr)\bigr], \quad k = K-1, \ldots, 0,
-\label{eq:policy_eval}
-\end{align}
-with $V(\bc, \pi) = U^\pi_0(p_0;\, \bc)$.  This is Equation~\eqref{eq:V_def} rewritten as a backward recursion --- no optimization yet, just Bayesian bookkeeping.
-
-\paragraph{Step 4: Bellman's principle of optimality.}  Define $V_k(\bb;\, \bc) \coloneqq \max_\pi U^\pi_k(\bb;\, \bc)$.  Maximizing over $\pi$ factors step-by-step.  At step $k$, parametrize the policy by the action it prescribes at the current belief, $\bs_k = \pi(\bb)$, and its continuation $\pi'$ over steps $\{k+1, \ldots, K-1\}$.  Equation~\eqref{eq:policy_eval} depends on these two pieces separately: the current action $\bs_k$ enters the one-step measurement distribution, and the continuation enters via $U^{\pi'}_{k+1}$.  Maximizing over both gives
-\begin{equation}
-V_k(\bb;\, \bc) \;=\; \max_{\bs_k \in \mathcal{S}}\; \max_{\pi'}\; \E_{\by_k \mid \bb, \bs_k, \bc}\!\bigl[U^{\pi'}_{k+1}\bigl(T(\bb, \bs_k, \by_k;\, \bc);\, \bc\bigr)\bigr].
-\label{eq:double_max}
-\end{equation}
-The inner $\max_{\pi'}$ may be pushed inside $\E_{\by_k}$: adaptive continuations are history-dependent, so the maximizer $\pi'$ can itself depend on the realization of $\by_k$, and maximizing a family of $\by_k$-dependent continuations pointwise before averaging gives the same result as maximizing their average (the interchange of $\max$ and $\E$ over $\by_k$-measurable policies).  Applying this interchange and substituting the definition of $V_{k+1}$,
-\begin{equation}
-V_k(\bb;\, \bc) \;=\; \max_{\bs_k \in \mathcal{S}}\; \E_{\by_k \mid \bb, \bs_k, \bc}\!\bigl[V_{k+1}\bigl(T(\bb, \bs_k, \by_k;\, \bc);\, \bc\bigr)\bigr],
-\end{equation}
-which is Equation~\eqref{eq:bellman}.  The Bellman-optimal policy is read off at each step as
-\begin{equation}
-\pi^\star_k(\bb;\, \bc) \;=\; \argmax_{\bs_k \in \mathcal{S}}\; \E_{\by_k \mid \bb, \bs_k, \bc}\!\bigl[V_{k+1}\bigl(T(\bb, \bs_k, \by_k;\, \bc);\, \bc\bigr)\bigr],
-\end{equation}
-and evaluating the recursion at the root belief $\bb_0 = p_0$ recovers $V^\star(\bc) = \max_\pi V(\bc, \pi) = V_0(p_0;\, \bc)$ of Equation~\eqref{eq:jointDP}.
 
 \bibliographystyle{unsrtnat}
 \bibliography{paper}
