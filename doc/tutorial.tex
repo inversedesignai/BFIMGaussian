@@ -495,6 +495,15 @@ The first arrow is the Fisher--Neyman reduction on the likelihood; the second ar
 
 The count-tuple $\mathbf{n}_k$ is bounded: at $K = 4$ epochs with at most $n = 10$ shots each, the total shot count $\sum_j N_j$ is at most $40$ and the tuple is sparse (at most four bins touched, because there are at most four epochs).  The set of reachable count-tuples across all four epochs, as enumerated by a breadth-first search from the empty tuple, is approximately $10^7$ distinct tuples.  Each entry is a 64-bit float (the value-to-go).  The table fits in memory.
 
+Figure~\ref{fig:belief_tree} visualizes this enumeration at a very small problem size ($K = 3$, $J = 2$, $n = 1$): $1 \to 4 \to 10 \to 20$ reachable count-tuples across the four layers, $35$ nodes total, against a naive playout tree of $85$ leaves-plus-internal-nodes.  Even at this toy scale, $22$ of the $35$ count-tuples arise from more than one parent path (marked with a red ring) --- the memoization collapse that the count-tuple representation exploits.  At the paper's full scale ($K = 4$, $J = 10$, $L = 2$) the compression ratio grows to roughly two orders of magnitude.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{belief_tree.png}
+\caption{Reachable count-tuple DAG for a Ramsey-like DP at $K = 3$ epochs, $J = 2$ delays, $n = 1$ shot per epoch.  \emph{Nodes:} reachable count-tuples $(N_1, M_1; N_2, M_2)$, one column per epoch; colour = posterior mean $\hat x$ (plasma scale); size $\propto$ posterior precision $1 / \sigma$; red ring marks nodes reached by more than one parent path (the memoization collapse).  \emph{Edges:} colour by action ($\tau_1$ / $\tau_2$), style by outcome ($y = 0$ dashed / $y = 1$ solid).  The compression-ratio box in the lower right compares the naive playout-tree size to the count-tuple DAG size.  \emph{Right column:} four representative posteriors --- the prior at the root and three distinct terminal-belief shapes at $k = 3$.}
+\label{fig:belief_tree}
+\end{figure}
+
 \subsection{Backward induction on count-tuples, in detail}
 
 \paragraph{Posterior from a count-tuple.}  To evaluate any expectation the DP needs, we must be able to turn a count-tuple into a posterior.  Discretize $\bx$ on a grid of $K_\Phi = 256$ points $\bx^{(1)}, \ldots, \bx^{(K_\Phi)}$ uniformly spaced across $[0, \phi_{\max} \Phi_0]$.  The posterior at the $i$-th grid point, given count-tuple $\mathbf{n}$, is
