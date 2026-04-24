@@ -119,7 +119,9 @@ for L in levels:
 # -----------------------------------------------------------------------------
 # Draw
 # -----------------------------------------------------------------------------
-fig = plt.figure(figsize=(22, 11))
+fig = plt.figure(figsize=(36, 20))
+# Global font scale
+plt.rcParams.update({'font.size': 24})
 
 # Left big panel: the DAG
 ax_tree = plt.subplot2grid((4, 5), (0, 0), colspan=4, rowspan=4)
@@ -136,7 +138,7 @@ for parent, child, j, y in edges:
                  color=ACTION_COLOR[j],
                  linestyle=OUTCOME_STYLE[y],
                  alpha=0.55,
-                 linewidth=1.1,
+                 linewidth=3.0,
                  zorder=1)
 
 # Nodes
@@ -151,20 +153,20 @@ for node, (x, yy) in pos.items():
     mean, sigma = stats[node]
     # Size: larger for sharper posterior
     norm_size = 1.0 - (sigma - min_sigma) / sigma_range
-    size = 120 + 450 * norm_size
+    size = 500 + 1800 * norm_size
     # Color: posterior mean, normalized to its range
     color_val = (mean - min_mean) / (max_mean - min_mean + 1e-12)
     color = cm.plasma(color_val)
     # Edge highlight if this node has multiple parent paths
     merge = node in merged_nodes
     edgecolor = 'black' if not merge else 'red'
-    linewidth = 0.8 if not merge else 2.4
+    linewidth = 1.8 if not merge else 5.0
     ax_tree.scatter(x, yy, s=size, c=[color], edgecolors=edgecolor,
                     linewidths=linewidth, zorder=3)
 
     label = f"({node[0][0]},{node[0][1]};{node[1][0]},{node[1][1]})"
-    ax_tree.text(x, yy - 0.55, label, ha='center', va='top',
-                 fontsize=7, zorder=4, family='monospace')
+    ax_tree.text(x, yy - 0.75, label, ha='center', va='top',
+                 fontsize=22, zorder=4, family='monospace')
 
 # Axis formatting
 ax_tree.set_xlim(-1.0, K * 3.5 + 1.5)
@@ -172,16 +174,15 @@ y_min = min(yy for _, yy in pos.values()) - 2
 y_max = max(yy for _, yy in pos.values()) + 2
 ax_tree.set_ylim(y_min, y_max)
 for k in range(K + 1):
-    ax_tree.axvline(k * 3.5, color='gray', alpha=0.15, linewidth=0.5, zorder=0)
-    ax_tree.text(k * 3.5, y_max - 0.4,
+    ax_tree.axvline(k * 3.5, color='gray', alpha=0.15, linewidth=1.0, zorder=0)
+    ax_tree.text(k * 3.5, y_max - 0.3,
                  f"$k = {k}$\n$|{{\\rm levels}}| = {len(levels[k])}$",
-                 ha='center', va='top', fontsize=12, fontweight='bold')
+                 ha='center', va='top', fontsize=32, fontweight='bold')
 ax_tree.set_title(
     f"Reachable count-tuple DAG: Ramsey-like DP, $K={K}$ epochs, $J={J}$ delays, $n=1$ shot/epoch\n"
-    f"Node label: $(N_1,M_1;N_2,M_2)$.  Color = posterior mean $\\hat x$ "
-    f"(plasma: dark → low $x$, bright → high $x$).  Size $\\propto$ precision $1/\\sigma$.  "
-    f"Red ring = node reached by more than one parent path (memoization collapse).",
-    fontsize=11)
+    f"Node label: $(N_1,M_1;N_2,M_2)$.  Color = posterior mean $\\hat x$.  "
+    f"Size $\\propto$ precision $1/\\sigma$.  Red ring = multi-parent (memoization collapse).",
+    fontsize=28)
 ax_tree.set_xticks([])
 ax_tree.set_yticks([])
 for spine in ax_tree.spines.values():
@@ -190,28 +191,28 @@ for spine in ax_tree.spines.values():
 # Legend
 legend_elements = [
     Line2D([0], [0], color=ACTION_COLOR[0], linestyle=OUTCOME_STYLE[0],
-           lw=2, label=r"$\tau_1$ (short), $y=0$"),
+           lw=4, label=r"$\tau_1$ (short), $y=0$"),
     Line2D([0], [0], color=ACTION_COLOR[0], linestyle=OUTCOME_STYLE[1],
-           lw=2, label=r"$\tau_1$ (short), $y=1$"),
+           lw=4, label=r"$\tau_1$ (short), $y=1$"),
     Line2D([0], [0], color=ACTION_COLOR[1], linestyle=OUTCOME_STYLE[0],
-           lw=2, label=r"$\tau_2$ (long), $y=0$"),
+           lw=4, label=r"$\tau_2$ (long), $y=0$"),
     Line2D([0], [0], color=ACTION_COLOR[1], linestyle=OUTCOME_STYLE[1],
-           lw=2, label=r"$\tau_2$ (long), $y=1$"),
+           lw=4, label=r"$\tau_2$ (long), $y=1$"),
     Line2D([0], [0], marker='o', color='w', markerfacecolor='lightgray',
-           markeredgecolor='red', markeredgewidth=2, markersize=11,
+           markeredgecolor='red', markeredgewidth=4, markersize=24,
            lw=0, label='merged (>1 parent path)'),
 ]
-ax_tree.legend(handles=legend_elements, loc='lower left', fontsize=9, framealpha=0.95)
+ax_tree.legend(handles=legend_elements, loc='lower left', fontsize=22, framealpha=0.95)
 
 # Summary text
 naive_tree = sum((J * 2) ** k for k in range(K + 1))
 actual_dag = sum(len(L) for L in levels)
 ax_tree.text(K * 3.5 + 0.2, y_min + 0.5,
-             f"naive playout tree size: $\\sum_{{k=0}}^{{K}} (|A|)^k = {naive_tree}$\n"
-             f"count-tuple DAG size:      {actual_dag}\n"
-             f"compression ratio:           {naive_tree / actual_dag:.1f}×",
-             fontsize=9, family='monospace', va='bottom',
-             bbox=dict(boxstyle='round,pad=0.4', facecolor='lightyellow', edgecolor='gray'))
+             f"naive tree: $\\sum_k (|A|)^k = {naive_tree}$\n"
+             f"count-tuple DAG: {actual_dag}\n"
+             f"compression: {naive_tree / actual_dag:.1f}×",
+             fontsize=22, family='monospace', va='bottom',
+             bbox=dict(boxstyle='round,pad=0.5', facecolor='lightyellow', edgecolor='gray', linewidth=1.5))
 
 # -----------------------------------------------------------------------------
 # Right small panels: four representative posteriors
@@ -229,18 +230,18 @@ for i, node in enumerate(rep_nodes):
     mean, sigma = stats[node]
     color_val = (mean - min_mean) / (max_mean - min_mean + 1e-12)
     color = cm.plasma(color_val)
-    ax_p.plot(X, p, color='#222', linewidth=1.5)
+    ax_p.plot(X, p, color='#222', linewidth=2.5)
     ax_p.fill_between(X, p, alpha=0.40, color=color)
-    ax_p.axvline(mean, color='red', linestyle='--', linewidth=1, alpha=0.8)
-    ax_p.axvline(PRIOR_MU, color='gray', linestyle=':', linewidth=0.8, alpha=0.6)
+    ax_p.axvline(mean, color='red', linestyle='--', linewidth=2.0, alpha=0.85)
+    ax_p.axvline(PRIOR_MU, color='gray', linestyle=':', linewidth=1.5, alpha=0.7)
     ax_p.set_xlim(0, 1)
-    ax_p.set_xlabel(r"$x$", fontsize=10)
-    ax_p.set_ylabel(r"$p(x \mid \mathbf{n})$", fontsize=9)
+    ax_p.set_xlabel(r"$x$", fontsize=22)
+    ax_p.set_ylabel(r"$p(x \mid \mathbf{n})$", fontsize=20)
     tup_str = f"$({node[0][0]},{node[0][1]};{node[1][0]},{node[1][1]})$"
     label = "prior" if node == empty else tup_str
     ax_p.set_title(f"{label}     $\\hat x={mean:.3f}$, $\\sigma={sigma:.3f}$",
-                   fontsize=9)
-    ax_p.tick_params(labelsize=7)
+                   fontsize=20)
+    ax_p.tick_params(labelsize=16)
     ax_p.grid(True, alpha=0.25)
 
 plt.tight_layout()
