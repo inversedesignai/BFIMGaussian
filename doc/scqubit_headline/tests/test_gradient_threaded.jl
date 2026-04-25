@@ -23,7 +23,8 @@ println("Threads.nthreads() = ", Threads.nthreads())
 println()
 
 function run_one(; K::Int, K_PHI::Int, J::Int, L::Int, terminal::Symbol,
-                  c::ScqubitParams, label::String, parallel_depth::Int=-1)
+                  c::ScqubitParams, label::String, parallel_depth::Int=-1,
+                  zygote_check::Bool=true)
     println("─"^72)
     println("$(label)  (parallel_depth=$(parallel_depth == -1 ? K-1 : parallel_depth))")
     println("─"^72)
@@ -65,13 +66,19 @@ function run_one(; K::Int, K_PHI::Int, J::Int, L::Int, terminal::Symbol,
     @printf("  max rel-err in gradient: %.3e\n", rel_err)
     @test rel_err < 1e-10
 
-    # ----- compare against Zygote-based grad_c_exact for sanity -----
-    t0 = time()
-    g_zyg = grad_c_exact(c_vec, memo, grid, ω_d, K; terminal=terminal)
-    t_zyg = time() - t0
-    rel_err_zyg = maximum(abs.(g_ref .- g_zyg) ./ max.(abs.(g_ref), 1e-30))
-    @printf("  grad_zygote:        %.2fs    | rel-err vs grad_fd_ref: %.3e\n",
-            t_zyg, rel_err_zyg)
+    # ----- compare against Zygote-based grad_c_exact for sanity (skip at largest case
+    #       because Zygote is pathologically slow on Julia 1.12 for K=4 K_PHI=128 — see
+    #       README "Caveats" section) -----
+    if zygote_check
+        t0 = time()
+        g_zyg = grad_c_exact(c_vec, memo, grid, ω_d, K; terminal=terminal)
+        t_zyg = time() - t0
+        rel_err_zyg = maximum(abs.(g_ref .- g_zyg) ./ max.(abs.(g_ref), 1e-30))
+        @printf("  grad_zygote:        %.2fs    | rel-err vs grad_fd_ref: %.3e\n",
+                t_zyg, rel_err_zyg)
+    else
+        println("  grad_zygote skipped (Julia 1.12 Zygote is too slow at this size)")
+    end
     println()
 end
 
@@ -85,12 +92,14 @@ run_one(K=2, K_PHI=16, J=4, L=2, terminal=:mse,
 run_one(K=3, K_PHI=32, J=4, L=2, terminal=:mse,
         c=PAPER_BASELINE, label="K=3 K_PHI=32 J=4 L=2 :mse")
 
-# Production-ish: K=4 J=10 L=2 K_PHI=64 (smaller K_PHI for test speed)
+# Production-ish: K=4 J=10 L=2 K_PHI=64 (Zygote skipped at K=4 — too slow on Julia 1.12)
 run_one(K=4, K_PHI=64, J=10, L=2, terminal=:mse,
-        c=PAPER_BASELINE, label="K=4 K_PHI=64 J=10 L=2 :mse")
+        c=PAPER_BASELINE, label="K=4 K_PHI=64 J=10 L=2 :mse",
+        zygote_check=false)
 
-# Headline-size: K=4 J=10 L=2 K_PHI=128
+# Headline-size: K=4 J=10 L=2 K_PHI=128 (Zygote skipped — too slow on Julia 1.12)
 run_one(K=4, K_PHI=128, J=10, L=2, terminal=:mse,
-        c=PAPER_BASELINE, label="K=4 K_PHI=128 J=10 L=2 :mse (headline-size)")
+        c=PAPER_BASELINE, label="K=4 K_PHI=128 J=10 L=2 :mse (headline-size)",
+        zygote_check=false)
 
 println("All gradient correctness tests passed.")
