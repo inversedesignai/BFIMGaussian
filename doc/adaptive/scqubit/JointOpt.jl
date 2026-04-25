@@ -172,6 +172,7 @@ function joint_opt(c0::ScqubitParams;
                    cbox::CBox = default_cbox(),
                    omega_d_fn = make_omega_d_fn(),
                    terminal::Symbol = :mi,
+                   grad_method::Symbol = :zygote,  # :zygote or :forwarddiff
                    verbose::Bool = true)
     isdir(ckpt_dir) || mkpath(ckpt_dir)
     v = c_as_vec(c0)
@@ -212,7 +213,11 @@ function joint_opt(c0::ScqubitParams;
         end
 
         # Envelope gradient at current c with fixed policy memo.
-        g = grad_c_exact(v, memo, grid, ω_d, K_epochs; terminal=terminal)
+        g = if grad_method === :forwarddiff
+            grad_c_exact_fd(v, memo, grid, ω_d, K_epochs; terminal=terminal)
+        else
+            grad_c_exact(v, memo, grid, ω_d, K_epochs; terminal=terminal)
+        end
         gn = norm(g)
 
         # Adam (maximise)
@@ -230,6 +235,7 @@ function joint_opt(c0::ScqubitParams;
             marker = refreshed ? "[reopt]" : "       "
             @printf("%s iter %4d  V=%.6f  |grad|=%.3e  Δt=%.2f s  ω_d=%.4e\n",
                     marker, iter, V_cur, gn, hist.elapsed[end], ω_d)
+            flush(stdout)
         end
 
         if ckpt_every > 0 && iter % ckpt_every == 0

@@ -30,9 +30,10 @@ using SpecialFunctions: loggamma
 using Random
 using Zygote
 using Zygote: @ignore_derivatives
+using ForwardDiff
 
 export V_adaptive_policy_exact,
-       grad_c_exact, grad_c_mc,
+       grad_c_exact, grad_c_exact_fd, grad_c_mc,
        c_as_vec, vec_as_c, C_FIELD_NAMES, C_DIM,
        rollout_mc
 
@@ -208,6 +209,26 @@ function grad_c_exact(c_vec::AbstractVector, memo::Dict,
                       terminal::Symbol=:mi) where {J, L}
     Zygote.gradient(v -> V_adaptive_policy_exact(vec_as_c(v), memo, grid, omega_d, K; terminal=terminal),
                     c_vec)[1]
+end
+
+"""
+    grad_c_exact_fd(c_vec, memo, grid, ω_d, K) -> Vector{Float64}
+
+ForwardDiff gradient of V_adaptive_policy_exact w.r.t. the 7-vector c.  Uses
+forward-mode AD — memory O(depth × chunk), so it avoids Zygote's tape
+explosion for deep policy trees at K ≥ 4.
+
+ω_d is treated as a fixed Float64 to match grad_c_exact semantics (envelope
+theorem: the operating point is non-differentiable argmax of a sensitivity
+amplitude, so pinning ω_d while differentiating only through the Ramsey
+likelihood is the correct Danskin step).
+"""
+function grad_c_exact_fd(c_vec::AbstractVector, memo::Dict,
+                         grid::Main.Belief.Grid{J, L}, omega_d::Real, K::Int;
+                         terminal::Symbol=:mi) where {J, L}
+    ForwardDiff.gradient(
+        v -> V_adaptive_policy_exact(vec_as_c(v), memo, grid, omega_d, K; terminal=terminal),
+        c_vec)
 end
 
 # ---------------------------------------------------------------
