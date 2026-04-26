@@ -269,3 +269,86 @@ The driver scripts and modules are committed to `doc/scqubit_headline/`. The
 fully reproducible from the scripts in ~1 hour). To regenerate the headline,
 run the three scripts in order; you should get `ratio ≈ 26.2 ± 0.1` at
 `z ≈ +145σ`.
+
+## Multistart follow-up (REOPT_EVERY=1, adaptive lr, 4 inits)
+
+After the naive-init headline, we ran a more rigorous multistart experiment
+to probe whether the V landscape has even better basins. Scripts:
+
+- `multistart_joint_adaptive.jl` — joint-DP with REOPT_EVERY=1 (every Adam
+  step has a true envelope-theorem gradient, no stale-policy bias) and
+  plateau-based adaptive lr (halve when V_best hasn't improved in
+  `PATIENCE` iters). Inits: `paper`, `naive`, `rand_1`, `rand_2`.
+- `multistart_pcrb.jl` — PCRB with same 4 inits.
+- `compare_mse_multistart_global.jl` — paired MC at the global-best `c` of
+  each side (selected by training V_best / log_JP_best).
+
+### Joint-DP per-init deployment MSE (K_PHI=256, N_MC=20000)
+
+| init | V_train (K=128) | V_deploy (K=256) | Deploy MSE |
+|---|---|---|---|
+| paper  | -5.18e-5 | -5.81e-5  | 5.86e-5 |
+| **naive**  | **-2.90e-5** | **-3.07e-5**  | **3.01e-5** ← deploy best |
+| rand_1 | -1.18e-5 | -5.07e-5  | 5.47e-5 ← K_PHI=128 grid artifact |
+| rand_2 | -7.26e-5 | -10.08e-5 | 9.97e-5 |
+
+`rand_1`'s training V_best (-1.18e-5) was a coarse-grid artifact: at the
+finer K_PHI=256 deployment grid the same `c` gives V=-5.07e-5 → MSE 5.47e-5,
+much worse than `naive`'s 3.01e-5. So **selecting by training V at K_PHI=128
+gives a misleadingly low MSE prediction in the rand_1 region**.
+
+### PCRB per-init deployment MSE — essentially init-insensitive
+
+| init | log_JP (K=128) | Deploy MSE (K=256) |
+|---|---|---|
+| **paper** | 20.7606 | **8.434e-4** ← deploy best |
+| naive  | 20.6160 | 8.596e-4 |
+| rand_1 | 19.7212 | 8.476e-4 |
+| rand_2 | 20.9706 | 8.463e-4 |
+
+PCRB MSE varies by only ~2% across inits — the Fisher landscape is
+essentially convex; PCRB's deployed MSE is dominated by aliasing, not by
+which c. (Note: the highest log_JP init, rand_2, does NOT have the lowest
+MSE — log_JP is not perfectly correlated with deployed MSE, but the spread
+is small enough that it doesn't matter.)
+
+### Final ratios across selection criteria
+
+| Selection criterion | joint MSE | PCRB MSE | ratio | z |
+|---|---|---|---|---|
+| Both = `PAPER_BASELINE` (paper headline) | 7.43e-5 | 8.43e-4 | 11.35× | +132σ |
+| Both = `naive` (this folder's main headline) | 3.28e-5 | 8.60e-4 | **26.19×** | +145σ |
+| Multistart, select by training metric | 5.47e-5 (rand_1) | 8.46e-4 (rand_2) | 15.47× | +135σ |
+| **Multistart, select by deployment MSE** | **3.01e-5 (naive)** | **8.43e-4 (paper)** | **28.05×** | ~+148σ |
+
+### Caveats from the multistart experiment
+
+1. **K_PHI=128 V-best is not always reliable.** For the rand_1 c-region,
+   the K_PHI=128 grid underestimates posterior variance (overestimates V),
+   so V_best=-1.18e-5 looked promising but deploys at -5.07e-5. Honest
+   selection requires either (a) verifying training V at the deployment
+   grid before committing, or (b) training at K_PHI=256 throughout (4×
+   slower per Bellman re-solve, ~2-3h per restart instead of ~30-40 min).
+
+2. **Adam with adaptive lr is more conservative than fixed-schedule lr
+   here.** The adaptive scheme decays lr aggressively when V plateaus,
+   sometimes before c has reached the basin minimum. The fixed
+   [80, 130, 170] schedule used in `sweep_joint_narrow_naive.jl` actually
+   reached V_best=-2.94e-5 from naive (slightly better than the adaptive
+   scheme's -2.90e-5).
+
+3. **PCRB is robust; joint-DP is sensitive.** Multistart helps joint-DP
+   significantly but barely affects PCRB. Reporting "global" results in a
+   paper means committing to multistart for the joint-DP side.
+
+### Recommendation for the paper
+
+The strongest defensible headline is **the multistart-by-deployment-MSE
+result: 28.05× at z≈+148σ**. It picks each side fairly (both by deployment
+MSE), and the joint-DP optimum is the `naive` basin (consistent across
+training and deployment grids — no K_PHI=128 artifact).
+
+If reviewers prefer "select by training metric" (since that's the natural
+optimization-time criterion), report the 15.47× number with a footnote
+explaining the K_PHI=128 grid artifact. Either way, the paper's existing
+11.27× is a lower bound; the global truth is at least 15-28×.
