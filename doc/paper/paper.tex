@@ -526,7 +526,7 @@ We run the policy iteration of Section~\ref{sec:envelope} with outer Adam update
 \begin{equation}
 \bc^\star_1 \;\approx\; (f_q^{\max} = 8.99~\mathrm{GHz},\; E_C/h = 0.254~\mathrm{GHz},\; \kappa = 0.47~\mathrm{MHz},\; \Delta_{qr} = 2.02~\mathrm{GHz}),
 \end{equation}
-with $V_{\text{adaptive}}(\bc^\star_1) = -\E[\mathrm{Var}(\bb_K)] = -7.49 \times 10^{-5}\,\Phi_0^2$.
+with $V_{\text{adaptive}}(\bc^\star_1) = -\E[\mathrm{Var}(\bx \mid \bb_K)] = -7.49 \times 10^{-5}\,\Phi_0^2$.
 
 \subsection{Joint PCRB baseline}
 
@@ -576,11 +576,11 @@ The prior width $\phi_{\max}$ interacts with the tractable horizon $K = 4$ throu
 
 
 %===============================================================================
-\section{Case Study C: Photonic metasensor (Gaussian-trace surrogate, \texorpdfstring{$10^5$}{high}-dim continuous \texorpdfstring{$\bc$}{c}, \texorpdfstring{$\Phi_{\log J}$}{Phi\_logJ})}
+\section{Case Study C: Photonic metasensor (rung-4 surrogate, \texorpdfstring{$10^5$}{high}-dim continuous \texorpdfstring{$\bc$}{c}, \texorpdfstring{$\Phi_{\text{Var}}$}{Phi\_Var})}
 \label{sec:photonic}
 %===============================================================================
 
-The two preceding case studies used exact Bellman DP.  The photonic case study operates on a $\sim 10^5$-pixel permittivity landscape where exact DP is infeasible, and demonstrates the relaxation-hierarchy rung 4: Gaussian-posterior belief updates via an extended Kalman filter, the Bayesian Fisher-information-matrix reward $\Phi_{\log J}$, and implicit-function-theorem differentiation through the inner optimization that selects the adaptive probe phases.
+The two preceding case studies used exact Bellman DP.  The photonic case study operates on a $\sim 10^5$-pixel permittivity landscape where exact DP is infeasible, and demonstrates the relaxation-hierarchy rung 4: deployment-aligned outer reward $\Phi_{\text{Var}}$, Gaussian-posterior belief updates via an extended Kalman filter, a Fisher-trace inner-policy surrogate $\bs^\star_k = \argmax_{\bs} \tr J_k(\bar\bx_k, \bs, \bc)$ at the EKF posterior mean, and implicit-function-theorem differentiation through that inner argmax.
 
 \begin{figure}[h]
 \centering
@@ -593,7 +593,7 @@ The two preceding case studies used exact Bellman DP.  The photonic case study o
 
 The device is a $2 \times 2$ lattice of identical 2D cross-waveguide scatterers, each cell a four-port cross with a central $300 \times 300$-pixel permittivity design region; all four cells share the same inverse-designed geometry, giving $\bc \in [0, 1]^{300 \times 300}$ (equivalently $\bc \in \R^{90{,}000}$) as the outer optimization variable.  The unknown state $\bx = \mathrm{vec}(\Delta n) \in \R^4$ is the vector of per-cell refractive-index perturbations to be estimated.  At each of $K_\text{train} = 3$ measurement epochs during co-design the sensor chooses a pair of input phases $\bs_k = (\phi_1^{(k)}, \phi_2^{(k)})$ applied to two of the lattice's external input ports as coherent broadband drives across 20 frequencies; the observations are the $\by_k \in \R^8$ broadband port powers measured at the lattice's 8 external output ports, with additive Gaussian noise.
 
-\paragraph{Reward.}  $\Phi = \Phi_{\log J}$ with $J_N$ the Bayesian Fisher-information matrix accumulated over the $K_\text{train}$ epochs.  The Gaussian-posterior Kalman filter makes $\log \det J_N$ tractable in closed form at each epoch.
+\paragraph{Reward.}  $\Phi = \Phi_{\text{Var}} = -\mathrm{Var}(\bx \mid \bb_K)$, with the EKF supplying the terminal Gaussian posterior $\bb_K \approx \mathcal{N}(\bar\bx_K, \Sigma_K)$ so that the deployed Bayesian MSE evaluates to $\E\,\tr \Sigma_K$.  The intractable Bellman inner $\argmax_\pi$ is replaced by the rung-4 surrogate of §\ref{sec:hierarchy}: at each epoch the prescribed policy maximizes the Bayesian Fisher-information trace at the posterior mean, $\bs^\star_k = \argmax_{\bs} \tr J_k(\bar\bx_k, \bs, \bc)$, in closed form under the Gaussian parametrization.
 
 \subsection{Physics and differentiability}
 
@@ -606,7 +606,7 @@ computed with a single FDFD solve per frequency and evaluated independently at e
 \subsection{Joint optimization}
 \label{sec:photonic_joint_opt}
 
-The outer loop is the policy iteration of Section~\ref{sec:envelope}.  At each $\bc$ the inner optimization $\bs^\star(\bb_k; \bc) = \argmax_{\bs} \Phi(\bx, \bs, \bc)$ is solved by grid search followed by L-BFGS refinement.  Its derivative with respect to $\bc$, which the chain rule requires, is computed in closed form from the implicit function theorem applied at the inner argmax, avoiding nested automatic differentiation.  To produce a geometry compatible with lithographic fabrication we apply a density filter to $\bc$ (convolving with a radius-$R$ kernel to enforce a minimum feature size) and then a $\tanh$ threshold projection with sharpness parameter $\beta$~\cite{wang2011projection, sigmund2007morphology, lazarov2016length, christiansen2018compact}.  During optimization $\beta$ is increased along a continuation schedule $16 \to 32 \to 64 \to 128 \to 256$ so that the projection gradually sharpens from a smooth blur to a near-binary mask.
+The outer loop is the policy iteration of Section~\ref{sec:envelope}.  At each $\bc$ and epoch $k$ the inner Fisher-trace optimization $\bs^\star_k(\bb_k; \bc) = \argmax_{\bs} \tr J_k(\bar\bx_k, \bs, \bc)$ is solved by grid search followed by L-BFGS refinement.  Its derivative with respect to $\bc$, which the chain rule requires, is computed in closed form from the implicit function theorem applied at the inner argmax, avoiding nested automatic differentiation.  To produce a geometry compatible with lithographic fabrication we apply a density filter to $\bc$ (convolving with a radius-$R$ kernel to enforce a minimum feature size) and then a $\tanh$ threshold projection with sharpness parameter $\beta$~\cite{wang2011projection, sigmund2007morphology, lazarov2016length, christiansen2018compact}.  During optimization $\beta$ is increased along a continuation schedule $16 \to 32 \to 64 \to 128 \to 256$ so that the projection gradually sharpens from a smooth blur to a near-binary mask.
 
 \subsection{Optimized binary design and loss trajectory}
 
