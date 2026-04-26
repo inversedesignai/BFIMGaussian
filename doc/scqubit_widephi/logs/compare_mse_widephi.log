@@ -1,0 +1,27 @@
+compare_mse_widephi.jl  (PHI_MAX=0.5; 5-D BayesOpt: ω_d free)
+Threads: 64
+c_joint*  : f_q=3.0000  E_C=0.4000  κ=0.1000 MHz  Δ=5.0000   V_train=-7.7908e-03
+ω_d_joint*/(2π) = 12.0000 GHz   (would-be ω_d_fn at c1: 2.0524 GHz)
+c_pcrb*   : f_q=12.0000  E_C=0.1500  κ=0.1000 MHz  Δ=5.0000   log_JP=25.1593
+ω_d_pcrb*/(2π)  = 12.0000 GHz   (would-be ω_d_fn at c2: 3.9768 GHz)   sched=[(10, 2), (10, 2), (10, 2), (10, 2)]
+
+[Deploy joint-DP at K_PHI=256]
+  Re-solve V=-7.7908e-03  30.7s
+  Exact Bayes-MMSE from Bellman: 7.7908e-03
+  MC MSE_1 = 1.1974e-02 ± 1.29e-04  (6.1s)
+
+[Deploy PCRB at K_PHI=256]
+  MC MSE_2 = 2.1009e-02 ± 1.36e-04  (3.8s)
+
+========================================================================
+HEADLINE  (PHI_MAX=0.5, 5-D BayesOpt with ω_d free, K_PHI=256)
+------------------------------------------------------------------------
+  -V_adaptive(c_1) (exact Bayes-MMSE) = 7.7908e-03
+  MC MSE_1 (joint-DP, redundant)      = 1.1974e-02 ± 1.29e-04
+  MC MSE_2 (PCRB)                     = 2.1009e-02 ± 1.36e-04
+  CRB lower bound 1/J_P               = 1.1843e-11
+  ratio MC: MSE_2 / MSE_1             = 1.755
+  ratio exact: MSE_2 / (-V_adaptive)  = 2.697
+  z-score                             = +48.34 σ
+========================================================================
+Saved.
