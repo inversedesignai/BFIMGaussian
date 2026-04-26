@@ -522,7 +522,40 @@ This is the marginal likelihood that will serve as the weighting in the Bellman 
 
 \paragraph{Child tuple.}  If we take $(\tau_j, n)$ and observe $m$ ``1'' outcomes, the new count-tuple has the same entries as $\mathbf{n}$ except $(N_j, M_j)$ becomes $(N_j + n,\, M_j + m)$.  We write this $\mathbf{n}'(\mathbf{n}, j, n, m)$.
 
-\paragraph{Bellman backup.}  Combining the pieces, the recursion is
+\paragraph{Bellman backup, derived step by step.}  Equations~\eqref{eq:qubit_terminal} and~\eqref{eq:qubit_backup} below are the general Bellman recursion of \S\ref{sec:bellman_principle} (Equations~\eqref{eq:bellman_terminal}--\eqref{eq:bellman_general}) specialized to four qubit-specific facts: the reward, the action space, the observation reduction, and the sufficient statistic.  We articulate each substitution explicitly so the derivation can be verified line by line.
+
+\textit{Step 1: choose the reward $\Phi$.}  Section~\ref{sec:blocks} introduced three families of pointwise rewards.  For the qubit problem we use the Bayesian-MSE-aligned reward, with terminal expression $\Phi_0(\bx, \bb_K) = -\mathrm{Var}(\bx \mid \bb_K)$.  This choice is motivated by the tower-law identity $\E[(\hat\bx_{\text{pm}} - \bx)^2] = \E[\mathrm{Var}(\bx \mid \bb_K)]$: maximizing the prior-averaged $\Phi_0$ is identically minimizing the deployed Bayesian MSE of the posterior-mean estimator.
+
+\textit{Step 2: collapse the leaf expectation.}  Substituting Step 1 into the general terminal Equation~\eqref{eq:bellman_terminal}, the integrand $-\mathrm{Var}(\bx \mid \bb_K)$ is a deterministic function of the belief $\bb_K$ (it does not depend on the realization of $\bx$ at the leaf).  The conditional expectation is therefore trivial:
+\begin{equation*}
+V_K(\bb) \;=\; \E_{\bx \mid \bb}\!\bigl[-\mathrm{Var}(\bx \mid \bb)\bigr] \;=\; -\mathrm{Var}(\bx \mid \bb).
+\end{equation*}
+This collapse is special to $\Phi_{\text{Var}}$; it would not happen for $\Phi_{\text{MI}}$, whose leaf integrand retains an explicit $\bx$-dependence inside the entropy expectation.
+
+\textit{Step 3: encode the belief by the count-tuple.}  Equation~\eqref{eq:belief_from_counts} established that the posterior $\bb_k(\bx)$ depends on the history only through the count-tuple $\mathbf{n} = (N_j, M_j)_{j=1}^J$.  Writing the terminal belief as $\bb(\cdot \mid \mathbf{n})$ converts $V_K(\bb)$ into a function of the count-tuple,
+\begin{equation*}
+V_K(\mathbf{n}) \;=\; -\mathrm{Var}\bigl(\bx \mid \mathbf{n}\bigr),
+\end{equation*}
+which is Equation~\eqref{eq:qubit_terminal} below.
+
+\textit{Step 4: specialize the action.}  In the general recursion the outer $\max_{\bs \in \mathcal{S}}$ ranges over an abstract action space.  In the qubit sensor every action is the pair $\bs = (\tau_j, n)$ with delay-index $j \in \{1, \ldots, 10\}$ and shot count $n \in \{1, 10\}$.  The outer max becomes a finite enumeration of $J \times L = 20$ candidates,
+\begin{equation*}
+\max_{\bs \in \mathcal{S}} \;\longrightarrow\; \max_{\substack{j \in \{1, \ldots, 10\}\\ n \in \{1, 10\}}}.
+\end{equation*}
+
+\textit{Step 5: collapse the observation expectation $\by \to m$.}  At fixed action $(\tau_j, n)$, the raw observation $\by_k$ is the bit string of $n$ Bernoulli outcomes.  The Ramsey likelihood (Equation~\eqref{eq:likelihood_counts}) depends on the bit string only through the count $m \in \{0, 1, \ldots, n\}$ of ``1'' outcomes, by the same i.i.d.-within-a-delay argument that gave the count-tuple sufficient statistic.  The expectation over the $2^n$-outcome bit string therefore reduces to an $(n+1)$-element finite sum,
+\begin{equation*}
+\E_{\by_k \mid \bb, (\tau_j, n)}[f(\by_k)] \;=\; \sum_{m=0}^{n}\, \Pr(m \mid \mathbf{n}, \tau_j, n)\; f(m),
+\end{equation*}
+with $\Pr(m \mid \mathbf{n}, \tau_j, n)$ given by Equation~\eqref{eq:marginal_outcome}.  This reduction is loss-less: no information about the bit-string-internal ordering enters the recursion because none enters the likelihood.
+
+\textit{Step 6: replace the belief operator $T$ by the count-tuple update.}  The general operator $T(\bb, \bs, \by;\, \bc)$ is Bayes' rule applied to belief $\bb$ given action $\bs$ and observation $\by$.  Applied to a count-tuple-encoded belief at action $(\tau_j, n)$ and observed count $m$, Bayes' rule produces a new belief encoded by the count-tuple
+\begin{equation*}
+\mathbf{n}'(\mathbf{n}, j, n, m) \;=\; \bigl(\ldots,\, (N_{j-1}, M_{j-1}),\, (N_j + n,\, M_j + m),\, (N_{j+1}, M_{j+1}),\, \ldots\bigr),
+\end{equation*}
+with only the $j$-th entry incremented and all other entries untouched.  The recursive lookup $V_{k+1}(T(\bb, \bs, \by;\, \bc))$ becomes the table lookup $V_{k+1}(\mathbf{n}'(\mathbf{n}, j, n, m))$ on a finite, memoized table.
+
+\textit{Step 7: assemble.}  Substituting Steps 4, 5, and 6 into the general backup Equation~\eqref{eq:bellman_general} and Step 3 into the general terminal Equation~\eqref{eq:bellman_terminal} yields the qubit-specific recursion
 \begin{align}
 V_K(\mathbf{n}) &\;=\; -\mathrm{Var}\bigl(\bx \mid \mathbf{n}\bigr), \label{eq:qubit_terminal}\\
 V_k(\mathbf{n}) &\;=\; \max_{\substack{j \in \{1, \ldots, 10\}\\ n \in \{1, 10\}}}\;
@@ -530,7 +563,9 @@ V_k(\mathbf{n}) &\;=\; \max_{\substack{j \in \{1, \ldots, 10\}\\ n \in \{1, 10\}
 \Pr(m \mid \mathbf{n}, \tau_j, n)\; V_{k+1}\bigl(\mathbf{n}'(\mathbf{n}, j, n, m)\bigr),
 \label{eq:qubit_backup}
 \end{align}
-for $k = K - 1, \ldots, 0$.  The optimal adaptive policy is $\pi^\star_k(\mathbf{n}) = (\tau_{j^\star}, n^\star)$, the argmax of Equation~\eqref{eq:qubit_backup}.  The joint-DP value is $V^\star = V_0(\mathbf{0})$ evaluated at the all-zero tuple.
+for $k = K - 1, \ldots, 0$.  The optimal adaptive policy is $\pi^\star_k(\mathbf{n}) = (\tau_{j^\star}, n^\star)$, the argmax of Equation~\eqref{eq:qubit_backup}.  The joint-DP value at the prior is $V^\star = V_0(\mathbf{0})$, evaluated at the all-zero count-tuple representing the uniform prior.
+
+\paragraph{What each step relied on.}  Step 1 relied on the modeling choice $\Phi = \Phi_{\text{Var}}$.  Step 2 relied on the leaf integrand being a function of $\bb_K$ alone, special to $\Phi_{\text{Var}}$ (no analogous collapse exists for $\Phi_{\text{MI}}$ or $\Phi_{\log J}$).  Steps 3 and 6 relied on the Fisher--Neyman count-tuple reduction of Equation~\eqref{eq:likelihood_counts}.  Steps 4 and 5 relied on the discrete action menu and the binomial-counted observation specific to the Ramsey protocol.  Each substitution is exact; no approximation has entered.  The resulting recursion is therefore the exact Bellman recursion for the qubit sensor, expressed in terms that admit memoized tabulation on count-tuple keys.
 
 \subsection{A miniature trace}
 
