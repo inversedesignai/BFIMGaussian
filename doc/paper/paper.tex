@@ -507,7 +507,7 @@ Case Study A is discrete-state and has no natural MSE metric; here we take the s
 
 \subsection{Problem setup}
 
-We consider the frequency-tunable transmon flux sensor of Danilin, Nugent \& Weides~\cite{danilin2024scqubit}.  The unknown is the external magnetic flux $\bx = \Phi_\mathrm{ext}$ threading a SQUID loop, with prior $\bx \sim \mathrm{Uniform}[0, \phi_{\max}\,\Phi_0]$ at $\phi_{\max} = 0.1$ (the rationale for this operating point is discussed in §\ref{sec:scqubit_priorwidth}).  Ramsey interferometry at a fixed operating flux $\Phi^\star$ returns a Bernoulli outcome with likelihood
+We consider the frequency-tunable transmon flux sensor of Danilin, Nugent \& Weides~\cite{danilin2024scqubit}.  The unknown is the external magnetic flux $\bx = \Phi_\mathrm{ext}$ threading a SQUID loop, with prior $\Phi_\mathrm{ext} \sim \mathrm{Uniform}[0, \phi_{\max}\,\Phi_0]$ at $\phi_{\max} = 0.1$, where $\Phi_0 = h/(2e)$ is the superconducting flux quantum (the rationale for this operating point is discussed in §\ref{sec:scqubit_priorwidth}); equivalently, in dimensionless flux $\phi \equiv \Phi_\mathrm{ext}/\Phi_0$, the prior is $\phi \sim \mathrm{Uniform}[0, \phi_{\max}]$.  Ramsey interferometry returns a Bernoulli outcome with likelihood
 \begin{equation}
 p(\by = 1 \mid \bx, \tau; \bc) = \tfrac{1}{2} + \tfrac{1}{2}\,\mathrm{th}(\bx, \bc)\,e^{-A(\bx, \bc)\tau - B(\bx, \bc)^2 \tau^2}\,\cos[\Delta\omega(\bx, \bc)\tau],
 \label{eq:ramsey_likelihood}
