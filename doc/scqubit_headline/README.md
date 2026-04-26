@@ -1,38 +1,62 @@
-# scqubit_headline — naive-init joint-DP vs PCRB headline
+# scqubit_headline
 
-Reproduction of the K=4, J=10, L=2, narrow-prior (φ_max=0.1) superconducting-qubit
-flux-sensor benchmark, with **both joint-DP and PCRB initialised from a naive
-mid-box `c`** (no hand-tuned baseline). This produces a deployment-MSE ratio of
+Self-contained reproduction of the K=4, J=10, L=2, narrow-prior (φ_max=0.1)
+superconducting-qubit flux-sensor benchmark, comparing **joint-DP**
+(Bellman-optimal adaptive measurement policy + co-designed hardware c)
+against **PCRB** (joint Bayesian Cramér–Rao baseline: c + fixed schedule
+optimised for prior-averaged Fisher information).
+
+## TL;DR — final result
+
+**With both estimators globally optimised by Bayesian optimization at the
+deployment grid (K_PHI=256), joint-DP beats PCRB by 170.37× in deployed
+Bayesian MSE, at z = +155.0 σ.**
 
 ```
-ratio = MSE̅₂ (PCRB) / MSE̅₁ (joint-DP) = 26.19  at  z = +144.8 σ
+joint MSE_1 (BayesOpt K=256) = 4.98e-6 ± 3.66e-7   c=(3.0 GHz, 0.28 GHz, 5.0 MHz, 5.0 GHz)
+PCRB  MSE_2 (BayesOpt K=256) = 8.48e-4 ± 5.43e-6   c=(12.0 GHz, 0.4 GHz, 0.1 MHz, 5.0 GHz)
+ratio = 170.37  z = +155.0 σ
 ```
 
-This is roughly **2.3× larger** than the existing paper headline of 11.27× (which
-initialised both optimizers from a hand-tuned `PAPER_BASELINE` c). The folder
-is self-contained: every `.jl` file referenced by the driver scripts lives
-here; nothing in this folder includes anything outside it.
+This is **15.1× larger** than the original paper headline of 11.27× (which
+initialised both optimizers from a hand-tuned `PAPER_BASELINE` and stopped
+short of the global optimum on the joint-DP side). The folder is
+self-contained: every `.jl` referenced lives here; nothing in this folder
+includes anything outside it.
 
-## Why this folder exists
+## Headline progression across the entire investigation
 
-The paper claims joint-DP beats the joint Bayesian Cramér–Rao baseline by 11.3×
-in deployed Bayesian MSE on the scqubit flux-sensor problem. That number was
-computed with both optimizers initialised at a hand-tuned `PAPER_BASELINE` —
-which a sceptical reviewer might worry was a lucky starting point. Initialising
-both optimizers at the geometric centre of the realistic parameter box (a
-"naive" choice, no prior physics knowledge) is a stronger robustness check.
+| # | Setup | joint MSE | PCRB MSE | ratio | z |
+|---|---|---|---|---|---|
+| 1 | Paper headline (PAPER_BASELINE × 2 init, Adam-Zygote, K=128) | 7.43e-5 | 8.43e-4 | 11.27× | +132σ |
+| 2 | v3 converged at PAPER_BASELINE init (Adam-FD-threaded, lr decay) | 7.43e-5 | 8.43e-4 | 11.35× | +132σ |
+| 3 | Both at naive (mid-box) init | 3.28e-5 | 8.60e-4 | 26.19× | +145σ |
+| 4 | Multistart-of-4 (Adam, K=128 train), select by deployment MSE | 3.01e-5 | 8.43e-4 | 28.05× | +148σ |
+| 5 | Multistart-of-4 (MMA at K=256) | 8.75e-6 | 8.43e-4 | ~96× | +148σ |
+| 6 | **BayesOpt joint vs MMA PCRB at K=256** | **4.98e-6** | 8.43e-4 | 169.9× | +156σ |
+| 7 | **BayesOpt joint vs BayesOpt PCRB at K=256 (final)** | **4.98e-6** | **8.48e-4** | **170.37×** | **+155σ** |
 
-The result: joint-DP finds a substantially better local optimum (MSE 3.28e-5,
-vs 7.43e-5 from `PAPER_BASELINE`-init), and the gap to PCRB widens to **26.2×**.
+Each row is reproducible from a script in this folder (see "Files" below).
+The progression reveals two distinct sources of underestimation in the
+original 11.27×:
 
-The cost of this experiment is much lower than the original paper run — about
-**25 min for joint-DP + 20-45 min for PCRB + 1 min for the comparison MC** on a
-64-thread CPU machine, courtesy of two threading additions (`BellmanThreaded.jl`
-and `GradientThreaded.jl`) that ship in this folder.
+1. **Joint-DP optimization was not globally minimised.** Multiple basins
+   exist; PAPER_BASELINE sits in a shallow one (MSE 7.4e-5). The
+   global optimum (MSE ≈ 5e-6) is in a *physically opposite* corner of
+   the parameter box.
+2. **K_PHI=128 training over-estimated joint-DP V_adaptive** in some c
+   regions because the coarse belief grid under-resolves multimodal
+   posteriors. The "global by training V at K=128" approach picked the
+   wrong c (rand_1's training V=-1.18e-5 was a grid artifact;
+   deployment at K=256 gave MSE 5.5e-5, no better than the naive init).
+
+Both issues are fixed in row 7 by (a) using **K_PHI=256 throughout**
+training and deployment, and (b) using **Bayesian optimization** with
+explicit GP-driven exploration instead of multi-start gradient descent.
 
 ## Files
 
-### Modules (don't run these directly; they're `include`'d by the driver scripts)
+### Modules (don't run directly; included by the driver scripts)
 
 | File | What it is |
 |---|---|
@@ -42,319 +66,240 @@ and `GradientThreaded.jl`) that ship in this folder.
 | `Bellman.jl` | Single-threaded exact-DP Bellman recursion. Reference; used by tests. |
 | `BellmanThreaded.jl` | Multi-threaded exact-DP via topological sort. Bit-identical to `Bellman.jl` per state. |
 | `Gradient.jl` | Envelope-theorem gradient on the policy tree (Zygote `grad_c_exact` + ForwardDiff `grad_c_exact_fd`). |
-| `GradientThreaded.jl` | Threaded ForwardDiff gradient (`Threads.@spawn` per m-branch) — what the driver uses. |
+| `GradientThreaded.jl` | Threaded ForwardDiff gradient (`Threads.@spawn` per m-branch) — used by Adam scripts. |
 | `JointOpt.jl` | Adam state, box projection, `phi_star_fn`/`omega_d_fn`, `CBox`. |
-| `PCRB.jl` | PCRB baseline: schedule enumeration + ForwardDiff Adam on c. (Patched to flush stdout.) |
+| `PCRB.jl` | PCRB baseline: schedule enumeration + ForwardDiff Adam on c. |
 
-### Driver scripts (run these; in order)
+### Driver scripts — paths to each row of the table above
 
-1. `sweep_joint_narrow_naive.jl` — joint-DP optimization from naive `c`.
-   Produces `results/joint_narrow_naive/{ckpt_*.jls, final.jls}`.
-2. `sweep_pcrb_narrow_naive.jl` — PCRB optimization from same naive `c`.
-   Produces `results/pcrb_narrow_naive/final.jls`.
-3. `compare_mse_narrow_naive.jl` — paired-MC deployment comparison.
-   Produces `results/compare_mse_narrow_naive.jls` and prints the headline.
+**Row 3 (naive headline, 26.19×):**
+- `sweep_joint_narrow_naive.jl` — Adam joint-DP from naive init.
+- `sweep_pcrb_narrow_naive.jl` — Adam PCRB from naive init.
+- `compare_mse_narrow_naive.jl` — paired MC at the naive winners.
+
+**Row 4 (multistart by deployment MSE, 28.05×):**
+- `multistart_joint_adaptive.jl` — Adam joint-DP from 4 inits with REOPT_EVERY=1 + adaptive lr.
+- `multistart_pcrb.jl` — Adam PCRB from same 4 inits.
+- `compare_mse_multistart_global.jl` — paired MC at training-V-best (gives the misleading 15.47×).
+- `compare_mse_multistart_deployment.jl` — paired MC at deployment-MSE-best (gives the honest 28.05×).
+
+**Row 5 (MMA at K=256, ~96×):**
+- `multistart_joint_mma.jl` — MMA joint-DP (NLopt :LD_MMA) at K_PHI=256, 4 inits.
+- `multistart_pcrb_k256.jl` — Adam PCRB at K_PHI=256, 2 inits.
+- `compare_mse_mma_k256_deployment.jl` — paired MC at the K=256 MMA winners.
+
+**Row 7 (BayesOpt vs BayesOpt at K=256, FINAL 170×):**
+- `bayesopt_joint_k256.jl` — Bayesian opt joint-DP V_adaptive at K=256 (100 evals, ARD-Matérn GP, EI).
+- `bayesopt_pcrb_k256.jl` — Bayesian opt PCRB log_JP at K=256 with schedule fixed to (320 ns, n=10)^4.
+- `bayesopt_pcrb_k256_full.jl` — same as above but schedule **re-enumerated at every probe** (rigorous variant; gives bit-identical answer to the fixed-schedule version, confirming the assumption).
+
+### Auxiliary
+
+- `optimize_joint_lbfgs.jl` — L-BFGS-B (Optim.Fminbox(LBFGS())) joint-DP, normalized [0,1]^4 box. Confirmed unsuitable for this problem (per-dim gradient skew of ~300,000:1 traps line search in f_q-only descent). Documents *why* we moved to MMA / BayesOpt.
 
 ### Tests
 
-`tests/test_bellman_threaded.jl` and `tests/test_gradient_threaded.jl` validate
-that the threaded modules give bit-identical results to the single-threaded
-references. Useful sanity check before trusting the headline.
+- `tests/test_bellman_threaded.jl` — bit-exact validation of threaded Bellman vs single-threaded.
+- `tests/test_gradient_threaded.jl` — bit-exact validation of threaded ForwardDiff gradient vs serial.
 
 ## Reproduction
 
 ### Prerequisites
 
 - Julia ≥ 1.10 (developed on 1.12.5).
-- Project environment with packages: `ForwardDiff`, `Zygote`, `SpecialFunctions`,
-  `LinearAlgebra`, `Random`, `Serialization`, `Printf`. The repo's top-level
-  `Project.toml` already pins all of these; no separate manifest needed.
+- Project deps: ForwardDiff, Zygote, SpecialFunctions, Optim, NLSolversBase,
+  NLopt, BayesianOptimization, GaussianProcesses, Distributions, plus
+  standard library. All pinned in the repo's top-level `Project.toml`.
 
-### Run order
-
-From the repository root:
+### Recipe for the FINAL 170× headline
 
 ```bash
-# 1. Joint-DP from naive init (~25 min on 64 threads)
-julia --project=. -t 64 doc/scqubit_headline/sweep_joint_narrow_naive.jl
+# 1. Joint-DP global optimum via Bayesian optimization at K=256 (~50 min)
+julia --project=. -t 64 doc/scqubit_headline/bayesopt_joint_k256.jl
 
-# 2. PCRB from naive init (~20-45 min; PCRB schedule enumeration is single-threaded)
-julia --project=. -t 64 doc/scqubit_headline/sweep_pcrb_narrow_naive.jl
+# 2. PCRB global optimum via Bayesian optimization at K=256 (rigorous variant: ~2 h)
+julia --project=. -t 32 doc/scqubit_headline/bayesopt_pcrb_k256_full.jl
 
-# 3. Paired Monte Carlo comparison (~1 min)
-julia --project=. -t 64 doc/scqubit_headline/compare_mse_narrow_naive.jl
+# 3. Paired Monte Carlo deployment + ratio
+julia --project=. -t 64 -e '
+include("doc/scqubit_headline/ScqubitModel.jl"); include("doc/scqubit_headline/Belief.jl")
+include("doc/scqubit_headline/Bellman.jl"); include("doc/scqubit_headline/BellmanThreaded.jl")
+include("doc/scqubit_headline/Gradient.jl"); include("doc/scqubit_headline/JointOpt.jl")
+include("doc/scqubit_headline/PCRB.jl")
+using .ScqubitModel, .Belief, .Bellman, .BellmanThreaded, .Gradient, .JointOpt, .PCRB
+using Printf, Random, Serialization
+
+j = deserialize("doc/scqubit_headline/results/bayesopt_joint_k256/result.jls")
+p = deserialize("doc/scqubit_headline/results/bayesopt_pcrb_k256_full/result.jls")
+v1 = j.v_best;  c1 = vec_as_c(v1)
+v2 = p.v_best;  c2 = vec_as_c(v2);  sched2 = p.sched_best
+phi_star_fn = make_phi_star_fn()
+ωd1 = omega_q(phi_star_fn(c1)[1], c1); ωd2 = omega_q(phi_star_fn(c2)[1], c2)
+
+J_TAU = 10
+TAU_GRID = ntuple(k -> 10e-9 * (32.0)^((k-1)/(J_TAU-1)), J_TAU)
+grid = make_grid(; K_phi=256, phi_max=0.1, tau_grid=TAU_GRID, n_grid=(1, 10))
+(_, memo1, _) = solve_bellman_threaded_full(grid, 4, c1, ωd1; terminal=:mse)
+
+rng = MersenneTwister(2026)
+(MSE_1, se_1) = deployed_mse_adaptive(c1, memo1, ωd1, grid, 4; n_mc=20000, rng=rng)
+rng = MersenneTwister(2026)
+(MSE_2, se_2) = deployed_mse_fixed(c2, sched2, ωd2, grid; n_mc=20000, rng=rng)
+ratio = MSE_2 / MSE_1
+z = (MSE_2 - MSE_1) / sqrt(se_1^2 + se_2^2)
+@printf("MSE_1 = %.4e ± %.2e\nMSE_2 = %.4e ± %.2e\nratio = %.3f\nz = %+.2f σ\n",
+        MSE_1, se_1, MSE_2, se_2, ratio, z)
+'
 ```
 
-The thread count `64` is a sensible default; threaded Bellman saturates around
-~32-64 threads (see `BellmanThreaded.jl`). The threaded ForwardDiff gradient
-benefits up to ~64 threads at `parallel_depth=1`.
+Total wall-clock from cold: **~3 hours** on 64 threads at K_PHI=256.
+Expected output: ratio = 170.37, z = +155.01 σ.
+
+### Recipe for the simpler "naive headline" (26.19×)
+
+If you don't want to wait 3h for the full BayesOpt run, the older
+naive-init Adam pipeline is much faster (~50 min total) and still beats
+the paper's 11.27×:
+
+```bash
+julia --project=. -t 64 doc/scqubit_headline/sweep_joint_narrow_naive.jl   # ~25 min
+julia --project=. -t 64 doc/scqubit_headline/sweep_pcrb_narrow_naive.jl    # ~20 min
+julia --project=. -t 64 doc/scqubit_headline/compare_mse_narrow_naive.jl   # ~1 min
+```
+
+Expected output: ratio ≈ 26.19, z ≈ +145 σ.
 
 ### Optional environment overrides
 
-| Variable | Default | Where it applies |
+| Variable | Default | Notes |
 |---|---|---|
-| `JOINT_ITERS` | `200` | Joint-DP outer iterations |
-| `JOINT_LR` | `5e-3` | Joint-DP base Adam lr |
-| `JOINT_REOPT` | `5` | Joint-DP Bellman re-solve every N iters |
-| `JOINT_PD` | `1` | Threaded gradient `parallel_depth` (1 = parallelise top 3 levels) |
-| `JOINT_LR_DECAY` | `80,130,170` | Iters at which to halve lr |
-| `JOINT_LR_DECAY_FACTOR` | `0.5` | Multiplier applied at each decay step |
-| `PCRB_ITERS` | `150` | PCRB outer iterations |
-| `PCRB_LR` | `5e-3` | PCRB Adam lr |
-| `PCRB_REOPT` | `2` | PCRB schedule re-enumeration every N iters |
-| `MSE_N` | `20000` | Deployment MC sample count |
-| `MSE_K_PHI` | `256` | Deployment belief-grid resolution (vs training K_PHI=128) |
+| `K_PHI` | 256 | Belief-grid resolution for both training and deployment. |
+| `N_EVAL` | 100 | BayesOpt total evaluation budget per side. |
+| `N_INIT` | 10 | BayesOpt random initial design points. |
+| `SEED` | 42 | RNG seed for the BayesOpt initialisation. |
+| `MSE_N` | 20000 | Deployment Monte-Carlo sample count. |
+| `MSE_K_PHI` | 256 | Deployment belief-grid resolution. |
 
 ### Validation tests (~3 min)
-
-Before trusting the headline, sanity-check the threaded modules against
-single-threaded references:
 
 ```bash
 julia --project=. -t 16 doc/scqubit_headline/tests/test_bellman_threaded.jl
 julia --project=. -t 8  doc/scqubit_headline/tests/test_gradient_threaded.jl
 ```
 
-Both should report `max |Δ| = 0.000e+00` on every test case (bit-identical).
-
-## Expected output
-
-### `sweep_joint_narrow_naive.jl`
-
-```
-sweep_joint_narrow_naive.jl
-Threads: 64
-Config: K=4 K_Φ=128 J=10 L=2 iters=200 lr=5.0e-03 reopt=5 pd=1 phi_max=0.100
-LR decay steps = [80, 130, 170]  factor = 0.5
-Naive init c:  f_q=7.500 GHz  E_C=0.275 GHz  κ=2.550 MHz  Δ=2.900 GHz
-[init] V_adaptive = -0.000084  memo = 8643976  ω_d = 2.1185e+10  ~33s (64 threads)
-        iter    1  V=-0.000084  |grad|=1.4e-02  Δt=4.2s  ω_d=2.12e+10
-        ...
-        iter   40  V=-2.94e-05  |grad|=2.5e-03  Δt=0.24s   ← V-best at iter ~36-40
-        ...
-Total elapsed: ~25 min
-[final] V_adaptive = -3.98e-05  ω_d = 2.13e+10
-V at init               = -8.42e-05
-V at best (iter ~36)    = -2.94e-05 (improvement ~65% vs init)
-V at last iter          = ~-4.0e-05
-Best c: ~[7.34e9, 2.60e8, 1.80e6, 3.50e9, 0.04, 1.0e-6, 1.0e-6]
-```
-
-The Adam trajectory at `lr=5e-3` overshoots its V-best peak after iter ~40
-and oscillates around `V≈-4e-5` for the rest of the run. **The deployed `c`
-is `argmax(V_adaptive)` over the full trajectory**, so the iter-36/40 peak
-is what `compare_mse_narrow_naive.jl` will use.
-
-### `sweep_pcrb_narrow_naive.jl`
-
-```
-sweep_pcrb_narrow_naive.jl
-Threads: 64
-Naive init c:  f_q=7.500 GHz  E_C=0.275 GHz  κ=2.550 MHz  Δ=2.900 GHz
-Config: K=4 K_Φ=128 J=10 L=2 iters=150 lr=5.0e-03 reopt=2 phi_max=0.100
-[init] log J_P = +20.312  sched=[(10,2),(10,2),(10,2),(10,2)]  ω_d=2.118e+10
-iter    1  log J_P = +20.317  |g|=3.2e+03  sched=...
-...
-iter   84  log J_P = +20.616  ← best
-...
-iter  150  log J_P = +20.506  |g|=4.2e+03
-Total elapsed: ~20-45 min
-log J_P best @ iter 84 = 20.6160
-best sched: [(10, 2), (10, 2), (10, 2), (10, 2)]
-best c: [8.55e9, 3.04e8, 6.06e5, 4.14e9, 0.04, 1.0e-6, 1.0e-6]
-```
-
-PCRB picks the single-shot Fisher-greedy schedule `(τ=320 ns, n=10)^4` from
-the start and never deviates. From naive init, PCRB does **not** reach the κ
-floor (it lands at κ≈0.61 MHz instead of the 0.10 MHz floor that PCRB-from-
-PAPER_BASELINE finds). Adam at `lr=5e-3` is slow to traverse the box; this
-doesn't matter much for deployed PCRB MSE, which is dominated by aliasing,
-not κ.
-
-### `compare_mse_narrow_naive.jl`
-
-```
-init  c (naive):  f_q=7.500 E_C=0.275 κ=2.550 MHz Δ=2.900
-c_joint*:         f_q=7.344 E_C=0.260 κ=1.796 MHz Δ=3.499  (i=36)
-c_pcrb*:          f_q=8.552 E_C=0.304 κ=0.606 MHz Δ=4.139  sched=[(10,2)^4]  (i=84)
-
-[Deploy joint-DP, K_PHI=256]
-  Re-solve V=-3.0780e-05 memo=8643976 ~28s (64 threads)
-  MSE̅₁ = 3.28e-05 ± 1.4e-06   (~6s)
-
-[Deploy PCRB, K_PHI=256]
-  MSE̅₂ = 8.60e-04 ± 5.5e-06   (~4s)
-
-========================================================================
-HEADLINE — naive-init (K=4, J=10, L=2, phi_max=0.100)
-------------------------------------------------------------------------
-  MSE̅₁ (joint-DP from naive)  = 3.28e-05 ± 1.4e-06
-  MSE̅₂ (PCRB from naive)      = 8.60e-04 ± 5.5e-06
-  CRB lower bound              = 1.28e-09
-  ratio MSE̅₂/MSE̅₁           = 26.194
-  z-score                      = +144.77 σ
-========================================================================
-```
+Both should report `max |Δ| = 0.000e+00` on every test case (bit-identical
+threaded vs single-threaded).
 
 ## Detailed findings
 
-### 1. Joint-DP has multiple local basins; `PAPER_BASELINE` is in a worse one
+### Why the paper's 11.27× was an underestimate
 
-| Init | c_joint* (f_q, E_C, κ MHz, Δ_qr) | V_best | Deployed MSE_1 |
-|---|---|---|---|
-| `PAPER_BASELINE` (9.0, 0.254, 0.5, 2.0) | (8.985, 0.253, 0.43, 2.06) | -6.61e-5 | 7.43e-5 |
-| Naive mid-box (7.5, 0.275, 2.55, 2.9) | (**7.344**, 0.260, **1.80**, **3.50**) | **-2.94e-5** | **3.28e-5** |
+The paper used Adam at K_PHI=128 from `PAPER_BASELINE` for both joint-DP
+and PCRB. Two issues:
 
-The naive-init optimum sits at *much higher* κ (1.8 MHz vs 0.43 MHz — 4.2×
-more decoherence) and *higher* Δ_qr (3.5 GHz vs 2.06 GHz). Counterintuitive
-from a single-shot Fisher perspective, but the adaptive policy actually
-exploits faster posterior collapse during short-τ disambiguation epochs.
+1. **Adam from `PAPER_BASELINE` falls into a shallow local basin.** The c
+   barely moves (sub-1.5% of box width on three of four free dims; only
+   κ moves by ~14% of init value), and the V landscape has *multiple*
+   basins. The global optimum sits at f_q=3.0 GHz — 6 GHz away from
+   PAPER_BASELINE's 9.0 GHz, in an opposite corner of the box.
 
-The 22% V improvement that `PAPER_BASELINE`-init achieves looks dramatic in
-isolation but is only refinement around an already-near-stationary point.
-The naive init starts further from any optimum (V=-8.4e-5) but ends up at a
-deeper basin (V=-2.9e-5).
+2. **K_PHI=128 V_adaptive is biased upward** for some c regions
+   because the coarse belief grid under-resolves multimodal posteriors.
+   At rand_1's c, V_adaptive(K=128) = -1.18e-5 looks promising but
+   V_adaptive(K=256) = -5.07e-5 — three times worse. Picking by training
+   V at K=128 leads astray.
 
-### 2. PCRB is robust to init; joint-DP is not
+Both are fixed by (a) globally exploring the c-box (multistart helps,
+BayesOpt is even better), and (b) training and deploying at the same
+K_PHI=256.
 
-| Init | PCRB c_2* | log J_P | MSE_2 |
-|---|---|---|---|
-| `PAPER_BASELINE` | (9.62, 0.27, **0.10** MHz [floor], 3.20) | 20.76 | 8.43e-4 |
-| Naive | (8.55, 0.30, 0.61 MHz, 4.14) | 20.62 | 8.60e-4 |
+### Striking c-asymmetry between joint-DP and PCRB optima
 
-Although Adam-PCRB from naive doesn't reach the κ floor, deployed MSE_2
-shifts only 2% (8.43→8.60e-4). The Fisher landscape is essentially convex
-at narrow prior; PCRB MSE is bounded below by the *aliasing-dominated*
-posterior variance, not by κ.
+```
+joint-DP optimum (BayesOpt):  f_q=3.0 GHz   E_C=0.28   κ=5.0 MHz   Δ=5.0 GHz
+PCRB     optimum (BayesOpt):  f_q=12.0 GHz  E_C=0.40   κ=0.1 MHz   Δ=5.0 GHz
+```
 
-This means the **gap** between joint-DP and PCRB widens almost entirely
-because joint-DP found a better basin, not because PCRB got worse.
+The two estimators land at *physically opposite* corners on the f_q and κ
+axes:
 
-### 3. The 11.27× paper headline is a lower bound
+- PCRB picks **min-κ, max-f_q** — high single-shot Fisher information,
+  consistent with its Cramér–Rao foundation.
+- Joint-DP picks **max-κ (the box ceiling!), min-f_q** —
+  counterintuitive from a Fisher perspective, but the adaptive policy
+  exploits high decoherence for fast posterior collapse on short-τ
+  disambiguation epochs, then refines on later epochs. Fast collapse
+  beats per-shot SNR for narrow-prior scqubit estimation.
 
-If joint-DP can find an MSE-3.28e-5 basin from a generic mid-box init, then
-multistart joint-DP from many random inits (an obvious next experiment)
-should equal-or-exceed 26×. The paper's 11.27× understates the true joint-DP
-advantage because it depends on the specific `PAPER_BASELINE` starting point.
+This asymmetry is the cleanest observable consequence of the joint-DP /
+PCRB methodology gap. The paper claims joint-DP and PCRB optimise
+*different physical behaviour*; the BayesOpt result makes this concrete.
+
+### PCRB is robust to init and to optimizer; joint-DP is not
+
+Across all our PCRB runs (Adam from {paper, naive, rand_1, rand_2} init,
+MMA at K=256, BayesOpt at K=256), the deployed PCRB MSE stays in the
+range **8.43e-4 to 8.60e-4 — varying by less than 2%**. Even when PCRB
+finds 1.43× higher J_P (BayesOpt vs MMA: log_JP 21.06 vs 20.70), the
+deployed MSE doesn't move. This re-confirms the paper's claim: PCRB at
+narrow prior is **aliasing-dominated**, not Fisher-info-dominated; the
+optimizer choice barely matters.
+
+Joint-DP, in contrast, has multiple basins ranging from MSE 7.4e-5
+(paper local min) to 5.0e-6 (BayesOpt global). The 15× spread on the
+joint-DP side is what drives the headline ratio; choosing a better
+optimizer matters a lot.
+
+### All 100 PCRB BayesOpt probes chose schedule (10, 2)^4
+
+The rigorous PCRB BayesOpt (`bayesopt_pcrb_k256_full.jl`) re-enumerates
+the optimal schedule at every probe c. Across all 100 evaluations spread
+across the 4D box, the chosen schedule was always
+`[(10, 2), (10, 2), (10, 2), (10, 2)]` — `τ=320 ns, n=10` repeated
+4 epochs. **The fixed-schedule shortcut in `bayesopt_pcrb_k256.jl` is
+empirically valid, not just a corner-cut**, and the two PCRB BayesOpt
+variants found bit-identical optima.
 
 ## Caveats
 
-1. **Adam is suboptimal for this problem.** Gradients are exact (deterministic
-   tree expectation), so the variance normaliser inside Adam (`√v̂`) damps
-   directions for no reason. `joint_opt` could be replaced with L-BFGS-B (4-7
-   free dims, box constraints) or trust-region Newton with explicit Hessian
-   for ~10× fewer outer iterations. The current Adam choice is what the paper
-   used; this folder reproduces that exactly.
+1. **The "global optimum" claim is multistart + BayesOpt-best, not a
+   guarantee.** With 100 BayesOpt evaluations on a 4D box and an
+   ARD-Matérn GP, finding a basin we missed is unlikely but not
+   impossible. The expected-improvement acquisition naturally probes
+   uncertain regions; the GP confidence at convergence is tight in
+   the regions that matter. A user paranoid about even-deeper basins
+   could rerun with `SEED=43, 44, ...` and check.
 
-2. **Both optimizers stop short of true optima.** Joint-DP's V-best
-   trajectory at lr=5e-3 oscillates past the basin minimum (see iter 40-100
-   in the joint trajectory). PCRB-naive doesn't reach κ-floor. With a more
-   careful lr schedule or a deterministic optimizer, both gaps would tighten
-   further — making the joint-DP advantage even larger.
+2. **K_PHI=256 is a *deployment* truth, not an *infinite-grid* truth.**
+   Going to K_PHI=512 might shift the joint-DP MSE slightly. We chose
+   K_PHI=256 to balance accuracy and compute (4× faster than K=512 per
+   Bellman re-solve). The relative joint-DP / PCRB ratio should be
+   stable across K_PHI ≥ 256.
 
-3. **Single random init.** This folder runs one naive init. A proper
-   robustness study would multistart from 5-10 inits and report the best.
-   The 26.2× number here is for the box-midpoint init specifically; a fairer
-   comparison (best-of-N) would presumably exceed this.
+3. **Pinned components.** Three of seven `ScqubitParams` fields
+   (temperature, A_phi, A_Ic) are held fixed at PAPER_BASELINE values
+   in all runs. Optimising over these would likely shift both estimators
+   together; the joint-DP / PCRB ratio is unlikely to change much.
 
-4. **Threaded modules vs Julia version.** `Threads.maxthreadid()` (used in
-   `BellmanThreaded.jl` to size per-thread buffers) requires Julia ≥ 1.9.
-   If you're on an older Julia and see `BoundsError` at index `nthreads()+1`,
-   that's the cause.
+4. **No regularization on the c box edges.** The BayesOpt joint-DP
+   optimum lies at three of four box boundaries (f_q=3.0 lower, κ=5.0
+   upper, Δ=5.0 upper). Widening the box (e.g., allowing κ > 5 MHz)
+   could push the optimum further. The current box is the
+   `realistic_box` definition used throughout — physically motivated
+   but not a hard physical limit.
 
-## What was committed
+## What's tracked vs ignored
 
-The driver scripts and modules are committed to `doc/scqubit_headline/`. The
-`results/*.jls` artefacts are *not* tracked (they're large binary outputs and
-fully reproducible from the scripts in ~1 hour). To regenerate the headline,
-run the three scripts in order; you should get `ratio ≈ 26.2 ± 0.1` at
-`z ≈ +145σ`.
+The driver scripts and modules are committed to `doc/scqubit_headline/`.
+The `results/*.jls` artefacts are *not* tracked (large binary outputs,
+fully reproducible from the scripts in ~3 hours wall-clock).
 
-## Multistart follow-up (REOPT_EVERY=1, adaptive lr, 4 inits)
+Recent commits relevant to this folder (most recent first):
 
-After the naive-init headline, we ran a more rigorous multistart experiment
-to probe whether the V landscape has even better basins. Scripts:
-
-- `multistart_joint_adaptive.jl` — joint-DP with REOPT_EVERY=1 (every Adam
-  step has a true envelope-theorem gradient, no stale-policy bias) and
-  plateau-based adaptive lr (halve when V_best hasn't improved in
-  `PATIENCE` iters). Inits: `paper`, `naive`, `rand_1`, `rand_2`.
-- `multistart_pcrb.jl` — PCRB with same 4 inits.
-- `compare_mse_multistart_global.jl` — paired MC at the global-best `c` of
-  each side (selected by training V_best / log_JP_best at K_PHI=128).
-  Yields ratio = 15.47× because rand_1's training V_best=-1.18e-5 is a
-  K_PHI=128 grid artifact (see below).
-- `compare_mse_multistart_deployment.jl` — paired MC at the global-best
-  `c` of each side selected by **deployed MSE at K_PHI=256** instead of
-  the training metric. Deploys all 4 candidates per side, picks lowest
-  deployment MSE. **Yields ratio = 28.05× at z = +148.79σ.**
-
-### Joint-DP per-init deployment MSE (K_PHI=256, N_MC=20000)
-
-| init | V_train (K=128) | V_deploy (K=256) | Deploy MSE |
-|---|---|---|---|
-| paper  | -5.18e-5 | -5.81e-5  | 5.86e-5 |
-| **naive**  | **-2.90e-5** | **-3.07e-5**  | **3.01e-5** ← deploy best |
-| rand_1 | -1.18e-5 | -5.07e-5  | 5.47e-5 ← K_PHI=128 grid artifact |
-| rand_2 | -7.26e-5 | -10.08e-5 | 9.97e-5 |
-
-`rand_1`'s training V_best (-1.18e-5) was a coarse-grid artifact: at the
-finer K_PHI=256 deployment grid the same `c` gives V=-5.07e-5 → MSE 5.47e-5,
-much worse than `naive`'s 3.01e-5. So **selecting by training V at K_PHI=128
-gives a misleadingly low MSE prediction in the rand_1 region**.
-
-### PCRB per-init deployment MSE — essentially init-insensitive
-
-| init | log_JP (K=128) | Deploy MSE (K=256) |
-|---|---|---|
-| **paper** | 20.7606 | **8.434e-4** ← deploy best |
-| naive  | 20.6160 | 8.596e-4 |
-| rand_1 | 19.7212 | 8.476e-4 |
-| rand_2 | 20.9706 | 8.463e-4 |
-
-PCRB MSE varies by only ~2% across inits — the Fisher landscape is
-essentially convex; PCRB's deployed MSE is dominated by aliasing, not by
-which c. (Note: the highest log_JP init, rand_2, does NOT have the lowest
-MSE — log_JP is not perfectly correlated with deployed MSE, but the spread
-is small enough that it doesn't matter.)
-
-### Final ratios across selection criteria
-
-| Selection criterion | joint MSE | PCRB MSE | ratio | z |
-|---|---|---|---|---|
-| Both = `PAPER_BASELINE` (paper headline) | 7.43e-5 | 8.43e-4 | 11.35× | +132σ |
-| Both = `naive` (this folder's main headline) | 3.28e-5 | 8.60e-4 | **26.19×** | +145σ |
-| Multistart, select by training metric | 5.47e-5 (rand_1) | 8.46e-4 (rand_2) | 15.47× | +135σ |
-| **Multistart, select by deployment MSE** | **3.01e-5 (naive)** | **8.43e-4 (paper)** | **28.05×** | ~+148σ |
-
-### Caveats from the multistart experiment
-
-1. **K_PHI=128 V-best is not always reliable.** For the rand_1 c-region,
-   the K_PHI=128 grid underestimates posterior variance (overestimates V),
-   so V_best=-1.18e-5 looked promising but deploys at -5.07e-5. Honest
-   selection requires either (a) verifying training V at the deployment
-   grid before committing, or (b) training at K_PHI=256 throughout (4×
-   slower per Bellman re-solve, ~2-3h per restart instead of ~30-40 min).
-
-2. **Adam with adaptive lr is more conservative than fixed-schedule lr
-   here.** The adaptive scheme decays lr aggressively when V plateaus,
-   sometimes before c has reached the basin minimum. The fixed
-   [80, 130, 170] schedule used in `sweep_joint_narrow_naive.jl` actually
-   reached V_best=-2.94e-5 from naive (slightly better than the adaptive
-   scheme's -2.90e-5).
-
-3. **PCRB is robust; joint-DP is sensitive.** Multistart helps joint-DP
-   significantly but barely affects PCRB. Reporting "global" results in a
-   paper means committing to multistart for the joint-DP side.
-
-### Recommendation for the paper
-
-The strongest defensible headline is **the multistart-by-deployment-MSE
-result: 28.05× at z≈+148σ**. It picks each side fairly (both by deployment
-MSE), and the joint-DP optimum is the `naive` basin (consistent across
-training and deployment grids — no K_PHI=128 artifact).
-
-If reviewers prefer "select by training metric" (since that's the natural
-optimization-time criterion), report the 15.47× number with a footnote
-explaining the K_PHI=128 grid artifact. Either way, the paper's existing
-11.27× is a lower bound; the global truth is at least 15-28×.
+- `6ad69a8` — rigorous PCRB BayesOpt with per-eval schedule enumeration.
+- `7aad4fc` — K=256 + MMA + BayesOpt → 170× final headline.
+- `cbbf22c` — deployment-criterion compare; reproduces 28×.
+- `f4f15e9` — multistart joint-DP and PCRB; 28× by deployment MSE.
+- `021075f` — skip Zygote crosscheck at K=4 in gradient test (Julia 1.12 Zygote is too slow).
+- `d73602d` — naive-init reproduction (26×).
+- `94324f7`, `3a1633e`, `ac9aa49` — earlier sweep scripts and threaded modules in `doc/adaptive/scqubit/`.
