@@ -24,8 +24,9 @@ using .ScqubitModel, .Belief, .Bellman, .Gradient, .JointOpt, .PCRB
 println("bayesopt_pcrb_widephi.jl  (phi_max = 0.5)"); flush(stdout)
 println("Threads: $(Threads.nthreads())"); flush(stdout)
 
-const K_EPOCHS = 4
+const K_EPOCHS = parse(Int, get(ENV, "K_EPOCHS", "4"))
 const K_PHI    = parse(Int, get(ENV, "K_PHI", "256"))
+const K_TAG    = "K$(K_EPOCHS)"
 const J_TAU    = 10
 const PHI_MAX  = 0.5
 const TAU_GRID = ntuple(k -> 10e-9 * (32.0)^((k-1)/(J_TAU-1)), J_TAU)
@@ -41,8 +42,8 @@ const SCALE5 = HI5 .- LO5
 
 const FIXED_SCHED = [(J_TAU, 2) for _ in 1:K_EPOCHS]   # (320 ns, n=10)^4
 
-println(@sprintf("Config: PHI_MAX=%.2f  K_PHI=%d  N_EVAL=%d  N_INIT=%d  SEED=%d  fixed_schedule=%s",
-                 PHI_MAX, K_PHI, N_EVAL, N_INIT, SEED, string(FIXED_SCHED)))
+println(@sprintf("Config: PHI_MAX=%.2f  K_EPOCHS=%d  K_PHI=%d  N_EVAL=%d  N_INIT=%d  SEED=%d  fixed_schedule=%s",
+                 PHI_MAX, K_EPOCHS, K_PHI, N_EVAL, N_INIT, SEED, string(FIXED_SCHED)))
 flush(stdout)
 
 grid = make_grid(; K_phi=K_PHI, phi_max=PHI_MAX, tau_grid=TAU_GRID, n_grid=N_GRID)
@@ -132,7 +133,7 @@ omega_d_fn  = make_omega_d_fn(; phi_star_fn=phi_star_fn)
         ω_fn/TWO_PI/1e9, (ω_best-ω_fn)/TWO_PI/1e9, 100*(ω_best-ω_fn)/ω_fn)
 flush(stdout)
 
-outdir = joinpath(@__DIR__, "results", "bayesopt_pcrb_widephi")
+outdir = joinpath(@__DIR__, "results", "bayesopt_pcrb_widephi_$(K_TAG)")
 isdir(outdir) || mkpath(outdir)
 open(joinpath(outdir, "result.jls"), "w") do io
     serialize(io, (; hist=HIST, ibest, logJP_best, v_best, omega_d_best=ω_best,

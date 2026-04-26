@@ -1,0 +1,47 @@
+sweep_K_warmstart.jl  (PHI_MAX=0.5; K_VALUES=[4, 5, 6])
+Threads: 256
+c_joint*  : f_q=3.0000  E_C=0.4000  κ=0.1000 MHz  Δ=5.0000   ω_d/(2π)=12.0000 GHz
+c_pcrb*   : f_q=12.0000  E_C=0.1500  κ=0.1000 MHz  Δ=5.0000   ω_d/(2π)=12.0000 GHz
+
+============================================================
+=== K = 4 ===
+============================================================
+[joint K=4] solving Bellman (K_phi=128)...
+  V_adaptive = -5.782786e-03   memo_size=8643976   0.8 min
+[joint K=4] MC deployment (n_mc=20000)...
+  MC MSE_1 = 1.5572e-02 ± 1.66e-04   (3.4 s)
+[pcrb K=4] log_JP=25.1203   schedule=[(10, 2), (10, 2), (10, 2), (10, 2)]
+[pcrb K=4] MC deployment...
+  MC MSE_2 = 2.1339e-02 ± 1.41e-04   (2.0 s)
+
+  --- K=4 summary ---
+    -V_adaptive (exact)            = 5.7828e-03
+    MC MSE_1 (joint-DP)            = 1.5572e-02 ± 1.66e-04
+    MC MSE_2 (PCRB)                = 2.1339e-02 ± 1.41e-04
+    ratio MC: MSE_2 / MSE_1        = 1.370
+    ratio exact: MSE_2 / (-V)      = 3.690
+    z-score                        = +26.45 σ
+
+============================================================
+=== K = 5 ===
+============================================================
+[joint K=5] solving Bellman (K_phi=128)...
+  V_adaptive = -3.012536e-03   memo_size=179334232   17.4 min
+[joint K=5] MC deployment (n_mc=20000)...
+  MC MSE_1 = 1.5656e-02 ± 1.75e-04   (3.8 s)
+[pcrb K=5] log_JP=25.3434   schedule=[(10, 2), (10, 2), (10, 2), (10, 2), (10, 2)]
+[pcrb K=5] MC deployment...
+  MC MSE_2 = 2.1335e-02 ± 1.42e-04   (2.3 s)
+
+  --- K=5 summary ---
+    -V_adaptive (exact)            = 3.0125e-03
+    MC MSE_1 (joint-DP)            = 1.5656e-02 ± 1.75e-04
+    MC MSE_2 (PCRB)                = 2.1335e-02 ± 1.42e-04
+    ratio MC: MSE_2 / MSE_1        = 1.363
+    ratio exact: MSE_2 / (-V)      = 7.082
+    z-score                        = +25.23 σ
+
+============================================================
+=== K = 6 ===
+============================================================
+[joint K=6] solving Bellman (K_phi=128)...

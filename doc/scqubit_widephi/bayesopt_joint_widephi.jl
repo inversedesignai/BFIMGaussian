@@ -29,8 +29,9 @@ using .ScqubitModel, .Belief, .Bellman, .BellmanThreaded, .Gradient, .JointOpt
 println("bayesopt_joint_widephi.jl  (phi_max = 0.5)"); flush(stdout)
 println("Threads: $(Threads.nthreads())"); flush(stdout)
 
-const K_EPOCHS = 4
+const K_EPOCHS = parse(Int, get(ENV, "K_EPOCHS", "4"))
 const K_PHI    = parse(Int, get(ENV, "K_PHI", "256"))
+const K_TAG    = "K$(K_EPOCHS)"
 const J_TAU    = 10
 const PHI_MAX  = 0.5
 const TAU_GRID = ntuple(k -> 10e-9 * (32.0)^((k-1)/(J_TAU-1)), J_TAU)
@@ -44,8 +45,8 @@ const LO5 = [ 3.0e9,   0.15e9,  0.1e6,   0.8e9,   TWO_PI * 1.0e9 ]
 const HI5 = [12.0e9,   0.4e9,   5.0e6,   5.0e9,   TWO_PI * 12.0e9 ]
 const SCALE5 = HI5 .- LO5
 
-println(@sprintf("Config: PHI_MAX=%.2f  K_PHI=%d  N_EVAL=%d  N_INIT=%d  SEED=%d",
-                 PHI_MAX, K_PHI, N_EVAL, N_INIT, SEED))
+println(@sprintf("Config: PHI_MAX=%.2f  K_EPOCHS=%d  K_PHI=%d  N_EVAL=%d  N_INIT=%d  SEED=%d",
+                 PHI_MAX, K_EPOCHS, K_PHI, N_EVAL, N_INIT, SEED))
 @printf("Box:\n")
 @printf("  f_q_max  ∈ [%.2f, %.2f] GHz\n", LO5[1]/1e9, HI5[1]/1e9)
 @printf("  E_C/h    ∈ [%.2f, %.2f] GHz\n", LO5[2]/1e9, HI5[2]/1e9)
@@ -127,7 +128,7 @@ omega_d_fn  = make_omega_d_fn(; phi_star_fn=phi_star_fn)
         ω_fn/TWO_PI/1e9, (ω_best-ω_fn)/TWO_PI/1e9, 100*(ω_best-ω_fn)/ω_fn)
 flush(stdout)
 
-outdir = joinpath(@__DIR__, "results", "bayesopt_joint_widephi")
+outdir = joinpath(@__DIR__, "results", "bayesopt_joint_widephi_$(K_TAG)")
 isdir(outdir) || mkpath(outdir)
 open(joinpath(outdir, "result.jls"), "w") do io
     serialize(io, (; hist=HIST, ibest, V_best, v_best, omega_d_best=ω_best,
