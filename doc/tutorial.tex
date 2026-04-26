@@ -590,10 +590,10 @@ Without the reduction, a brute-force playout tree at $K = 4$, $|\mathcal{S}| = 2
 
 A target sits in one of sixteen cells arranged on a ring: $\bx \in \{1, \ldots, 16\}$, with uniform prior $p_0(\bx) = 1/16$.  At each of $K = 4$ epochs we point a beam at some cell $\bs_k \in \{1, \ldots, 16\}$ and observe $\by_k \in \{0, 1\}$ with Bernoulli likelihood
 \begin{equation}
-p(\by_k = 1 \mid \bx, \bs_k;\, \bc) \;=\; p_\mathrm{FA} + (p_\mathrm{D} - p_\mathrm{FA}) \cdot G_\bc(\theta_{\bs_k} - \varphi_{\bx}),
+p(\by_k = 1 \mid \bx, \bs_k;\, \bc) \;=\; p_\mathrm{FA} + (p_\mathrm{D} - p_\mathrm{FA}) \cdot G_{\bc}(\theta_{\bs_k} - \varphi_{\bx}),
 \label{eq:radar_likelihood}
 \end{equation}
-with $p_\mathrm{D} = 0.9$, $p_\mathrm{FA} = 0.05$, cell bearings $\varphi_\bx = 2\pi(\bx - 1)/16$, and $G_\bc$ a top-hat beam pattern of integer width $m$ (the hardware design variable).  The reward is the mutual information $I(\bx; \by_{1:K})$, which equals the prior entropy minus the expected terminal posterior entropy; maximizing it is equivalent to minimizing the expected terminal posterior entropy.
+with $p_\mathrm{D} = 0.9$, $p_\mathrm{FA} = 0.05$, cell bearings $\varphi_{\bx} = 2\pi(\bx - 1)/16$, and $G_{\bc}$ a top-hat beam pattern of integer width $m$ (the hardware design variable).  The reward is the mutual information $I(\bx; \by_{1:K})$, which equals the prior entropy minus the expected terminal posterior entropy; maximizing it is equivalent to minimizing the expected terminal posterior entropy.
 
 \subsection{The belief is a probability vector}
 
@@ -627,9 +627,9 @@ the negative posterior entropy (plus a constant that cancels in the argmax).  Th
 V_k(\bb) \;=\; \max_{\bs \in \{1, \ldots, 16\}}\; \sum_{\by \in \{0, 1\}} \Pr(\by \mid \bb, \bs;\, \bc)\; V_{k+1}\bigl(T(\bb, \bs, \by;\, \bc)\bigr),
 \label{eq:radar_backup}
 \end{equation}
-where $\Pr(\by \mid \bb, \bs;\, \bc) = \sum_\bx \bb(\bx)\, p(\by \mid \bx, \bs; \bc)$ is the marginal outcome probability under the current belief.  The argmax is the optimal adaptive action at belief $\bb$ with $K - k$ steps left.
+where $\Pr(\by \mid \bb, \bs;\, \bc) = \sum_{\bx} \bb(\bx)\, p(\by \mid \bx, \bs; \bc)$ is the marginal outcome probability under the current belief.  The argmax is the optimal adaptive action at belief $\bb$ with $K - k$ steps left.
 
-\paragraph{Root.}  $V^\star = V_0(p_0)$.  The globally optimal policy is the collection $\{\pi^\star_k : \bb \mapsto \argmax_\bs \ldots\}$ for $k = 0, \ldots, K-1$.
+\paragraph{Root.}  $V^\star = V_0(p_0)$.  The globally optimal policy is the collection $\{\pi^\star_k : \bb \mapsto \argmax_{\bs} \ldots\}$ for $k = 0, \ldots, K-1$.
 
 \subsection{A miniature trace: one cell, one beam, \texorpdfstring{$K = 2$}{K=2}}
 
