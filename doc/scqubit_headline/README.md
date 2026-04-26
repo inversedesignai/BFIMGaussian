@@ -281,7 +281,13 @@ to probe whether the V landscape has even better basins. Scripts:
   `PATIENCE` iters). Inits: `paper`, `naive`, `rand_1`, `rand_2`.
 - `multistart_pcrb.jl` — PCRB with same 4 inits.
 - `compare_mse_multistart_global.jl` — paired MC at the global-best `c` of
-  each side (selected by training V_best / log_JP_best).
+  each side (selected by training V_best / log_JP_best at K_PHI=128).
+  Yields ratio = 15.47× because rand_1's training V_best=-1.18e-5 is a
+  K_PHI=128 grid artifact (see below).
+- `compare_mse_multistart_deployment.jl` — paired MC at the global-best
+  `c` of each side selected by **deployed MSE at K_PHI=256** instead of
+  the training metric. Deploys all 4 candidates per side, picks lowest
+  deployment MSE. **Yields ratio = 28.05× at z = +148.79σ.**
 
 ### Joint-DP per-init deployment MSE (K_PHI=256, N_MC=20000)
 
