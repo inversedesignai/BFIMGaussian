@@ -120,7 +120,25 @@ julia --project=. -t 64 doc/scqubit_5d/compare_mse_5d.jl
 
 Total wall-clock: ~52 min.
 
-### Optional: MMA refinement of the joint-DP winner
+### MMA validation of the BayesOpt winner
+
+We ran `mma_joint_5d.jl` from the BayesOpt 5D winner. Result:
+
+```
+V_init  (BayesOpt) = -4.4446e-06
+V_final (MMA)      = -4.4377e-06    ← 0.15% improvement, essentially negligible
+NLopt return code  = XTOL_REACHED   in just 8 evaluations
+c drift            = 0 on all 4 hardware dims
+                     ω_d drift = +0.0001 GHz (sub-MHz)
+|g_z| trajectory   = 2.77e-3 → 2.0e-5 (4 orders of magnitude reduction)
+```
+
+**Conclusion: BayesOpt found a tight local minimum.** Independent
+gradient-based MMA from the same point converges in place, with `|g_z|`
+hitting the floor of finite-difference precision on ω_d. The 202.55×
+headline is not a BayesOpt sampling artefact.
+
+### Run MMA polish yourself
 
 ```bash
 INIT_ID=bayesopt julia --project=. -t 64 doc/scqubit_5d/mma_joint_5d.jl
