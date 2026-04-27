@@ -90,13 +90,134 @@ Choose one for the standalone paper:
 
 - Tier 1 plus: extend the action set with adaptive measurement basis `φ_ref`
   (canonical Higgins-Wiseman feedback dimension, `R = 2`).
-- Extend the design vector `c` to ~30 dims via multi-junction SQUID asymmetry (~5 dims),
-  multi-mode readout (~10 dims), bias-line filter parameters (~5 dims), and
-  full-physics geometric/coupling unlocks (~3 dims).  All with meaningful physics impact
-  (see physics-impact analysis in the parent project notes).
+- Extend the design vector `c` to **220 dims** via the parametric layers listed below.
+  All physics-meaningful, all fab-relevant, all with analytical gradients.
 - Headline: first long-horizon Bellman-optimal hardware-policy co-design with continuous
-  ~30-dim hardware.
+  ~200-dim hardware optimized via stochastic gradient descent.
 - Likely home: PRX, NMI, or JMLR with a methods focus.
+
+#### Parametric `c` layers (target dim = 220)
+
+| Layer | Description | Dim | Running |
+|---|---|---:|---:|
+| 1 | Core transmon (Danilin model, all 7 unpinned) | 7 | 7 |
+| 2 | Asymmetric multi-junction SQUID | 4 | 11 |
+| 3 | Junction array (fluxonium-like dispersion) | 10 | 21 |
+| 4 | Multi-mode resonator readout (5 modes) | 15 | 36 |
+| 5 | Spatial bias-coil network (10 coils) | 20 | 56 |
+| 6 | Pulse-library shape parametrization | 160 | 216 |
+| 7 | RF / signal-chain parameters | 4 | 220 |
+
+#### Layer 1: Core transmon (Danilin model, all freed)
+
+| Index | Parameter | Symbol | Role |
+|---:|---|---|---|
+| 1 | qubit transition frequency at Φ=0 | `f_q_max` | sets Δω in the Ramsey cosine |
+| 2 | charging energy | `E_C/h` | sets anharmonicity, enters `ω_q(φ)` |
+| 3 | resonator decay rate | `κ` | sets `Γ_1^cav` |
+| 4 | qubit-resonator detuning | `Δ_qr` | sets dispersive coupling |
+| 5 | mixing-chamber temperature | `T` | sets thermal factor `tanh(½ hf_q/kT)` |
+| 6 | flux-noise amplitude | `A_Φ` | sets `B²` quadratic dephasing |
+| 7 | critical-current-noise amplitude | `A_Ic` | sets `B²` quadratic dephasing |
+
+#### Layer 2: Asymmetric multi-junction SQUID
+
+| Index | Parameter | Symbol | Role |
+|---:|---|---|---|
+| 8 | junction asymmetry | `α = (I_{c,1}-I_{c,2})/(I_{c,1}+I_{c,2})` | richer `ω_q(φ)` shape; non-zero `α` shifts the sweet spot off Φ=0 |
+| 9 | asymmetry phase offset | `φ_α` | additional flux degree of freedom for asymmetric loop |
+| 10 | loop mutual inductance | `M` | sets `Γ_1^ind` |
+| 11 | parasitic mutual inductance | `M'` | sets parasitic `Γ_1^ind` contribution |
+
+#### Layer 3: Junction array (fluxonium-like dispersion)
+
+A series array of `N_arr = 10` junctions in addition to the SQUID, each with its own Josephson energy. The array's net inductance and dispersion shape `ω_q(φ)` in ways that simple two-junction SQUIDs cannot. Each `E_{J,k}` is a fab-controllable junction area.
+
+| Index | Parameter | Role |
+|---:|---|---|
+| 12 | `E_J,1` array junction 1 | individual junction Josephson energy |
+| 13 | `E_J,2` | individual |
+| ... | ... | ... |
+| 21 | `E_J,10` array junction 10 | individual |
+
+#### Layer 4: Multi-mode resonator readout
+
+Five resonator modes coupled to the qubit via dispersive interactions; each mode contributes additively to `Γ_1^cav`. Multi-mode readout enables Purcell filtering and parallel readout.
+
+| Index | Parameter | Symbol | Role |
+|---:|---|---|---|
+| 22-24 | mode 1: `ω_{r,1}, κ_1, g_1` | resonator freq, decay, coupling | sets mode-1 contribution to `Γ_1^cav` |
+| 25-27 | mode 2: `ω_{r,2}, κ_2, g_2` | as above | mode 2 |
+| 28-30 | mode 3: `ω_{r,3}, κ_3, g_3` | as above | mode 3 |
+| 31-33 | mode 4: `ω_{r,4}, κ_4, g_4` | as above | mode 4 |
+| 34-36 | mode 5: `ω_{r,5}, κ_5, g_5` | as above | mode 5 |
+
+#### Layer 5: Spatial bias-coil network
+
+Ten current loops at different positions that together produce the bias flux. Each loop contributes its own mutual inductance to the SQUID and has its own low-pass filter cutoff (different cable lengths, different filter stages).
+
+| Index | Parameter | Symbol | Role |
+|---:|---|---|---|
+| 37-38 | coil 1: `M_1, f_{c,1}` | mutual inductance, filter cutoff | spatial-noise contribution from coil 1 |
+| 39-40 | coil 2: `M_2, f_{c,2}` | as above | coil 2 |
+| ... | ... | ... | ... |
+| 55-56 | coil 10: `M_{10}, f_{c,10}` | as above | coil 10 |
+
+The filter cutoffs `f_{c,k}` shape the 1/f flux-noise PSD seen by each contribution; spatial superposition of multiple coils with engineered filter profiles can sculpt the effective dephasing spectrum.
+
+#### Layer 6: Pulse-library shape parametrization (160 dims)
+
+The action `s_k = (j, ℓ, r)` selects one of `J × R = 10 × 2 = 20` pulse types from a calibrated library: delay index `j`, repetition `ℓ`, phase basis `r`. Repetitions `ℓ` share the same pulse shape; only `(j, r)` indexes the pulse library.
+
+Each of the 20 library pulses is parametrized by **8 calibration parameters**, giving 160 total dims. These parameters live in `c` (set once at calibration time, used by all subsequent measurements); they are not part of the per-step action.
+
+For pulse `(j, r)`, j ∈ {1..10}, r ∈ {0, π/2}:
+
+| Param | Symbol | Physical role |
+|---|---|---|
+| 1 | `A_{j,r}` | amplitude scaling (vs nominal `π/2` rotation) — sets effective rotation angle |
+| 2 | `σ_{j,r}` | Gaussian envelope width — sets pulse-shape selectivity in frequency |
+| 3 | `β_{j,r}` | DRAG coefficient — first-order anharmonicity leakage suppression |
+| 4 | `β2_{j,r}` | DRAG² coefficient — second-order anharmonicity correction |
+| 5 | `Δω_{j,r}^\mathrm{pulse}` | linear frequency chirp — corrects for AC Stark, drift |
+| 6 | `φ0_{j,r}` | static phase offset (calibration, distinct from action `φ_ref`) |
+| 7 | `γ_{j,r}` | envelope skew (asymmetric Gaussian) — corrects rise/fall mismatch |
+| 8 | `tc_{j,r}` | pulse center offset (timing calibration) |
+
+Total Layer-6 dimension: `8 × 20 = 160`.
+
+These 8 parameters per pulse modify the Ramsey signal at delay τ in analytically-tractable ways (via DRAG theory, AC-Stark corrections, and effective-rotation-angle expressions) — full numerical Schrödinger-equation pulse simulation is a future extension. The reduced-form pulse-shape model gives closed-form gradients of the Ramsey likelihood `p(y | x, τ; c)` with respect to all 8 shape parameters per pulse.
+
+#### Layer 7: RF / signal-chain parameters
+
+| Index | Parameter | Symbol | Role |
+|---:|---|---|---|
+| 217 | LO frequency offset | `Δf_LO` | sets effective drive frequency offset |
+| 218 | IF mixer carrier offset | `Δf_IF` | mixer up-conversion offset |
+| 219 | IQ amplitude imbalance | `δA_{IQ}` | I/Q amplitude mismatch on the drive line |
+| 220 | IQ phase imbalance | `δφ_{IQ}` | I/Q phase mismatch on the drive line |
+
+#### Action set (unchanged in dimension, but `φ_ref` adds R=2)
+
+| Component | Symbol | Cardinality |
+|---|---|---:|
+| delay index | `j ∈ {1..10}` | 10 |
+| repetition index | `ℓ ∈ {1..2}` | 2 |
+| phase basis | `r ∈ {0, π/2}` | 2 |
+| **total action set** | `(j, ℓ, r)` | **40** |
+
+#### Why each layer is fab-relevant
+
+- Layers 1–4 are standard tunable knobs at design time (junction E_J via area, resonator
+  frequency via length, etc.).
+- Layer 5 corresponds to the actual bias-line topology: filter cascades, multiple flux
+  drive lines, on-chip vs off-chip bias coils.
+- Layer 6 corresponds to AWG calibration parameters that experimentalists routinely tune
+  via pulse-tomography campaigns (Rabi-2, Wittmann calibration, DRAG sweeps).  All 8
+  per-pulse parameters are independently calibrated in modern superconducting-qubit
+  experiments.
+- Layer 7 corresponds to RF chain calibration done at instrument-level (LO mixer
+  calibration, IQ balance).
 
 ### Tier 3: SBDP as a general-purpose POMDP scaling primitive
 
