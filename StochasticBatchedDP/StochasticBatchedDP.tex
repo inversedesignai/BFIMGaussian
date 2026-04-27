@@ -1,0 +1,394 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\newcommand{\bc}{\bm{c}}
+\newcommand{\bx}{\bm{x}}
+\newcommand{\by}{\bm{y}}
+\newcommand{\bs}{\bm{s}}
+\newcommand{\bb}{\bm{b}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\Var}{\operatorname{Var}}
+
+\title{Stochastic Batched Dynamic Programming\\
+       \large A scaling strategy for joint hardware-policy co-design beyond the exact-DP horizon ceiling}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Exact Bellman dynamic programming for partially observable Markov decision processes (POMDPs)
+admits an efficient sufficient-statistic memoization for many problems of interest, but the
+memoization grows fast enough in horizon $K$ that exact solutions are typically capped at
+$K \approx 4$--$5$.  Joint hardware-policy co-design, where a continuous hardware parameter
+$\bc$ is optimized jointly with the inner Bellman-optimal policy $\pi^\star(\bc)$, inherits this
+ceiling.  We develop a scaling extension: \emph{stochastic batched dynamic programming},
+which combines (i) a batched receding-horizon decomposition of the inner Bellman problem
+into $n$ tractable batches of length $K_\mathrm{batch}$ and (ii) stochastic Monte-Carlo
+sampling of batch-boundary trajectories at outer-gradient time, replacing the intractable
+enumeration over reachable batch-boundary beliefs.  The resulting estimator is unbiased,
+per-sample gradients are exact via the sharp-max envelope theorem, and the wall-clock cost
+scales linearly in the sample size and the number of batches rather than in the reachable
+belief count.  The construction generalizes naturally and preserves the exactness
+guarantees of joint dynamic programming on the sampled sub-problems.
+\end{abstract}
+
+\tableofcontents
+
+\section{Setup and notation}
+\label{sec:setup}
+
+A POMDP is a tuple $(\mathcal{X}, \mathcal{S}, \mathcal{Y}, p_0, p, T)$ with hidden state
+$\bx \in \mathcal{X}$, action $\bs \in \mathcal{S}$, observation $\by \in \mathcal{Y}$,
+prior $p_0$, observation likelihood $p(\by \mid \bx, \bs;\, \bc)$, and Bayesian belief
+update operator $T(\bb, \bs, \by;\, \bc)$.  The hardware parameter $\bc \in \mathcal{C}$
+parametrises the likelihood and the belief update.  Belief at step $k$ is
+$\bb_k \in \Delta(\mathcal{X})$, the simplex of distributions on the state space.
+
+A pointwise reward $\Phi(\bx, \bs_{1:K};\, \bc)$ depends on the realized trajectory and the
+hardware.  For terminal rewards expressible as a functional of the terminal belief
+$\bb_K$, write $\Phi_0(\bb_K;\, \bc) = \E_{\bx \mid \bb_K}[\Phi(\bx, \bs_{1:K};\, \bc)]$.
+The Bellman recursion at fixed $\bc$ is
+\begin{align}
+V_K(\bb;\, \bc) &= \Phi_0(\bb;\, \bc), \label{eq:terminal}\\
+V_k(\bb;\, \bc) &= \max_{\bs \in \mathcal{S}}\; \E_{\by \mid \bb, \bs, \bc}\!\bigl[V_{k+1}(T(\bb, \bs, \by;\, \bc);\, \bc)\bigr], \label{eq:bellman}
+\end{align}
+for $k = K-1, \ldots, 0$.  The optimal adaptive policy is
+$\pi^\star_k(\bb;\, \bc) = \argmax_{\bs} \E_{\by}[V_{k+1}(T(\bb, \bs, \by;\, \bc);\, \bc)]$.
+The joint hardware-policy optimum solves
+\begin{equation}
+\bc^\star = \argmax_{\bc \in \mathcal{C}}\; V^\star(\bc), \qquad V^\star(\bc) := V_0(p_0;\, \bc).
+\label{eq:joint}
+\end{equation}
+
+The outer gradient $dV^\star/d\bc$ is computed by the sharp-max envelope theorem: at the
+optimal inner policy, the indirect contribution of policy sensitivity to $\partial V^\star /
+\partial \bc$ vanishes, and reverse-mode automatic differentiation through an
+argmax-frozen Bellman recursion returns an exact, unbiased outer gradient.
+
+\section{The exact-DP horizon ceiling}
+\label{sec:ceiling}
+
+Exact Bellman DP for the recursion of Equations~\eqref{eq:terminal}--\eqref{eq:bellman}
+admits efficient memoization when a low-dimensional sufficient statistic for the belief is
+available.  Two common settings:
+
+\paragraph{Discrete state.}  The belief is a probability vector on $|\mathcal{X}|$ states.
+Reachable beliefs from $p_0$ form a tree of size at most $(|\mathcal{S}| \cdot
+|\mathcal{Y}|)^K$.  Memoization stores one value per reachable belief; the table size is
+bounded but grows exponentially with $K$.
+
+\paragraph{Continuous state with sufficient-statistic reduction.}  When the per-shot
+likelihood depends on the history only through a finite tuple of integers (e.g., a
+count-tuple of observations partitioned by action type), the belief at step $k$ is
+encoded by that tuple, and the reachable-tuple set is the memo's natural index.  The
+number of reachable tuples grows multiplicatively with $K$, polynomially with the action
+and observation alphabet sizes.  In favourable cases the memo is $\sim 10^7$ at $K = 4$;
+unfavourable cases (multimodal posteriors, dense action grids) push this to $10^8$--$10^9$
+or more by $K = 5$ or $6$.  Memory becomes the binding constraint.
+
+For practical hardware (modest workstation, $\sim 1$~TB RAM) the exact-DP ceiling is
+typically $K_\mathrm{max} \in \{4, 5\}$.  Beyond that we descend to approximations.
+
+\section{Batched dynamic programming}
+\label{sec:batched}
+
+Suppose the deployment horizon $K_\mathrm{total}$ is much larger than the exact-DP ceiling
+$K_\mathrm{batch} \le K_\mathrm{max}$, with $K_\mathrm{total} = n \cdot K_\mathrm{batch}$
+for some integer $n$.  Define a \emph{batched policy} $\pi^\mathrm{batch}$ as follows:
+
+\begin{enumerate}[nosep, leftmargin=2em]
+\item At step $k = 0$, with belief $\bb_0 = p_0$, solve exact Bellman for $K_\mathrm{batch}$
+      epochs starting at $\bb_0$.  Use the resulting policy $\pi^{(1)}$ for steps $1, \ldots, K_\mathrm{batch}$.
+\item At step $k = K_\mathrm{batch}$, with belief $\bb_{K_\mathrm{batch}}$ resulting from
+      executing $\pi^{(1)}$ on the realized observations, solve exact Bellman for $K_\mathrm{batch}$
+      epochs starting at $\bb_{K_\mathrm{batch}}$.  Use $\pi^{(2)}$ for the next $K_\mathrm{batch}$ steps.
+\item Repeat for $n$ batches total.
+\end{enumerate}
+
+Each batch is locally Bellman-optimal over its $K_\mathrm{batch}$-step subproblem; the
+overall procedure is a receding-horizon approximation to the full $K_\mathrm{total}$
+Bellman, suboptimal at the start (because $\pi^{(1)}$ plans only $K_\mathrm{batch}$ steps
+ahead even though $K_\mathrm{total} - K_\mathrm{batch}$ steps remain) and tight at the end.
+
+\subsection{The value of a batched policy}
+
+The expected reward under the batched policy starting from $\bb_0 = p_0$ is
+\begin{equation}
+V^\mathrm{batch}(p_0;\, \bc)
+\;=\;
+\E_{\bb_{K_\mathrm{batch}} \sim P(\,\cdot\,\mid p_0, \pi^{(1)},\, \bc)}\!
+\bigl[\,V^\mathrm{batch}(\bb_{K_\mathrm{batch}};\, \bc, \text{remaining } n - 1 \text{ batches})\,\bigr],
+\label{eq:Vbatch_recursive}
+\end{equation}
+unfolding to
+\begin{equation}
+V^\mathrm{batch}(p_0;\, \bc)
+\;=\;
+\sum_{\bb_{K_\mathrm{batch}}}\, P(\bb_{K_\mathrm{batch}} \mid p_0, \pi^{(1)},\, \bc)\,
+V_0^{\mathrm{batch}_2}(\bb_{K_\mathrm{batch}};\, \bc),
+\label{eq:Vbatch_2batch}
+\end{equation}
+in the two-batch case ($n = 2$), where $V_0^{\mathrm{batch}_2}$ denotes the standard
+$K_\mathrm{batch}$ Bellman value at the new starting belief $\bb_{K_\mathrm{batch}}$ over
+the second batch.  The sum is over reachable batch-boundary beliefs.
+
+\subsection{The curse of enumeration over batch-boundary beliefs}
+
+To compute Equation~\eqref{eq:Vbatch_2batch} exactly we would need
+$V_0^{\mathrm{batch}_2}(\bb_{K_\mathrm{batch}};\, \bc)$ at every reachable
+$\bb_{K_\mathrm{batch}}$.  In the count-tuple-keyed setting this is one fresh
+$K_\mathrm{batch}$ Bellman solve per reachable count-tuple after batch~1.  At
+$K_\mathrm{batch} = 4$ the reachable count-tuple set is $\sim 10^7$ in unfavourable
+regimes, and each fresh solve costs $\sim 10$~seconds: enumeration cost is $10^8$ seconds
+(thousands of CPU-years).
+
+This is the same memo blow-up that capped exact $K_\mathrm{total} = K_\mathrm{batch} + 1$
+in the first place, just relocated to the batch boundary.  Batched DP, naively
+implemented, does not break the exact-DP ceiling.
+
+\section{Stochastic batched DP}
+\label{sec:stochastic}
+
+The standard remedy for an intractable expectation over a large index set is to replace
+exhaustive enumeration with Monte-Carlo sampling under the natural distribution
+$P(\bb_{K_\mathrm{batch}} \mid p_0, \pi^{(1)},\, \bc)$.
+
+\subsection{The estimator}
+
+Sample $M$ trajectories under the current batched policy.  For each trajectory $m$ define
+$\bb_{K_\mathrm{batch}}^{(m)}$ as the realized batch-1 terminal belief.  The estimator
+\begin{equation}
+\widehat{V}^\mathrm{batch}(p_0;\, \bc; \mathcal{M})
+\;:=\;
+\frac{1}{M} \sum_{m=1}^{M}
+V_0^{\mathrm{batch}_2}\bigl(\bb_{K_\mathrm{batch}}^{(m)};\, \bc\bigr)
+\label{eq:estimator}
+\end{equation}
+is an unbiased estimator of Equation~\eqref{eq:Vbatch_2batch}: the trajectories
+$\mathcal{M} = \{\bb_{K_\mathrm{batch}}^{(m)}\}_{m=1}^M$ are i.i.d.\ samples from the
+correct policy-induced distribution, and the integrand is computed exactly per sample by
+solving fresh $K_\mathrm{batch}$ Bellman from $\bb_{K_\mathrm{batch}}^{(m)}$.
+
+The variance of the estimator scales as $\Var[V_0^{\mathrm{batch}_2}] / M$ where the
+variance is over the trajectory distribution; standard concentration inequalities give
+the $1/\sqrt{M}$ confidence intervals.
+
+\subsection{Per-sample gradients via the envelope theorem}
+
+For outer optimization we need not just the value but its gradient with respect to $\bc$.
+For each sampled trajectory we apply the sharp-max envelope theorem to the
+$K_\mathrm{batch}$-step subproblem starting at $\bb_{K_\mathrm{batch}}^{(m)}$:
+\begin{enumerate}[nosep, leftmargin=2em]
+\item Run forward $K_\mathrm{batch}$ Bellman from $\bb_{K_\mathrm{batch}}^{(m)}$.  Record
+      the optimal argmax action at every reachable belief in the second batch's subtree.
+\item Re-evaluate $V_0^{\mathrm{batch}_2}(\bb_{K_\mathrm{batch}}^{(m)};\, \bc)$ by
+      substituting the recorded argmaxes in place of the $\max$ operator.  This produces
+      an argmax-free expression in $\bc$.
+\item Apply reverse-mode automatic differentiation to the argmax-free expression.
+\end{enumerate}
+
+The envelope theorem certifies that the resulting gradient is exact:
+\begin{equation}
+\frac{\partial V_0^{\mathrm{batch}_2}(\bb_{K_\mathrm{batch}}^{(m)};\, \bc)}{\partial \bc}
+\;=\;
+\left.\frac{\partial}{\partial \bc}\right|_{\pi^\star_{batch_2} \text{ frozen}}
+V_0^{\mathrm{batch}_2}(\bb_{K_\mathrm{batch}}^{(m)};\, \bc).
+\label{eq:envelope}
+\end{equation}
+The first batch's contribution to the gradient (through how $\pi^{(1)}$ shapes the sampling
+distribution of $\bb_{K_\mathrm{batch}}$) follows the same envelope-theorem-frozen recursion
+applied to batch 1, and contributes a score-function term in $\partial \log P / \partial \bc$
+that can be carried via reverse-mode AD on the trajectory's likelihood, exactly as in the
+single-batch joint-DP gradient.
+
+The aggregate gradient
+\begin{equation}
+\widehat{\nabla}_{\bc} V^\mathrm{batch}(p_0;\, \bc; \mathcal{M})
+\;=\;
+\frac{1}{M} \sum_{m=1}^{M}
+\frac{\partial V^{(m)}(\bc)}{\partial \bc}
+\label{eq:agg_grad}
+\end{equation}
+is unbiased for $\nabla_{\bc} V^\mathrm{batch}(p_0;\, \bc)$ and has the standard SGD
+variance scaling.
+
+\subsection{Outer SGD update}
+
+The outer optimization becomes Adam (or any preferred stochastic optimizer) on $\bc$ with
+mini-batches of size $M$:
+\begin{equation}
+\bc^{(t+1)} = \mathrm{Adam}\bigl(\bc^{(t)},\; \widehat{\nabla}_{\bc} V^\mathrm{batch}(p_0;\, \bc^{(t)}; \mathcal{M}^{(t)}),\; \eta\bigr).
+\end{equation}
+A fresh trajectory mini-batch $\mathcal{M}^{(t)}$ is sampled at each iteration $t$, so the
+variance does not compound across iterations.  Standard SGD convergence theory applies:
+under bounded gradient variance and standard step-size schedules the iterates converge in
+expectation to a stationary point of $V^\mathrm{batch}(p_0;\, \bc)$.
+
+\section{The general algorithm}
+
+\begin{algorithm}[H]
+\caption{Stochastic Batched DP}
+\label{alg:sbdp}
+\begin{algorithmic}[1]
+\Require Initial $\bc^{(0)}$, total horizon $K_\mathrm{total}$, batch length $K_\mathrm{batch}$, sample size $M$, learning rate $\eta$, iterations $T$
+\For{$t = 0, 1, \ldots, T - 1$}
+    \State $g \gets 0$
+    \For{$m = 1, \ldots, M$ (parallel)}
+        \State $\bb \gets p_0$
+        \State Initialize trajectory $\tau_m \gets ()$
+        \For{$\mathrm{batch} = 1, \ldots, n = K_\mathrm{total} / K_\mathrm{batch}$}
+            \State $(V_\mathrm{batch}, \pi_\mathrm{batch}, \mathrm{memo}_\mathrm{batch}) \gets \mathrm{Bellman}(\bb,\, K_\mathrm{batch},\, \bc^{(t)})$
+            \For{$k = 1, \ldots, K_\mathrm{batch}$}
+                \State $\bs \gets \pi_\mathrm{batch}(\bb)$
+                \State $\bx \sim \bb$;  $\by \sim p(\,\cdot \mid \bx, \bs;\, \bc^{(t)})$
+                \State $\bb \gets T(\bb, \bs, \by;\, \bc^{(t)})$
+                \State Append $(\bs, \by, \bb)$ to $\tau_m$
+            \EndFor
+        \EndFor
+        \State $V_m \gets \Phi_0(\bb;\, \bc^{(t)})$ \Comment{terminal reward at trajectory leaf}
+        \State $g_m \gets \mathrm{EnvelopeGrad}(V_m,\, \tau_m,\, \mathrm{memos},\, \bc^{(t)})$
+        \State $g \gets g + g_m$
+    \EndFor
+    \State $g \gets g / M$
+    \State $\bc^{(t+1)} \gets \mathrm{Adam}(\bc^{(t)},\, g,\, \eta)$
+\EndFor
+\State \Return $\bc^{(T)}$
+\end{algorithmic}
+\end{algorithm}
+
+\textbf{Complexity per outer iteration}: $M \times n_\mathrm{batches} \times
+\mathrm{cost}(K_\mathrm{batch} \text{ Bellman})$.  In typical regimes,
+$\mathrm{cost}(K_\mathrm{batch} \text{ Bellman}) \approx 10$ seconds, so a single outer
+gradient step at $M = 10$ and $n = 4$ takes $\sim 400$ seconds wall-clock without
+parallelism, or $\sim 40$ seconds with $M$-way parallelism on a single multicore node.
+A complete training run of $T = 500$ iterations finishes in 5--7 hours on standard
+hardware.
+
+\section{Convergence and bias}
+\label{sec:convergence}
+
+\paragraph{Per-sample exactness.}  Each $V_m$ in Equation~\eqref{eq:estimator} is computed
+by exact Bellman within its $K_\mathrm{batch}$ subproblem, with the sharp-max
+envelope-theorem gradient.  No smoothing temperature, no policy approximation, no biased
+inner optimizer.  The per-sample value and gradient are both exact for the trajectory's
+contribution to the estimator.
+
+\paragraph{Estimator bias and variance.}  The estimator
+$\widehat{V}^\mathrm{batch}(p_0;\, \bc; \mathcal{M})$ is unbiased for the true batched
+value (which is itself an approximation of the full $K_\mathrm{total}$ Bellman value).
+Its variance scales as $\sigma^2 / M$ where $\sigma^2$ depends on the spread of
+$V_0^{\mathrm{batch}_2}$ across reachable batch-boundary beliefs.  In well-conditioned
+problems $\sigma^2$ is small and $M = 10$--$30$ suffices; in problems with bimodal or
+multimodal batch-boundary belief distributions $M$ needs to grow accordingly.
+
+\paragraph{Convergence rate.}  Under standard SGD assumptions (bounded gradient variance,
+diminishing step sizes), the outer iterates converge to a stationary point of
+$V^\mathrm{batch}(p_0;\, \bc)$ at the standard $1/\sqrt{T}$ rate.  Since the per-sample
+gradient is exact rather than smoothed, the asymptotic noise floor is set by sampling
+variance alone, not by gradient bias.
+
+\paragraph{Approximation gap to full $K_\mathrm{total}$ Bellman.}  The batched policy is a
+strict approximation of the full $K_\mathrm{total}$ Bellman policy: each batch's lookahead
+is truncated to $K_\mathrm{batch}$, missing the tail value of subsequent batches.  The gap
+$V_0(p_0;\, \bc) - V^\mathrm{batch}(p_0;\, \bc) \ge 0$ is regime-dependent.  When the
+batch-boundary posterior is unimodal and well-concentrated (e.g., $K_\mathrm{batch}$ is
+large enough to "set up" a well-localized belief for subsequent batches), the gap is small.
+When the batch-boundary posterior is multimodal, the gap can be large because batched DP
+fails to recognize that $\pi^{(1)}$ should anticipate the disambiguation work of $\pi^{(2)}$.
+
+\section{Connections to existing methods}
+\label{sec:related}
+
+\paragraph{Stochastic gradient descent.}  The construction is structurally identical to
+minibatch SGD on neural networks: full-batch gradient over a finite-but-huge index set
+(here, reachable batch-boundary beliefs) is replaced by a small stochastic mini-batch.  The
+unbiasedness, variance, and convergence properties carry over directly.
+
+\paragraph{Stochastic Dual Dynamic Programming (SDDP).}  Pereira and Pinto's SDDP for
+multi-stage stochastic linear programs uses sampled forward-backward sweeps to build
+cutting-plane approximations of the value function.  Stochastic Batched DP is the POMDP
+analogue: scenarios are replaced by belief trajectories, cutting-plane approximations are
+replaced by exact Bellman within each batch.  The receding-horizon decomposition is a
+standard MPC pattern in both communities.
+
+\paragraph{Sequential Bayesian experimental design.}  Simulation-based sequential OED
+(Huan and Marzouk; Long, Marzouk, and Wang) uses MC sampling of belief trajectories at
+outer optimization time, but typically with rung-3 myopic information-gain inner policies
+rather than exact Bellman.  Stochastic Batched DP can be viewed as the upgrade of these
+methods from "myopic" to "Bellman within each batch".
+
+\paragraph{Differentiable POMDP planning.}  Existing differentiable-POMDP work (deep RL
+with NN policies, Karkus et al.\ QMDP-net, etc.) uses NN-parametrized policies with
+end-to-end gradient training.  These methods exhibit a known pathology in joint
+hardware-policy optimization: the NN policy can absorb the training signal and leave the
+hardware near initialization (the "hardware-light fixed point").  Stochastic Batched DP
+sidesteps this by using exact Bellman within each batch, a non-NN inner solver that does
+not have a free policy capacity to absorb hardware-task signal.
+
+\paragraph{Sample-based POMDP solvers (POMCP, DESPOT).}  These methods perform Monte-Carlo
+tree search over the belief space at policy-inference time.  Stochastic Batched DP uses
+sampling at outer-gradient time instead, which is a different point of insertion: the
+inner policy is exact Bellman (sample-free), and sampling enters only to estimate the
+outer-hardware gradient.
+
+\section{Practical guidance}
+\label{sec:practical}
+
+\paragraph{Choosing $K_\mathrm{batch}$.}  Pick the largest $K_\mathrm{batch}$ for which
+exact Bellman fits in the available memory budget.  Going larger reduces the
+approximation gap to full Bellman; going smaller reduces per-iteration wall-clock at the
+cost of suboptimal early-batch lookahead.
+
+\paragraph{Choosing $M$.}  Start at $M = 10$.  Increase if the gradient-step direction is
+noisy enough to slow down Adam convergence (visible as oscillation in the loss trajectory).
+$M = 30$--$50$ is a typical regime.
+
+\paragraph{Re-sampling cadence.}  Sample fresh trajectories at every outer iteration.
+Re-using trajectories across multiple SGD steps introduces gradient bias because the
+sampling distribution depends on $\bc^{(t)}$.
+
+\paragraph{Parallelism.}  The $M$ trajectory simulations and Bellman solves are
+embarrassingly parallel.  On a $C$-core machine, target $M \le C / k_\mathrm{Bellman}$
+where $k_\mathrm{Bellman}$ is the number of cores each individual Bellman solve uses
+effectively (typically 8--64).
+
+\paragraph{Diagnostics.}  Track the per-batch values $V_0^{\mathrm{batch}_j}$ and the
+spread of $V^{(m)}$ across samples.  A high spread indicates that batch-boundary beliefs
+are diverse, which is healthy for sampling but suggests $K_\mathrm{batch}$ may be too
+small.  A monotonically decreasing batch-boundary belief variance across batches
+indicates progressive disambiguation, which is the regime where batched DP works well.
+
+\section{Discussion}
+\label{sec:discussion}
+
+Stochastic Batched DP fills a gap in the relaxation hierarchy between exact Bellman DP
+(rung 1, $K_\mathrm{max}$-limited) and the policy-approximation rungs 2--4
+(certainty-equivalent, myopic, Gaussian-trace-EKF).  It preserves exactness of the inner
+solver within each batch and exactness of per-sample gradients via the envelope theorem,
+while breaking the reachable-belief enumeration via Monte-Carlo sampling.  The resulting
+method is well-suited to problems where (a) exact Bellman is feasible at modest
+$K_\mathrm{batch}$, (b) the deployment horizon is much larger, and (c) the outer hardware
+optimization is the central computational expense.
+
+The framework is particularly natural when combined with point-based value iteration
+(PBVI) or its rho-POMDP extension as the inner solver.  PBVI's $\alpha$-vector
+representation makes the per-sample $K_\mathrm{batch}$ Bellman value $V_0^{\mathrm{batch}_j}(\bb)$
+evaluatable at any belief $\bb$ in $O(|\Gamma| \cdot |\mathcal{X}|)$ time without
+re-solving from scratch.  Combined with the stochastic-batched outer SGD, this lifts the
+horizon ceiling from $K_\mathrm{max} \approx 5$ (exact memoization) to $K_\mathrm{total}$
+of practically arbitrary size.
+
+\end{document}
