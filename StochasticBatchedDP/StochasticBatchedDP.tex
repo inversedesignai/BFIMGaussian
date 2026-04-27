@@ -237,6 +237,371 @@ variance does not compound across iterations.  Standard SGD convergence theory a
 under bounded gradient variance and standard step-size schedules the iterates converge in
 expectation to a stationary point of $V^\mathrm{batch}(p_0;\, \bc)$.
 
+\section{Gradient computation: a detailed derivation}
+\label{sec:gradient}
+
+This section derives the SBDP outer-hardware gradient explicitly.  We work the two-batch
+case ($n = 2$) in full detail, identifying every $\bc$-dependence and unfolding each chain
+rule.  We then generalize to $n > 2$ batches recursively.  No step is skipped; the goal is
+that the formula in the algorithm box can be derived directly from first principles by
+following this section.
+
+\subsection{Setup for the two-batch case}
+\label{sec:n2_setup}
+
+For $n = 2$ with $K_\mathrm{total} = 2 K_\mathrm{batch}$, the batched value is
+\begin{equation}
+V^\mathrm{batch}(p_0;\, \bc)
+\;=\;
+\E_{\bx \sim p_0}\,
+\E_{(\by_1, \ldots, \by_{K_\mathrm{batch}}) \mid \bx, \pi^{[1]}(\bc), \bc}
+\!\left[\,
+V^{[2]}\bigl(\bb_{K_\mathrm{batch}}(\bx, \by_{1:K_\mathrm{batch}}; \bc);\, \bc\bigr)
+\,\right],
+\label{eq:Vbatch_n2}
+\end{equation}
+where
+\begin{itemize}[nosep,leftmargin=2em]
+\item $\pi^{[1]}(\bc)$ is the batch-1 policy obtained by exact $K_\mathrm{batch}$ Bellman
+      from $p_0$ at parameter $\bc$.  Each action in batch~1 is the local argmax
+      $\bs_k = \pi^{[1]}(\bb_{k-1};\, \bc)$.
+\item $\bb_{k} = T(\bb_{k-1}, \bs_k, \by_k;\, \bc)$ is the Bayesian belief update.
+\item $V^{[2]}(\bb;\, \bc)$ is the standard $K_\mathrm{batch}$ Bellman value at starting
+      belief $\bb$ with parameter $\bc$.  Because batch~2 is the last batch, its local
+      terminal coincides with the global terminal $\Phi_0$.
+\end{itemize}
+
+The trajectory is the tuple $\tau := (\bx, \by_1, \ldots, \by_{K_\mathrm{batch}})$ with
+joint density
+\begin{equation}
+P(\tau;\, \bc) \;=\; p_0(\bx) \cdot \prod_{k=1}^{K_\mathrm{batch}} p\bigl(\by_k \mid \bx, \bs_k(\tau_{<k}, \bc);\, \bc\bigr),
+\label{eq:trajdensity}
+\end{equation}
+where $\bs_k(\tau_{<k}, \bc) = \pi^{[1]}(\bb_{k-1}(\tau_{<k}, \bc);\, \bc)$ is the
+deterministic action under the batch-1 policy.
+
+We want $\nabla_{\bc}\, V^\mathrm{batch}(p_0;\, \bc)$.
+
+\subsection{Identifying every \texorpdfstring{$\bc$}{c}-dependence}
+\label{sec:c_dependences}
+
+Equation~\eqref{eq:Vbatch_n2} has $\bc$ entering through five distinct paths.  We list
+them explicitly because each contributes to the gradient differently:
+
+\begin{enumerate}[nosep,leftmargin=2em]
+\item[(P1)] \emph{Batch-1 policy actions} $\bs_k(\tau_{<k}, \bc)$ via the argmax of the local
+      $K_\mathrm{batch}$ Bellman.
+\item[(P2)] \emph{Within-batch-1 observation likelihood} $p(\by_k \mid \bx, \bs_k;\, \bc)$.
+\item[(P3)] \emph{Within-batch-1 belief update} $T(\bb_{k-1}, \bs_k, \by_k;\, \bc)$, which
+      shapes how $\bb_{K_\mathrm{batch}}$ depends on the trajectory.
+\item[(P4)] \emph{Batch-2 Bellman value at fixed starting belief}
+      $V^{[2]}(\cdot;\, \bc)$, which depends on $\bc$ through batch-2's likelihood and
+      belief updates.
+\item[(P5)] \emph{Starting belief input to batch-2}, $\bb_{K_\mathrm{batch}}(\bx, \by_{1:K_\mathrm{batch}}; \bc)$.
+      Evaluating $V^{[2]}$ at a starting belief that itself depends on $\bc$ pulls a chain
+      of (P3) sensitivities in.
+\end{enumerate}
+
+We now show that (P1) contributes zero to the gradient under hard argmax, while
+(P2)--(P5) contribute through two channels: a pathwise term (carrying P3, P4, P5) and a
+score-function term (carrying P2).
+
+\paragraph{Hard-argmax policy contributes zero.}
+The batch-1 policy is $\bs_k(\bb_{k-1}; \bc) = \argmax_{\bs} Q^{[1]}_k(\bb_{k-1}, \bs;\, \bc)$.
+For an interior strict maximizer, the argmax is locally constant in $\bc$:
+$\partial \bs_k / \partial \bc = 0$ almost everywhere in $\bc$.  Hence path (P1)
+contributes a measure-zero set of jump points, which integrate to zero against
+$\bc$-perturbations.  Throughout, we therefore treat the realized actions
+$\bs^{(m)}_{1:K_\mathrm{batch}}$ on each sampled trajectory as
+$\bc$-frozen at their recorded values.  This is the same locally-constant-argmax
+assumption used by the sharp-max envelope theorem of the joint-DP framework, applied here
+to the policy choices.
+
+\subsection{The REINFORCE / pathwise decomposition}
+\label{sec:reinforce}
+
+Let $F(\tau;\, \bc) := V^{[2]}(\bb_{K_\mathrm{batch}}(\tau, \bc);\, \bc)$.  Then
+$V^\mathrm{batch}(p_0;\, \bc) = \E_{\tau \sim P(\cdot;\, \bc)}[F(\tau;\, \bc)]$.  By the
+log-derivative identity ($\nabla_{\bc} P = P \cdot \nabla_{\bc} \log P$),
+\begin{equation}
+\nabla_{\bc}\, \E_{\tau \sim P(\cdot;\, \bc)}\!\bigl[F(\tau;\, \bc)\bigr]
+\;=\;
+\E_{\tau \sim P(\cdot;\, \bc)}\!\bigl[\,\nabla_{\bc} F(\tau;\, \bc)\,\bigr]
+\;+\;
+\E_{\tau \sim P(\cdot;\, \bc)}\!\bigl[\,F(\tau;\, \bc)\, \nabla_{\bc} \log P(\tau;\, \bc)\,\bigr].
+\label{eq:reinforce}
+\end{equation}
+The first term is the \emph{pathwise gradient} (deterministic chain rule on the integrand
+at fixed sampled $\tau$).  The second term is the \emph{score-function gradient}
+(REINFORCE-style sensitivity of the trajectory distribution).  Both are needed for an
+unbiased estimator.
+
+\subsection{Pathwise gradient \texorpdfstring{$\nabla_{\bc} F(\tau;\, \bc)$}{nabla\_c F}}
+\label{sec:pathwise}
+
+By chain rule on $F = V^{[2]}\bigl(\bb_{K_\mathrm{batch}}(\tau, \bc);\, \bc\bigr)$,
+\begin{equation}
+\nabla_{\bc} F(\tau;\, \bc)
+\;=\;
+\underbrace{\Bigl[\,\nabla_{\bb} V^{[2]}\!\bigl(\bb_{K_\mathrm{batch}};\, \bc\bigr)\,\Bigr]^\top \cdot \nabla_{\bc} \bb_{K_\mathrm{batch}}(\tau, \bc)}_{\text{(A): input-belief sensitivity}}
+\;+\;
+\underbrace{\biggl.\frac{\partial V^{[2]}\bigl(\bb;\, \bc\bigr)}{\partial \bc}\biggr|_{\bb \text{ held fixed at } \bb_{K_\mathrm{batch}}}}_{\text{(B): standard joint-DP gradient}}.
+\label{eq:pathwise}
+\end{equation}
+Each term has a concrete computation; we unfold them in turn.
+
+\paragraph{Term (B): standard joint-DP gradient at fixed starting belief.}
+
+This is the existing joint-DP gradient of the paper's main framework, applied to
+$V^{[2]}$.  Specifically, holding the starting belief fixed at $\bb_{K_\mathrm{batch}}^{(m)}$
+on the sampled trajectory, we run forward the $K_\mathrm{batch}$ Bellman recursion at
+parameter $\bc$ to obtain the policy memo for batch~2.  Then we apply the sharp-max
+envelope theorem: freeze the recorded action argmaxes throughout the batch-2 subtree, and
+compute reverse-mode automatic differentiation on the resulting argmax-free expression for
+$V^{[2]}(\bb_{K_\mathrm{batch}}^{(m)};\, \bc)$.  The result is exact for the batch-2
+subproblem.
+
+In the count-tuple-keyed setting, term (B) is computable in time $O(N_\mathrm{batch-2-memo} \cdot \mathrm{cost}(p, T))$, comparable to one $K_\mathrm{batch}$ Bellman solve.
+
+\paragraph{Term (A): input-belief sensitivity through belief-update chain.}
+
+This is two distinct factors:
+\begin{itemize}[nosep, leftmargin=2em]
+\item $\nabla_{\bb} V^{[2]}(\bb;\, \bc)$: the gradient of the batch-2 Bellman value with
+      respect to the \emph{input belief} $\bb$, evaluated at $\bb = \bb_{K_\mathrm{batch}}^{(m)}$.
+\item $\nabla_{\bc} \bb_{K_\mathrm{batch}}(\tau, \bc)$: the sensitivity of the batch-1
+      terminal belief to $\bc$ along the realized batch-1 trajectory.
+\end{itemize}
+
+\textbf{Computing $\nabla_{\bb} V^{[2]}$.}  The batch-2 Bellman recursion at starting
+belief $\bb$ contains $\bb$ in two places: (i) directly, as the argument of the value
+function; (ii) through the marginal observation probability $\Pr(\by \mid \bb, \bs;\, \bc) =
+\sum_{\bx} \bb(\bx)\, p(\by \mid \bx, \bs;\, \bc)$, which appears in every Bellman backup
+weighting future values.  In the count-tuple-keyed framework with $\bb$ on a $K_\Phi$-grid,
+$\bb$ is a $K_\Phi$-dimensional vector; $\nabla_{\bb} V^{[2]}$ is a $K_\Phi$-vector.  It is
+computable by reverse-mode AD through the argmax-frozen Bellman recursion, treating $\bb$
+as the differentiation target instead of $\bc$.
+
+\textbf{Computing $\nabla_{\bc} \bb_{K_\mathrm{batch}}$.}  The belief at the end of batch~1
+is the recursion
+\[
+\bb_k = T(\bb_{k-1}, \bs_k, \by_k;\, \bc), \qquad k = 1, \ldots, K_\mathrm{batch},
+\]
+with $\bs_k$ and $\by_k$ frozen at their recorded values.  Differentiating w.r.t. $\bc$
+with frozen $(\bs_k, \by_k)$:
+\begin{equation}
+\frac{\partial \bb_k}{\partial \bc}
+\;=\;
+\biggl.\frac{\partial T}{\partial \bc}\biggr|_{\bb_{k-1}, \bs_k, \by_k}
+\;+\;
+\biggl.\frac{\partial T}{\partial \bb}\biggr|_{\bb_{k-1}, \bs_k, \by_k}
+\cdot
+\frac{\partial \bb_{k-1}}{\partial \bc},
+\label{eq:belief_chain}
+\end{equation}
+unfolding from $\partial \bb_0 / \partial \bc = 0$ (the prior is $\bc$-independent).
+This is a standard chain-rule recursion through the belief-update operator and is
+computable by one reverse-mode AD pass over the $K_\mathrm{batch}$-step chain.
+
+\textbf{Combining (A1) and (A2).}  Term~(A) of Equation~\eqref{eq:pathwise} is
+\[
+\sum_{i=1}^{K_\Phi} \frac{\partial V^{[2]}}{\partial \bb_{K_\mathrm{batch}, i}}\bigl(\bb_{K_\mathrm{batch}}; \bc\bigr) \cdot \frac{\partial \bb_{K_\mathrm{batch}, i}}{\partial \bc}.
+\]
+Both factors are vectors in $\R^{K_\Phi}$; the inner product collapses them into a scalar
+gradient w.r.t. $\bc$.  In practice the two reverse-mode AD passes are combined into one,
+treating the entire pipeline (batch-1 belief updates feeding batch-2 Bellman value) as a
+single computational graph with $\bc$ as the differentiation target.
+
+\subsection{Score-function gradient \texorpdfstring{$\nabla_{\bc} \log P(\tau;\, \bc)$}{nabla\_c log P}}
+\label{sec:score_function}
+
+From Equation~\eqref{eq:trajdensity},
+\[
+\log P(\tau;\, \bc)
+\;=\;
+\log p_0(\bx)
+\;+\;
+\sum_{k=1}^{K_\mathrm{batch}} \log p\bigl(\by_k \mid \bx, \bs_k;\, \bc\bigr).
+\]
+The prior $p_0(\bx)$ is $\bc$-independent.  Differentiating:
+\begin{equation}
+\nabla_{\bc} \log P(\tau;\, \bc)
+\;=\;
+\sum_{k=1}^{K_\mathrm{batch}} \nabla_{\bc} \log p\bigl(\by_k \mid \bx, \bs_k;\, \bc\bigr),
+\label{eq:scorefn}
+\end{equation}
+with $\bs_k$ frozen by the hard-argmax property of \S\ref{sec:c_dependences}.  Each summand
+is the per-shot likelihood score, computable by reverse-mode AD on the closed-form
+likelihood $p(\by \mid \bx, \bs;\, \bc)$.  Note that this is a vector in $\R^{d_c}$ (one
+component per hardware coordinate); the score-function gradient is a sum of such vectors
+across batch-1 shots.
+
+\subsection{The full per-trajectory gradient estimator}
+\label{sec:full_estimator}
+
+Combining \eqref{eq:reinforce}, \eqref{eq:pathwise}, and \eqref{eq:scorefn}, the
+per-trajectory gradient estimator is
+\begin{equation}
+g^{(m)}
+\;=\;
+\underbrace{\Bigl[\nabla_{\bb} V^{[2]}\bigr|_{\bb_{K_\mathrm{batch}}^{(m)}}\!\Bigr]^\top \cdot \nabla_{\bc} \bb_{K_\mathrm{batch}}^{(m)}}_{\text{Term A: belief-input × belief chain}}
+\;+\;
+\underbrace{\biggl.\frac{\partial V^{[2]}\bigl(\bb;\, \bc\bigr)}{\partial \bc}\biggr|_{\bb = \bb_{K_\mathrm{batch}}^{(m)}}}_{\text{Term B: joint-DP gradient at fixed input}}
+\;+\;
+\underbrace{V^{[2]}\bigl(\bb_{K_\mathrm{batch}}^{(m)};\, \bc\bigr) \cdot \sum_{k=1}^{K_\mathrm{batch}} \nabla_{\bc} \log p\bigl(\by_k^{(m)} \mid \bx^{(m)}, \bs_k^{(m)};\, \bc\bigr)}_{\text{Term C: score-function correction}}.
+\label{eq:gm}
+\end{equation}
+Aggregating across $M$ samples,
+\begin{equation}
+\widehat{\nabla}_{\bc}\, V^\mathrm{batch}(p_0;\, \bc; \mathcal{M})
+\;=\;
+\frac{1}{M} \sum_{m=1}^{M} g^{(m)}.
+\label{eq:full_estimator}
+\end{equation}
+This estimator is unbiased for $\nabla_{\bc}\, V^\mathrm{batch}(p_0;\, \bc)$ by direct
+substitution of \eqref{eq:reinforce} and the law of large numbers.
+
+\paragraph{Roles of the three terms.}  Term~B is what one would write down naively if the
+trajectory were $\bc$-independent: the standard joint-DP gradient evaluated at the sampled
+batch-2 starting belief.  Term~A corrects for the fact that $\bb_{K_\mathrm{batch}}$ itself
+depends on $\bc$ through the chain of belief updates that built it.  Term~C corrects for
+the fact that the trajectory's sampling distribution depends on $\bc$ through the
+likelihood; without it the estimator is biased toward the trajectories that current $\bc$
+makes likely.
+
+\paragraph{Failure modes if any term is dropped.}  Dropping Term~A produces a bias
+proportional to the rate at which $\bb_{K_\mathrm{batch}}$ shifts under $\bc$, scaled by
+the slope of $V^{[2]}$ in $\bb$.  Dropping Term~C produces a bias proportional to the
+score-function-times-value covariance.  Both are problem-dependent; in cases where the
+likelihood depends on $\bc$ only weakly across the prior support, Terms~A and~C can be
+small, but they are not zero in general.
+
+\subsection{Variance reduction with baselines}
+\label{sec:baseline}
+
+The score-function term~C in \eqref{eq:gm} is the dominant variance contributor, because
+it is a product of two random quantities (the value $V^{[2]}$ and the per-shot scores).
+Standard variance reduction subtracts a $\bc$-only baseline $B(\bc)$ from $V^{[2]}$ before
+multiplying by the score:
+\begin{equation}
+g^{(m)}_{\mathrm{reduced}}
+\;=\;
+\text{(A)} + \text{(B)} + \bigl[V^{[2]}(\bb_{K_\mathrm{batch}}^{(m)};\, \bc) - B(\bc)\bigr] \cdot \sum_k \nabla_{\bc} \log p(\by_k^{(m)} \mid \bx^{(m)}, \bs_k^{(m)}; \bc).
+\label{eq:gm_baseline}
+\end{equation}
+The estimator remains unbiased for any $B(\bc)$ that does not depend on $\tau^{(m)}$,
+because $\E_{\tau}[\nabla_{\bc} \log P(\tau;\, \bc)] = 0$ identically.
+
+\paragraph{Choice of baseline.}  Two standard choices:
+\begin{itemize}[nosep, leftmargin=2em]
+\item \emph{Empirical mean:} $B(\bc) = \frac{1}{M} \sum_{m'=1}^M V^{[2]}(\bb_{K_\mathrm{batch}}^{(m')};\, \bc)$.
+      Cheap (free, given the values are already computed) but biased if used naively
+      (because $B$ depends on the same samples whose scores it modifies).  The standard
+      remedy is leave-one-out: $B^{(m)}(\bc) = \frac{1}{M-1} \sum_{m' \ne m} V^{[2]}(\bb_{K_\mathrm{batch}}^{(m')};\, \bc)$.
+\item \emph{Local Bellman value:} $B(\bc) = V^{[1]}_{\mathrm{local}}(p_0;\, \bc)$, the
+      $K_\mathrm{batch}$ Bellman value of batch~1 at $p_0$ with local terminal $\Phi_0$.
+      This is computable for free during the batch-1 Bellman solve and is the optimal
+      baseline in the sense of minimum variance among $\bc$-only constants when the local
+      terminal of batch~1 matches the global terminal of $V^{[2]}$.
+\end{itemize}
+
+The local-Bellman baseline is the natural ``advantage-function'' choice and we recommend
+it when the local and global terminals coincide (e.g., $\Phi_0 = -\mathrm{Var}(\bx \mid \bb)$
+applied at end of every batch including the final one).
+
+\subsection{Generalization to \texorpdfstring{$n > 2$}{n > 2} batches}
+\label{sec:nbatch_general}
+
+For $n$ batches with $K_\mathrm{total} = n K_\mathrm{batch}$, define the
+\emph{remaining-horizon value from batch $j$ onwards} as
+\begin{equation}
+V_{\mathrm{global}}^{(j)}(\bb;\, \bc)
+\;:=\;
+\E_{\tau_j \mid \bb, \pi^{[j]}(\bc), \bc}\!\Bigl[\, V_{\mathrm{global}}^{(j+1)}\!\bigl(\bb_{K_\mathrm{batch}\text{-end of batch } j}(\tau_j, \bc);\, \bc\bigr)\,\Bigr],
+\label{eq:Vglobal_recursion}
+\end{equation}
+with $V_{\mathrm{global}}^{(n)}(\bb;\, \bc) = V^{[n]}(\bb;\, \bc)$ (the standard
+$K_\mathrm{batch}$ Bellman value, since batch~$n$'s local terminal coincides with the
+global terminal).  Then $V^\mathrm{batch}(p_0;\, \bc) = V_{\mathrm{global}}^{(1)}(p_0;\, \bc)$.
+
+Differentiating \eqref{eq:Vglobal_recursion} by REINFORCE applied at each level:
+\begin{equation}
+\nabla_{\bc} V_{\mathrm{global}}^{(j)}(\bb;\, \bc)
+\;=\;
+\E_{\tau_j}\!\Bigl[
+\nabla_{\bc} V_{\mathrm{global}}^{(j+1)}(\bb_{K_\mathrm{batch}\text{-end}}; \bc)
+\;+\;
+V_{\mathrm{global}}^{(j+1)}(\bb_{K_\mathrm{batch}\text{-end}}; \bc) \cdot \nabla_{\bc} \log P_j(\tau_j \mid \bb;\, \bc)
+\Bigr],
+\label{eq:nablaVglobal_recursion}
+\end{equation}
+where $\nabla_{\bc} \log P_j$ is the score function for batch $j$'s shots (analogous to
+\eqref{eq:scorefn}).  Unfolding $\nabla_{\bc} V_{\mathrm{global}}^{(j+1)}$ via the same
+identity and grouping pathwise vs.\ score-function contributions:
+
+\begin{equation}
+\nabla_{\bc} V^\mathrm{batch}(p_0;\, \bc)
+\;=\;
+\E_{\tau_1, \tau_2, \ldots, \tau_n}\!\biggl[\,
+\underbrace{\nabla_{\bc} \Phi_0(\bb_{K_\mathrm{total}}; \bc)}_{\text{pathwise terminal}}
+\;+\;
+\sum_{j=1}^{n} \underbrace{\widetilde{V}^{(j)}(\bb_{\text{boundary}_j}; \bc) \cdot \nabla_{\bc} \log P_j(\tau_j; \bc)}_{\text{score function for batch } j}
+\,\biggr],
+\label{eq:nablaV_n_general}
+\end{equation}
+where the pathwise terminal gradient unfolds back through all $K_\mathrm{total}$ belief
+updates by chain rule (same structure as Equation~\eqref{eq:belief_chain} extended to
+$K_\mathrm{total}$ steps), and $\widetilde{V}^{(j)}$ is the residual value to be earned
+from batch $j$ onwards (i.e., $V_{\mathrm{global}}^{(j+1)}$ at the appropriate boundary
+belief).
+
+\paragraph{Per-trajectory gradient estimator for general $n$.}  Sample one full trajectory
+$\tau^{(m)} = (\tau_1^{(m)}, \tau_2^{(m)}, \ldots, \tau_n^{(m)})$.  The per-trajectory
+gradient is
+\begin{equation}
+g^{(m)}_{\text{full}}
+\;=\;
+\underbrace{\nabla_{\bc} \Phi_0(\bb_{K_\mathrm{total}}^{(m)};\, \bc)\big|_{\tau^{(m)} \text{ frozen}}}_{\text{pathwise terminal across all } K_\mathrm{total} \text{ steps}}
+\;+\;
+\sum_{j=1}^{n} V_{\mathrm{global}}^{(j+1)}(\bb_{\text{boundary}_j}^{(m)};\, \bc) \cdot \sum_{k \in \text{batch } j} \nabla_{\bc} \log p(\by_k^{(m)} \mid \bx^{(m)}, \bs_k^{(m)};\, \bc).
+\label{eq:gm_n}
+\end{equation}
+Each $V_{\mathrm{global}}^{(j+1)}$ at the boundary is computable by exact $K_\mathrm{batch}$
+Bellman from $\bb_{\text{boundary}_j}^{(m)}$, since for $j+1 = n$ this is just the
+last-batch Bellman, and for $j+1 < n$ it can be evaluated in turn by conditioning on
+subsequent $\tau_{j+1}^{(m)}, \ldots, \tau_n^{(m)}$ which are already sampled along the
+trajectory.
+
+\paragraph{Cost per gradient step.}  For each sample, the gradient computation requires
+one $K_\mathrm{batch}$ Bellman solve at each batch boundary, plus one reverse-mode AD pass
+on the trajectory chain.  Total cost per gradient step at $M$ samples:
+\[
+M \times n \times \mathrm{cost}\bigl(K_\mathrm{batch} \text{ Bellman solve + AD}\bigr).
+\]
+Parallelizable in the $M$ direction; for typical implementations this is about an order of
+magnitude more expensive than a single Bellman solve at $K_\mathrm{batch}$.
+
+\subsection{Connection back to single-batch joint-DP}
+\label{sec:single_batch_check}
+
+For $n = 1$ (single batch with $K_\mathrm{total} = K_\mathrm{batch}$), there is no
+batch-boundary sampling: the entire integral over $\tau$ is performed exactly inside the
+Bellman recursion via the marginal observation probability sums.
+Equation~\eqref{eq:gm_n} reduces to
+\[
+\nabla_{\bc} V^\mathrm{batch}(p_0;\, \bc)
+\;=\;
+\nabla_{\bc} V^{[1]}(p_0;\, \bc)
+\;=\;
+\biggl.\frac{\partial V^{[1]}(\bb;\, \bc)}{\partial \bc}\biggr|_{\bb = p_0, \pi^\star \text{ frozen}},
+\]
+which is exactly the sharp-max envelope-theorem gradient of the paper's main framework.
+The score-function term vanishes because there are no batch boundaries and the $\E_\tau$
+integration is performed exactly.  This recovers the exact-Bellman joint-DP gradient as
+the $n = 1$ specialization of SBDP.  For $n \ge 2$ the additional score-function terms
+appear precisely because the integration over batch-boundary trajectories is replaced by
+Monte-Carlo sampling.
+
 \section{The general algorithm}
 
 \begin{algorithm}[H]
