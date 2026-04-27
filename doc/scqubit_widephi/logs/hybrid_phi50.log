@@ -1,0 +1,82 @@
+hybrid_mse_widephi.jl  (PHI_MAX=0.5)
+Threads: 100
+K_dp=4, K_total list=[4, 5, 6, 8, 10], K_phi=256, n_mc=20000
+c_joint*: f_q=3.0000  E_C=0.4000  κ=0.1000 MHz  Δ=5.0000   ω_d/(2π)=12.0000 GHz
+c_pcrb*:  f_q=12.0000  E_C=0.1500  κ=0.1000 MHz  Δ=5.0000   ω_d/(2π)=12.0000 GHz
+
+[bellman] solving K_dp=4 at K_phi=256 for c_joint*...
+  V_adaptive(K=4) = -7.790822e-03   memo=8643976   27.7s
+
+============================================================
+=== K_total = 4  (K_dp=4 Bellman + 0 CE) ===
+============================================================
+  hybrid MSE_1 = 1.1974e-02 ± 1.29e-04   (6.7s)
+  PCRB MSE_2  = 2.1009e-02 ± 1.36e-04   (3.8s)
+
+  --- K_total=4 summary ---
+    hybrid MSE (joint-DP K_dp=4 + CE)        = 1.1974e-02 ± 1.29e-04
+    PCRB MSE   ((τ_max, n=10)^4)              = 2.1009e-02 ± 1.36e-04
+    ratio MSE_pcrb / MSE_hyb                  = 1.755
+    z-score                                   = +48.34 σ
+
+============================================================
+=== K_total = 5  (K_dp=4 Bellman + 1 CE) ===
+============================================================
+  hybrid MSE_1 = 1.2340e-02 ± 1.35e-04   (7.2s)
+  PCRB MSE_2  = 2.0862e-02 ± 1.36e-04   (4.5s)
+
+  --- K_total=5 summary ---
+    hybrid MSE (joint-DP K_dp=4 + CE)        = 1.2340e-02 ± 1.35e-04
+    PCRB MSE   ((τ_max, n=10)^5)              = 2.0862e-02 ± 1.36e-04
+    ratio MSE_pcrb / MSE_hyb                  = 1.691
+    z-score                                   = +44.46 σ
+
+============================================================
+=== K_total = 6  (K_dp=4 Bellman + 2 CE) ===
+============================================================
+  hybrid MSE_1 = 1.2697e-02 ± 1.38e-04   (8.4s)
+  PCRB MSE_2  = 2.0776e-02 ± 1.36e-04   (5.4s)
+
+  --- K_total=6 summary ---
+    hybrid MSE (joint-DP K_dp=4 + CE)        = 1.2697e-02 ± 1.38e-04
+    PCRB MSE   ((τ_max, n=10)^6)              = 2.0776e-02 ± 1.36e-04
+    ratio MSE_pcrb / MSE_hyb                  = 1.636
+    z-score                                   = +41.66 σ
+
+============================================================
+=== K_total = 8  (K_dp=4 Bellman + 4 CE) ===
+============================================================
+  hybrid MSE_1 = 1.3338e-02 ± 1.45e-04   (10.7s)
+  PCRB MSE_2  = 2.0453e-02 ± 1.37e-04   (7.2s)
+
+  --- K_total=8 summary ---
+    hybrid MSE (joint-DP K_dp=4 + CE)        = 1.3338e-02 ± 1.45e-04
+    PCRB MSE   ((τ_max, n=10)^8)              = 2.0453e-02 ± 1.37e-04
+    ratio MSE_pcrb / MSE_hyb                  = 1.533
+    z-score                                   = +35.63 σ
+
+============================================================
+=== K_total = 10  (K_dp=4 Bellman + 6 CE) ===
+============================================================
+  hybrid MSE_1 = 1.3690e-02 ± 1.51e-04   (12.9s)
+  PCRB MSE_2  = 2.0480e-02 ± 1.36e-04   (9.0s)
+
+  --- K_total=10 summary ---
+    hybrid MSE (joint-DP K_dp=4 + CE)        = 1.3690e-02 ± 1.51e-04
+    PCRB MSE   ((τ_max, n=10)^10)              = 2.0480e-02 ± 1.36e-04
+    ratio MSE_pcrb / MSE_hyb                  = 1.496
+    z-score                                   = +33.34 σ
+
+========================================================================
+HYBRID-CE SUMMARY  (PHI_MAX=0.50, K_dp=4 Bellman, then CE)
+------------------------------------------------------------------------
+K_total          MSE_hyb        MSE_pcrb     ratio   z-score
+4             1.1974e-02      2.1009e-02     1.755    +48.34 σ
+5             1.2340e-02      2.0862e-02     1.691    +44.46 σ
+6             1.2697e-02      2.0776e-02     1.636    +41.66 σ
+8             1.3338e-02      2.0453e-02     1.533    +35.63 σ
+10            1.3690e-02      2.0480e-02     1.496    +33.34 σ
+========================================================================
+┌ Warning: Assignment to `t` in soft scope is ambiguous because a global variable by the same name exists: `t` will be treated as a new local. Disambiguate by using `local t` to suppress this warning or `global t` to assign to the existing global variable.
+└ @ ~/BFIMGaussian/doc/scqubit_widephi/hybrid_mse_widephi.jl:153
+Saved.
