@@ -109,3 +109,135 @@ bopt total: 0.15 min
 Best log_JP = 22.027209 at eval 30
   c_best:  f_q=12.0000 GHz  E_C=0.4000 GHz  κ=0.1000 MHz  Δ=5.0000 GHz
   ω_d/(2π) = 1.0000 GHz   ω_d = 6.2832e+09 rad/s
+
+Verifying schedule assumption: enumerate at the BOpt winner...
+  argmax schedule: [(10, 2), (10, 2), (10, 2), (10, 2)]   log_JP=22.027209   (71.7s)
+  fixed assumed:   [(10, 2), (10, 2), (10, 2), (10, 2)]   log_JP=22.027209
+  ✓ assumption confirmed at this c+ω_d
+  ω_d_fn(c_best)/(2π) = 4.0530 GHz  (Δ from BOpt's ω_d = -3.0530 GHz, -75.3%)
+┌ Warning: use values(kwargs) instead of kwargs.data
+│   caller = #MAPGPOptimizer#13 at gp.jl:37 [inlined]
+└ @ Core ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:37
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:52:06.034	iteration: 10	current optimum: 21.792931471648625
+[ Info: 2026-04-26T21:52:09.576	iteration: 11	current optimum: 21.792931471648625
+[ Info: 2026-04-26T21:52:09.577	iteration: 12	current optimum: 21.792931471648625
+[ Info: 2026-04-26T21:52:09.577	iteration: 13	current optimum: 21.792931471648625
+[ Info: 2026-04-26T21:52:09.578	iteration: 14	current optimum: 21.792931471648625
+[ Info: 2026-04-26T21:52:09.579	iteration: 15	current optimum: 21.792931471648625
+[ Info: 2026-04-26T21:52:09.580	iteration: 16	current optimum: 22.022008556304982
+[ Info: 2026-04-26T21:52:09.580	iteration: 17	current optimum: 22.022008556304982
+[ Info: 2026-04-26T21:52:09.581	iteration: 18	current optimum: 22.022008556304982
+[ Info: 2026-04-26T21:52:09.582	iteration: 19	current optimum: 22.022008556304982
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:52:09.583	iteration: 20	current optimum: 22.022008556304982
+[ Info: 2026-04-26T21:52:09.584	iteration: 21	current optimum: 22.022008556304982
+[ Info: 2026-04-26T21:52:09.585	iteration: 22	current optimum: 22.022008556304982
+[ Info: 2026-04-26T21:52:09.586	iteration: 23	current optimum: 22.022008556304982
+[ Info: 2026-04-26T21:52:09.586	iteration: 24	current optimum: 22.022008556304982
+[ Info: 2026-04-26T21:52:09.587	iteration: 25	current optimum: 22.022008556304982
+[ Info: 2026-04-26T21:52:09.588	iteration: 26	current optimum: 22.022008556304982
+[ Info: 2026-04-26T21:52:09.589	iteration: 27	current optimum: 22.022008556304982
+[ Info: 2026-04-26T21:52:09.590	iteration: 28	current optimum: 22.022008556304982
+[ Info: 2026-04-26T21:52:09.591	iteration: 29	current optimum: 22.022008556304982
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:52:09.592	iteration: 30	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.593	iteration: 31	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.594	iteration: 32	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.595	iteration: 33	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.596	iteration: 34	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.597	iteration: 35	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.620	iteration: 36	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.622	iteration: 37	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.623	iteration: 38	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.624	iteration: 39	current optimum: 22.02720895262831
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:52:09.626	iteration: 40	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.627	iteration: 41	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.629	iteration: 42	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.630	iteration: 43	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.632	iteration: 44	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.633	iteration: 45	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.634	iteration: 46	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.636	iteration: 47	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.638	iteration: 48	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.639	iteration: 49	current optimum: 22.02720895262831
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:52:09.641	iteration: 50	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.642	iteration: 51	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.644	iteration: 52	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.661	iteration: 53	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.663	iteration: 54	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.665	iteration: 55	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.667	iteration: 56	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.668	iteration: 57	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.670	iteration: 58	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.672	iteration: 59	current optimum: 22.02720895262831
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:52:09.674	iteration: 60	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.676	iteration: 61	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.678	iteration: 62	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.689	iteration: 63	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.691	iteration: 64	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.693	iteration: 65	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.695	iteration: 66	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.697	iteration: 67	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.699	iteration: 68	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.701	iteration: 69	current optimum: 22.02720895262831
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:52:09.706	iteration: 70	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.709	iteration: 71	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.711	iteration: 72	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.713	iteration: 73	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.717	iteration: 74	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.720	iteration: 75	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.722	iteration: 76	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.724	iteration: 77	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.727	iteration: 78	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.730	iteration: 79	current optimum: 22.02720895262831
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:52:09.732	iteration: 80	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.736	iteration: 81	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.739	iteration: 82	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.742	iteration: 83	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.745	iteration: 84	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.747	iteration: 85	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.751	iteration: 86	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.753	iteration: 87	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.757	iteration: 88	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.760	iteration: 89	current optimum: 22.02720895262831
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:52:09.764	iteration: 90	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.767	iteration: 91	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.770	iteration: 92	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.773	iteration: 93	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.776	iteration: 94	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.780	iteration: 95	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.785	iteration: 96	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.788	iteration: 97	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.791	iteration: 98	current optimum: 22.02720895262831
+[ Info: 2026-04-26T21:52:09.796	iteration: 99	current optimum: 22.02720895262831
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+┌ Info: ──────────────────────────────────────────────────────────────────────────────────────────────
+│                                                      Time                    Allocations      
+│                                             ───────────────────────   ────────────────────────
+│              Tot / % measured:                   7.60s /  98.8%           1.56GiB /  99.6%    
+│ 
+│ Section                             ncalls     time    %tot     avg     alloc    %tot      avg
+│ ──────────────────────────────────────────────────────────────────────────────────────────────
+│ acquisition                             91    5.43s   72.3%  59.7ms   1.40GiB   90.1%  15.8MiB
+│ model update                            91    1.25s   16.6%  13.7ms   84.4MiB    5.3%   950KiB
+│ function evaluation                    100    482ms    6.4%  4.82ms   19.6MiB    1.2%   200KiB
+│ model hyperparameter optimization       91    349ms    4.6%  3.83ms   53.0MiB    3.3%   597KiB
+└ ──────────────────────────────────────────────────────────────────────────────────────────────
+Saved /home/zlin/BFIMGaussian/doc/scqubit_widephi/results/bayesopt_pcrb_phi16_K4/result.jls

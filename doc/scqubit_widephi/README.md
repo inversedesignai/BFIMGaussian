@@ -1,14 +1,43 @@
-# scqubit_widephi — 5-D BayesOpt at the wide-prior limit (φ_max = 0.5)
+# scqubit_widephi — 5-D BayesOpt vs PCRB across the φ_max spectrum
 
-Self-contained reproduction of the `scqubit_5d` pipeline at the **uninformative** prior limit
-`PHI_MAX = 0.5` (vs the paper's headline `PHI_MAX = 0.1`).  Same 5-D BayesOpt setup with the
-drive frequency `ω_d` as a free parameter (no envelope-theorem bias).
+Self-contained reproduction of the `scqubit_5d` pipeline parameterized on the prior width
+`PHI_MAX`.  Same 5-D BayesOpt setup with the drive frequency `ω_d` as a free parameter (no
+envelope-theorem bias).  Tests how the joint-DP / PCRB ratio depends on prior width at the
+fixed horizon K=4.
 
-This experiment validates the prediction in §7.6 of the paper:
+## Headline result
+
+The 10× joint-DP advantage is preserved up to **φ_max ≈ 0.155–0.16**.  Beyond that the
+adaptive margin collapses toward the aliasing floor predicted by §7.6 of the paper.
+
+| φ_max | MC MSE_1 (joint-DP) | MC MSE_2 (PCRB)    | ratio | z-score |
+|-------|---------------------|--------------------|-------|---------|
+| 0.10  | (5D, prior result)  | —                  | ~200× | —       |
+| 0.12  | 3.53×10⁻⁵           | 1.24×10⁻³          | 35.08×| +147σ   |
+| 0.15  | 1.30×10⁻⁴           | 1.92×10⁻³          | 14.75×| +138σ   |
+| **0.16** | **2.19×10⁻⁴**    | **2.16×10⁻³**      | **9.88×** | +130σ |
+| 0.17  | 3.18×10⁻⁴           | 2.46×10⁻³          | 7.75× | +118σ   |
+| 0.18  | 3.89×10⁻⁴           | 2.75×10⁻³          | 7.06× | +119σ   |
+| 0.20  | (in jls)            | (in jls)           | 4.90× | +107σ   |
+| 0.30  | 6.50×10⁻³           | 7.60×10⁻³          | 1.17× | +13σ    |
+| 0.40  | 1.25×10⁻²           | 1.36×10⁻²          | 1.09× | +7σ     |
+| 0.50  | 1.20×10⁻²           | 2.10×10⁻²          | 1.76× | +48σ    |
+
+The ratio crosses 10× between φ_max=0.15 (14.75×) and φ_max=0.16 (9.88×).  The
+non-monotonicity at φ_max=0.40 → 0.50 is BayesOpt finding different basins; both are deep
+in the aliasing-floor regime where the comparison is less informative anyway (PCRB is
+mis-specified at multimodal posteriors).
+
+## Original purpose (φ_max = 0.5)
+
+This folder originally tested the §7.6 paper prediction:
 
 > "At φ_max → Φ_0/2 (uninformative prior) the support spans many fringes and four epochs are
 > too few for either a fixed or an adaptive schedule to resolve them; both joint-DP and
 > joint-PCRB converge to comparable aliasing-floor MSE and the adaptive margin shrinks."
+
+Confirmed: at φ_max=0.5 the ratio is 1.76× (versus 11.3× at φ_max=0.1).  The full sweep
+above generalizes that result and pins down the 10× operating range.
 
 ## Layout
 
