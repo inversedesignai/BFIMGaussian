@@ -4,13 +4,20 @@ The most impactful configuration the framework enables.
 
 ## Goal
 
-Demonstrate that **stochastic batched DP rescues the joint-DP advantage from the
-aliasing-floor regime where exact Bellman is impossible**.  Specifically, at
-`φ_max = 0.5` (the "uninformative" prior limit where the existing exact-DP joint-DP / PCRB
-ratio is only 1.76× at K=4) and at horizons `K_total = 16, 32` (well beyond the
-exact-DP ceiling), with `dim(c) > 100` continuous parametric hardware, push the
-joint-DP / PCRB MSE ratio to **≥ 50× at K_total = 16** and **≥ 200× at K_total = 32**,
-optimized via stochastic-gradient descent over the full hardware vector.
+Demonstrate that **stochastic batched DP beats the canonical adaptive-QPE baseline
+(geometric-Ramsey with Higgins-Wiseman feedback) at long horizons in the wide-prior
+aliasing-floor regime**.  Specifically, at `φ_max = 0.5` (the "uninformative" prior limit
+where the existing exact-DP joint-DP advantage collapses to 1.76× at K=4) and at horizons
+`K_total = 16, 32` (well beyond the exact-DP ceiling), with `dim(c) > 100` continuous
+parametric hardware optimized via stochastic-gradient descent, push the
+**SBDP / Higgins-Wiseman MSE ratio to ≥ 5× at K_total = 16 and ≥ 10× at K_total = 32**.
+
+The Higgins-Wiseman protocol — geometric delays `τ_k = τ_max / 2^(k-1)` with feedback
+phase chosen at each step from the current posterior mean — is the gold-standard
+adaptive baseline in the quantum metrology literature (Berry-Wiseman 2000;
+Higgins-Berry-Wiseman-Pryde 2007 Nature).  Beating it by ≥5× at long horizon is the
+substantive headline; beating PCRB-extended (the non-adaptive baseline) by orders of
+magnitude follows trivially and is reported as a secondary number.
 
 ## Why this configuration is the most impactful
 
@@ -34,8 +41,19 @@ within each K_batch.  If the receding-horizon truncation is tolerable (which we 
 K_batch=4 since each batch can complete a coarse-to-fine localization arc), SBDP should
 reproduce most of the long-horizon advantage.
 
-**Expected headline**: ratio at K_total=16 is **≥ 50×**, at K_total=32 is **≥ 200×**.
-Both **at the φ_max where exact DP gives only 1.76×**.
+**Why SBDP should beat Higgins-Wiseman specifically at φ_max=0.5**: HW's geometric
+schedule starts at the longest delay `τ_max` to read the coarsest phase bit.  At
+φ_max=0.5 the prior spans ~1.85 Ramsey fringes at τ_max, so HW's first measurement is
+nearly aliased: `p(y=1)` is almost the same value at both fringes, contributing little
+bit-level information.  HW then halves `τ` and re-measures, but several halvings are
+"wasted" before τ becomes short enough to disambiguate.  Bellman-optimal policy, by
+contrast, starts at a SHORT τ to disambiguate the multimodal prior, then transitions to
+long τ for refinement within the selected fringe.  SBDP at K_batch=4 should reproduce
+this short-then-long structure within each batch, while HW cannot.
+
+**Expected SBDP / HW ratio**: ≥ 5× at K_total=16, ≥ 10× at K_total=32.  Beating PCRB-
+extended (non-adaptive) follows trivially with much larger ratios (≥ 100× expected),
+reported as a secondary check.
 
 ### Claim 2: First long-horizon Bellman-optimal joint co-design
 
@@ -126,8 +144,10 @@ parallelism on samples: ~1–1.5 hours.  T=200: ~10–14 days.
 - Paired-MC comparison vs all five baselines at the same K_total=16, paired x_true seeds
 - Headline ratio table
 
-**Headline target**: ratio MSE_PCRB / MSE_SBDP ≥ 50× at K_total=16.  If this lands, the
-paper has its central claim.
+**Headline target**: **MSE_HW / MSE_SBDP ≥ 5× at K_total=16** (vs Higgins-Wiseman, the
+canonical adaptive QPE baseline).  Secondary: MSE_PCRB / MSE_SBDP ≥ 100× (vs the
+non-adaptive baseline).  The HW comparison is the substantive headline; PCRB the
+sanity check.
 
 ### Phase 3: Long-horizon scaling, K_total = 32 (~3 weeks, 380 cores)
 
@@ -146,8 +166,9 @@ paper has its central claim.
 - Final c** and final V_batched(c**) at φ_max=0.5, K_total=32
 - Paired-MC comparison vs baselines at K_total=32
 
-**Headline target**: ratio MSE_PCRB / MSE_SBDP ≥ 200× at K_total=32.  Demonstrates that
-SBDP's advantage grows with horizon, not saturates.
+**Headline target**: **MSE_HW / MSE_SBDP ≥ 10× at K_total=32**.  Demonstrates that SBDP's
+advantage *grows* with horizon (5× at K=16 → 10× at K=32), rather than saturating.
+Secondary: MSE_PCRB / MSE_SBDP ≥ 500× (the non-adaptive comparison continues to widen).
 
 ### Phase 4: Variance-reduction & ablation studies (~1 week)
 
@@ -251,18 +272,21 @@ The project succeeds if **all three** are achieved:
 
 | # | Criterion | Threshold |
 |---|---|---:|
-| 1 | SBDP K=16 ratio at φ=0.5 vs PCRB | ≥ 50× |
-| 2 | SBDP K=32 ratio at φ=0.5 vs PCRB | ≥ 200× |
+| 1 | SBDP K=16 ratio at φ=0.5 vs **Higgins-Wiseman** | ≥ 5× |
+| 2 | SBDP K=32 ratio at φ=0.5 vs **Higgins-Wiseman** | ≥ 10× |
 | 3 | dim(c)=220 SGD converges (per-layer ablation shows Layer 6 moves) | qualitative |
+| 4 | (Secondary) SBDP K=16 ratio vs PCRB-extended | ≥ 100× |
 
-If only #1 and #3 succeed but #2 saturates earlier, the paper is still strong: the
+If only #1, #3, #4 succeed but #2 saturates earlier, the paper is still strong: the
 saturation point itself is publishable as "SBDP saturates at K_total ≈ X for this
-problem class."
+problem class against the canonical adaptive baseline."
 
-If only #1 succeeds: paper still publishable but at lower-tier venue (PR Applied).
+If only #1 and #4 succeed: paper still publishable but at lower-tier venue (PR Applied).
 
 If even #1 fails: re-run at φ_max=0.3 (intermediate prior, partly aliased) where the
-opportunity is smaller but the demonstration is cleaner.
+opportunity is smaller but the demonstration is cleaner.  At φ_max=0.3 the SBDP/HW gap
+should be larger because the aliasing-disambiguation advantage of Bellman is more
+pronounced relative to the easy unimodal-localization regime that HW handles well.
 
 ## What this paper would say
 
@@ -270,9 +294,10 @@ opportunity is smaller but the demonstration is cleaner.
 stochastic batched dynamic programming"*
 
 **One-sentence summary**: *"We extend exact-Bellman joint hardware-policy co-design from
-K=4 epochs to K=32 via stochastic batched DP, demonstrating an N×-fold reduction in
-deployed Bayesian MSE on a 220-dimensional superconducting-qubit flux sensor design at
-the wide-prior aliasing-floor regime where existing methods are K-limited."*
+K=4 epochs to K=32 via stochastic batched DP, beating the canonical Higgins-Wiseman
+adaptive QPE protocol by 5–10× on deployed Bayesian MSE for a 220-dimensional
+superconducting-qubit flux sensor design at the wide-prior aliasing-floor regime where
+existing exact methods are K-limited."*
 
 **Likely venue**: PRX Quantum (best fit), NMI (high-dim ML methodology angle), or PRX
 (broader physics).  The (φ=0.5, K=16-32, dim(c)=220) combination is striking enough for
