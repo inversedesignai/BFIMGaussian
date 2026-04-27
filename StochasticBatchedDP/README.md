@@ -1,71 +1,115 @@
 # Stochastic Batched DP
 
-A scaling strategy for joint hardware-policy co-design when exact Bellman dynamic programming is
-tractable only up to a horizon ceiling `K_batch` but the deployment horizon `K_total` is much
-larger.  Combines:
+A standalone research project on a new framework for joint hardware-policy co-design at long horizons.  Companion to (but logically independent of) the joint-DP work in the parent BFIMGaussian repository; targeted at its own paper.
 
-1. **Batched DP**: instead of solving exact Bellman for the full horizon `K_total` (intractable
-   due to memoization blow-up), solve it in `n` consecutive batches of length `K_batch`, each
-   starting from the previous batch's terminal belief.
+## What this project is
 
-2. **Stochastic outer optimization**: instead of enumerating all reachable batch-boundary
-   beliefs (curse of dimensionality at multimodal posteriors), sample a small set of
-   trajectories under the current policy, evaluate each per-sample value via fresh Bellman
-   solves, and use the empirical mean as an unbiased stochastic estimate.  Take SGD-style
-   steps on the outer hardware parameter from the per-sample envelope-theorem gradients.
+Joint hardware-policy co-design via exact Bellman dynamic programming hits a horizon ceiling
+of `K_total ≈ 4–5` because the count-tuple memoization grows superlinearly in the horizon.
+This project introduces **stochastic batched dynamic programming** (SBDP), a scaling
+framework that pushes the tractable joint-DP horizon to arbitrary `K_total` while
+preserving exactness of inner Bellman backups within each batch and unbiasedness of
+per-sample outer-hardware gradients.
 
-Together: a method that extends exact-inner-DP joint hardware-policy co-design from
-`K_total ≈ 4` to arbitrary horizons, with unbiased gradients per sampled trajectory and a
-linear cost in sample size rather than in reachable-belief count.
+The framework combines four ingredients:
+
+1. **Batched DP**: decompose `K_total = n × K_batch` into `n` consecutive batches of length
+   `K_batch`, each a tractable exact Bellman solve from its predecessor's terminal belief.
+
+2. **Stochastic outer optimization**: at each outer-gradient step, sample `M` trajectories
+   under the current batched policy; bypass the exhaustive enumeration over reachable
+   batch-boundary beliefs.
+
+3. **Per-sample sharp-max envelope-theorem gradients**: each sampled batch's local Bellman
+   gradient is exact, no smoothing temperature.
+
+4. **Per-batch advantage variance reduction**: the score-function term in the REINFORCE
+   identity is paired per batch with a remaining-horizon-value baseline, reducing variance
+   while preserving unbiasedness.
+
+The resulting outer-hardware gradient is unbiased for the batched-policy value and has
+wall-clock cost linear in `M` and `n`, not in the reachable-belief count.
+
+## Why this is publishable on its own
+
+To our knowledge the specific combination of (continuous physical hardware as outer
+variable) × (exact Bellman dynamic programming as inner solver in each batch) ×
+(stochastic Monte-Carlo sampling of batch-boundary trajectories) × (sharp-max
+envelope-theorem gradients) × (per-batch advantage baselines) is not present in the
+literature.  Pieces exist separately:
+
+- **Stochastic Dual Dynamic Programming** (Pereira-Pinto 1991): scenario-sampled
+  forward-backward sweeps for stochastic linear programs.  Closest cousin in spirit, but
+  for convex programs with cutting-plane value approximations, not POMDPs with exact
+  memoized Bellman.
+- **Sequential Bayesian experimental design** (Huan-Marzouk 2013, Long-Marzouk-Wang
+  successors): MC sampling of belief trajectories with stochastic-gradient outer updates.
+  Inner policy is typically rung-3 myopic info-gain, not exact Bellman.
+- **Deep Adaptive Design** (Foster-Ivanova-Rainforth 2021): variational lower bound on
+  expected info gain optimized via SGD over an NN policy.  Different inner solver.
+- **PBVI / SARSOP / Perseus**: sample-based POMDP solvers.  Sampling at policy-inference
+  time, not at outer-hardware-gradient time.
+- **Differentiable DP** (Mensch-Blondel 2018, Amos-Kolter 2017, Domke 2012):
+  gradient-through-DP for outer parameter learning.  MDPs / structured prediction, not
+  POMDPs with sample-based belief enumeration.
 
 ## Files
 
-- `README.md` — this file (high-level overview)
-- `StochasticBatchedDP.tex` — formal derivation and algorithm
-- `StochasticBatchedDP.pdf` — compiled article
+- `README.md` — this file (project overview, scope, plan)
+- `StochasticBatchedDP.tex` — formal article: setup, full gradient derivation including
+  detailed n>2 case, algorithm, convergence, connections to existing methods
+- `StochasticBatchedDP.pdf` — compiled article (15 pages)
 
-## Idea in one paragraph
+Forthcoming: experimental modules, scqubit case-study scripts, baseline implementations,
+results.
 
-Exact Bellman DP for POMDPs with a reachable-belief memo grows superlinearly in the horizon
-`K`; for many problems this caps tractable `K` at 4-5 epochs.  *Batched DP* breaks the long
-horizon into batches of length `K_batch`, each one a fresh exact-Bellman solve from its
-predecessor's terminal belief; this is locally Bellman-optimal, globally a receding-horizon
-approximation.  The new bottleneck moves from "memo size" to "the number of distinct
-batch-boundary beliefs", which is essentially the same blow-up under another name.
-*Stochastic batched DP* dispenses with enumeration: at each outer optimization step we
-sample `M` trajectories under the current policy, solve a fresh `K_batch` Bellman from each
-sample's terminal belief, and aggregate `M` envelope-theorem-exact gradients into one SGD
-step.  The outer-hardware optimum found this way is a stationary point of the true batched
-value, with statistical noise scaling as `1/√M` and the per-sample gradient bias-free for
-the *sampled* sub-problem.
+## Demonstration target
 
-## What this generalises
+The main demonstration application is the frequency-tunable transmon flux sensor of
+Danilin, Nugent, and Weides (arXiv:2211.08344v4).  This is the same physical device as in
+the parent BFIMGaussian project's joint-DP case study, chosen here because (a) the
+existing exact-Bellman infrastructure provides a clean baseline at `K_total = K_batch =
+4`; (b) the Ramsey likelihood and count-tuple sufficient statistic match the SBDP
+framework cleanly; (c) the wide-prior multimodal regime (`φ_max → Φ_0/2`) is exactly the
+regime where exact DP fails and SBDP's long-horizon disambiguation should shine.
 
-The framework specialises:
-- **NN training**: minibatch SGD on a sum over a finite (huge) training set is an unbiased
-  estimator of full-batch gradient.  Same logic applies here, with "training points"
-  replaced by "reachable batch-boundary beliefs" and "loss" replaced by "exact Bellman value".
-- **Stochastic Dual Dynamic Programming (SDDP)**: scenario-sampled forward-backward sweeps
-  for stochastic programs, classical in operations research.  This is the structurally
-  closest cousin, but SDDP works on convex stochastic programs with cutting-plane value
-  approximations, while the construction here works on POMDPs with exact memoized Bellman.
-- **Sample-based POMDP solvers** (POMCP, DESPOT): Monte Carlo tree search over belief
-  space; here the sampling is at *outer-hardware* gradient time rather than at policy
-  inference time.
+## Scope, in three ambition tiers
 
-## What is new (to our knowledge)
+Choose one for the standalone paper:
 
-The specific combination of (i) continuous physical hardware as outer optimization
-variable, (ii) exact Bellman dynamic programming as inner solver within each batch, (iii)
-stochastic Monte-Carlo sampling of batch-boundary trajectories to bypass the
-reachable-belief enumeration, and (iv) sharp-max envelope-theorem gradients producing
-unbiased per-sample outer-hardware gradients, is not present in the literature as a single
-framework.  Pieces of it have been used in adjacent communities: SDDP for stochastic
-programming, simulation-based sequential OED for adaptive design, deep RL for
-NN-policy POMDPs, end-to-end optical co-design for hardware-NN coupled systems.  The
-synthesis is the contribution.
+### Tier 1: Long-horizon Bellman-optimal quantum metrology (cleanest)
 
-## Pseudocode
+- Demonstrate SBDP at `K_total ∈ {8, 16, 32}` with `K_batch = 4` on the scqubit problem.
+- Compare against PCRB-extended schedule, geometric-Ramsey + Higgins feedback,
+  particle-filter myopic information gain, and a small deep-RL policy.
+- Headline: SBDP achieves `~N×` MSE reduction over the best classical baseline at
+  `K_total = N`.
+- Likely home: PRX Quantum, NMI.
+
+### Tier 2: Joint hardware-policy co-design at long horizons with high-dim continuous hardware
+
+- Tier 1 plus: extend the action set with adaptive measurement basis `φ_ref`
+  (canonical Higgins-Wiseman feedback dimension, `R = 2`).
+- Extend the design vector `c` to ~30 dims via multi-junction SQUID asymmetry (~5 dims),
+  multi-mode readout (~10 dims), bias-line filter parameters (~5 dims), and
+  full-physics geometric/coupling unlocks (~3 dims).  All with meaningful physics impact
+  (see physics-impact analysis in the parent project notes).
+- Headline: first long-horizon Bellman-optimal hardware-policy co-design with continuous
+  ~30-dim hardware.
+- Likely home: PRX, NMI, or JMLR with a methods focus.
+
+### Tier 3: SBDP as a general-purpose POMDP scaling primitive
+
+- Tier 2 plus: demonstrate the framework on at least one additional application
+  (e.g., adaptive radar tracking with continuous beam-pattern parameters, or adaptive
+  microscopy).
+- Add a theoretical convergence analysis (variance scaling, approximation gap to full
+  exact `K_total` Bellman, sample complexity bounds).
+- Headline: SBDP as a unifying scaling framework for joint hardware-policy co-design across
+  the relaxation hierarchy.
+- Likely home: NMI, JMLR, or possibly Nature Communications.
+
+## Algorithm
 
 ```
 Stochastic Batched DP for joint outer-c, inner-π optimization
@@ -75,7 +119,7 @@ Input:
   K_total : total horizon
   K_batch : per-batch horizon (chosen so exact Bellman is tractable)
   M : sample size per gradient step
-  η : learning rate
+  η : Adam learning rate
   T_outer : number of outer iterations
 
 Initialize c ← c_0
@@ -83,20 +127,19 @@ Initialize c ← c_0
 for t = 1 ... T_outer:
     g ← 0
     for m = 1 ... M (parallel):
-        # Sample one trajectory of length K_total under current c
+        # Sample one trajectory of length K_total under the batched policy at current c
         b ← prior
+        record actions, observations, beliefs along the way
         for batch_id = 1 ... n = K_total / K_batch:
             (V_batch, π_batch, memo_batch) ← solve_bellman(b, K_batch, c)
             for k = 1 ... K_batch:
                 a ← π_batch(b)
                 y ← sample_observation(b, a, c, x ~ b)
                 b ← bayes_update(b, a, y, c)
-        # The per-sample value
+        # Per-sample value and gradient
         V_m ← terminal_reward(b, c)
-        # Per-sample gradient via envelope theorem
-        # (freeze argmax actions and observation argmaxes along trajectory,
-        #  reverse-mode AD through frozen recursion)
-        g_m ← envelope_grad(V_m, c, frozen_choices)
+        g_m ← (pathwise via reverse-mode AD over K_total belief-update chain)
+              + Σ_j (advantage A_j × per-batch score function at c)
         g += g_m
     g /= M
     c ← Adam_step(c, g, η)
@@ -104,25 +147,49 @@ for t = 1 ... T_outer:
 return c
 ```
 
-## Cost summary
+The advantage `A_j` and pathwise term are derived in detail in `StochasticBatchedDP.tex`,
+§5.
 
-| operation | cost |
+## Compute budget (rough estimates)
+
+For the scqubit demonstration on existing hardware (~380 cores):
+
+| experiment | wall-clock |
 |---|---|
-| per Bellman solve at K_batch | one tractable DP solve (problem-dependent) |
-| per trajectory sample | n_batches × Bellman solve = O(K_total / K_batch) Bellman solves |
-| per outer gradient step | M × per-trajectory cost (parallelizable in M) |
-| total at T_outer steps | T_outer × M × n_batches × K_batch_solve |
+| SBDP `n=4` `K_total=16`, `M=20`, `K_phi=128`, `T=500`, narrow prior | ~3 days |
+| SBDP `n=8` `K_total=32`, `M=20`, `K_phi=128`, `T=500`, narrow prior | ~7 days |
+| SBDP `n=16` `K_total=64`, `M=30`, `K_phi=64`, `T=500`, narrow prior | ~10 days |
+| Tier 2 with `dim(c) = 30` | ~4× the above (larger AD graph) |
+| Wide prior (`φ_max = 0.5`) | infeasible at K_phi=128 without further engineering |
 
-The wall-clock scales linearly in M and `n_batches`, not in the reachable-belief count.
-For typical problems where one K_batch Bellman takes ~30 s and M = 10, T_outer = 500,
-n_batches = 4, total wall-clock is ~17 hours on a single node, dominated by the
-M × n_batches Bellman solves per gradient step.
+A first 1-day feasibility test at `K_total = 8`, `M = 10` suffices to confirm the
+framework works numerically before committing to the larger experiments.
 
-## Convergence
+## Baselines for comparison
 
-Standard SGD theory applies.  With unbiased per-sample gradients and bounded variance,
-the iterates converge to a stationary point of the batched-value objective at the standard
-1/√t rate.  The key requirement is that each per-sample gradient is unbiased for the
-trajectory's contribution to V_batched.  This holds because the sharp-max envelope theorem
-makes the inner Bellman backup gradient exact at the optimal argmax, and the sampling
-distribution for the trajectory is exactly the policy-induced distribution under current c.
+For the scqubit demonstration:
+
+1. **Exact `K_total = 4` joint-DP** (the existing parent-project headline; serves as the
+   baseline at the joint-DP horizon ceiling).
+2. **PCRB-extended schedule** at the same `K_total`: `(τ_max, n_max)^K_total` at the
+   PCRB-optimal `c`.  The single-level Fisher-information baseline.
+3. **Geometric-Ramsey with Higgins-Wiseman feedback** at the same `K_total`: classical
+   adaptive QPE baseline.  Requires `φ_ref` in the action space.
+4. **Particle-filter myopic information gain** (Granade-Ferrie 2012 style): rung-3 myopic
+   adaptive baseline.
+5. **Deep-RL policy** (small LSTM, PPO or REINFORCE training): neural-network adaptive
+   baseline.  Tests the "hardware-light pathology" claim (cf. paper §5).
+
+Each baseline produces an MSE on the same paired-MC deployment; ratios against SBDP
+provide the headline numbers.
+
+## Convergence (sketch; see `.tex` §6)
+
+Standard SGD theory applies.  With unbiased per-sample gradients and bounded variance, the
+iterates converge in expectation to a stationary point of `V_batched(c)` at rate
+`O(1/√T)`.  The estimator variance scales as `O(σ²/M)` where `σ²` depends on the spread of
+batch-boundary belief values; advantage baselines reduce `σ²` substantially.  No smoothing
+temperature anywhere; the only approximation is the receding-horizon truncation of the
+batched policy relative to the (intractable) full `K_total` Bellman, and even that
+vanishes in the `n → 1` limit (where SBDP recovers exact joint-DP at the inner Bellman
+horizon ceiling).
