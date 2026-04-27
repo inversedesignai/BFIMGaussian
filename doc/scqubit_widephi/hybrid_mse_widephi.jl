@@ -35,6 +35,7 @@ using .ScqubitModel, .Belief, .Bellman, .BellmanThreaded, .Gradient, .JointOpt, 
 
 const PHI_MAX     = parse(Float64, get(ENV, "PHI_MAX", "0.5"))
 const PHI_TAG     = "phi$(round(Int, PHI_MAX*100))"
+const CE_TAG      = get(ENV, "CE_TAG", "MI")  # tag for output naming (e.g. "FI", "MI")
 const K_DP        = 4
 const K_TOTAL_LIST = parse.(Int, split(get(ENV, "K_TOTALS", "4,5,6,8,10"), ","))
 const K_PHI       = parse(Int, get(ENV, "K_PHI", "256"))
@@ -69,21 +70,25 @@ t = time()
 @printf("  V_adaptive(K=%d) = %.6e   memo=%d   %.1fs\n", K_DP, V1_dp, length(memo1), time()-t)
 flush(stdout)
 
-# Per-shot Fisher information J_F(phi, tau, c, ωd) = (dP/dphi)^2 / [P(1-P)]
-function J_F(phi::Float64, tau::Float64, c::ScqubitParams, ωd::Float64)
-    p = clamp(P1_ramsey(phi, tau, c, ωd), 1e-300, 1 - 1e-16)
-    dp = ForwardDiff.derivative(φ -> P1_ramsey(φ, tau, c, ωd), phi)
-    dp^2 / (p * (1 - p))
+# Single-shot binary entropy at point estimate (Phi_MI rung-2 specialization).
+# For Bernoulli observation y at known phi=phi_hat, H(p) is maximized at p=0.5;
+# the oracle's argmax-expected-information-gain action under Phi_MI reduces to
+# argmax binary entropy of the predicted outcome at phi_hat.  Distinct from
+# Fisher-info-based CE (which weights by 1/[p(1-p)]) when the slope dp/dphi is
+# small but p is far from 0.5.
+function H_binary_at(phi::Float64, tau::Float64, c::ScqubitParams, ωd::Float64)
+    p = clamp(P1_ramsey(phi, tau, c, ωd), 1e-12, 1 - 1e-12)
+    -p * log(p) - (1 - p) * log1p(-p)
 end
 
-# Certainty-equivalent action: argmax over (j, ℓ) of n_ℓ * J_F(phi_hat, τ_j, c, ωd)
+# Certainty-equivalent action under Phi_MI: argmax_{(j,ℓ)} n_ℓ * H_binary(p(phi_hat, τ_j))
 function ce_action(phi_hat::Float64, c::ScqubitParams, ωd::Float64,
                    grid_local::Main.Belief.Grid{J, L}) where {J, L}
     best_j = 1; best_ℓ = 1; best_val = -Inf
     for j in 1:J, ℓ in 1:L
         τ = grid_local.tau_grid[j]
         n = grid_local.n_grid[ℓ]
-        v = n * J_F(phi_hat, τ, c, ωd)
+        v = n * H_binary_at(phi_hat, τ, c, ωd)
         if v > best_val
             best_val = v; best_j = j; best_ℓ = ℓ
         end
@@ -185,7 +190,7 @@ end
 println("="^72); flush(stdout)
 
 for r in results
-    open(joinpath(@__DIR__, "results", "hybrid_mse_$(PHI_TAG)_K$(r.K_total).jls"), "w") do io
+    open(joinpath(@__DIR__, "results", "hybrid_mse_$(CE_TAG)_$(PHI_TAG)_K$(r.K_total).jls"), "w") do io
         serialize(io, (; r..., PHI_MAX, c_joint=c1, c_pcrb=c2,
                          omega_d_joint=ωd1, omega_d_pcrb=ωd2,
                          K_PHI, N_MC, timestamp=now()))
