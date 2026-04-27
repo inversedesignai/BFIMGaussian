@@ -1,0 +1,11 @@
+bayesopt_joint_widephi.jl  (phi_max = 0.5)
+Threads: 100
+Config: PHI_MAX=0.17  K_EPOCHS=4  K_PHI=256  N_EVAL=100  N_INIT=10  SEED=42
+Box:
+  f_q_max  ∈ [3.00, 12.00] GHz
+  E_C/h    ∈ [0.15, 0.40] GHz
+  κ        ∈ [0.10, 5.00] MHz
+  Δ_qr     ∈ [0.80, 5.00] GHz
+  ω_d/(2π) ∈ [1.00, 12.00] GHz   (free)
+
+Launching joint-DP 5-D BOpt at PHI_MAX=0.17 with 100 evals (10 random init)...

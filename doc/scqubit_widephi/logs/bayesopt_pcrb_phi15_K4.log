@@ -1,0 +1,243 @@
+bayesopt_pcrb_widephi.jl  (phi_max = 0.5)
+Threads: 4
+Config: PHI_MAX=0.15  K_EPOCHS=4  K_PHI=256  N_EVAL=100  N_INIT=10  SEED=42  fixed_schedule=[(10, 2), (10, 2), (10, 2), (10, 2)]
+
+Launching PCRB 5-D BOpt at PHI_MAX=0.15 with 100 evals (10 random init)...
+[pcrb_widephi   1] log_JP=+20.247765  c=(4.6875, 0.2281, 4.6937 MHz, 2.6375)  ω_d/(2π)=7.1875 GHz  0.2s
+[pcrb_widephi   2] log_JP=+21.479962  c=(9.1875, 0.3531, 2.2437 MHz, 4.7375)  ω_d/(2π)=1.6875 GHz  0.0s
+[pcrb_widephi   3] log_JP=+21.600879  c=(11.4375, 0.1656, 3.4688 MHz, 1.5875)  ω_d/(2π)=4.4375 GHz  0.0s
+[pcrb_widephi   4] log_JP=+21.024618  c=(6.9375, 0.2906, 1.0188 MHz, 3.6875)  ω_d/(2π)=9.9375 GHz  0.0s
+[pcrb_widephi   5] log_JP=+20.647689  c=(5.8125, 0.1969, 1.6313 MHz, 3.1625)  ω_d/(2π)=11.3125 GHz  0.0s
+[pcrb_widephi   6] log_JP=+21.593336  c=(10.3125, 0.3219, 4.0812 MHz, 1.0625)  ω_d/(2π)=5.8125 GHz  0.0s
+[pcrb_widephi   7] log_JP=+21.223234  c=(8.0625, 0.2594, 0.4062 MHz, 4.2125)  ω_d/(2π)=3.0625 GHz  0.0s
+[pcrb_widephi   8] log_JP=+19.674950  c=(3.5625, 0.3844, 2.8563 MHz, 2.1125)  ω_d/(2π)=8.5625 GHz  0.0s
+[pcrb_widephi   9] log_JP=+19.827512  c=(3.8438, 0.2672, 2.3969 MHz, 3.5562)  ω_d/(2π)=4.0938 GHz  0.0s
+[pcrb_widephi  10] log_JP=+21.323071  c=(8.3438, 0.3922, 4.8469 MHz, 1.4563)  ω_d/(2π)=9.5938 GHz  0.0s
+[pcrb_widephi  11] log_JP=+19.237652  c=(3.0000, 0.4000, 0.1000 MHz, 0.8000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  12] log_JP=+19.237755  c=(3.0000, 0.4000, 0.1000 MHz, 5.0000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  13] log_JP=+19.092261  c=(3.0000, 0.1500, 5.0000 MHz, 5.0000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  14] log_JP=+19.079425  c=(3.0000, 0.1500, 5.0000 MHz, 0.8000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  15] log_JP=+19.237085  c=(3.0000, 0.4000, 5.0000 MHz, 5.0000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  16] log_JP=+21.945777  c=(12.0000, 0.4000, 0.1000 MHz, 0.8000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  17] log_JP=+19.092261  c=(3.0000, 0.1500, 5.0000 MHz, 5.0000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  18] log_JP=+21.775044  c=(12.0000, 0.1500, 0.1000 MHz, 5.0000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  19] log_JP=+19.093683  c=(3.0000, 0.1500, 0.1000 MHz, 0.8000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  20] log_JP=+19.204198  c=(3.0000, 0.3136, 5.0000 MHz, 0.8000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  21] log_JP=+19.093942  c=(3.0000, 0.1500, 0.1000 MHz, 5.0000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  22] log_JP=+19.231952  c=(3.0000, 0.4000, 5.0000 MHz, 0.8000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  23] log_JP=+19.237085  c=(3.0000, 0.4000, 5.0000 MHz, 5.0000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  24] log_JP=+21.294023  c=(12.0000, 0.1500, 5.0000 MHz, 0.8000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  25] log_JP=+19.093683  c=(3.0000, 0.1500, 0.1000 MHz, 0.8000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  26] log_JP=+21.294023  c=(12.0000, 0.1500, 5.0000 MHz, 0.8000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  27] log_JP=+21.763936  c=(12.0000, 0.1500, 0.1000 MHz, 0.8000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  28] log_JP=+21.749086  c=(12.0000, 0.1500, 5.0000 MHz, 5.0000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  29] log_JP=+19.237755  c=(3.0000, 0.4000, 0.1000 MHz, 5.0000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  30] log_JP=+21.950786  c=(12.0000, 0.4000, 0.1000 MHz, 5.0000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  31] log_JP=+19.237652  c=(3.0000, 0.4000, 0.1000 MHz, 0.8000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  32] log_JP=+19.079425  c=(3.0000, 0.1500, 5.0000 MHz, 0.8000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  33] log_JP=+19.231952  c=(3.0000, 0.4000, 5.0000 MHz, 0.8000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  34] log_JP=+21.939038  c=(12.0000, 0.4000, 5.0000 MHz, 5.0000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  35] log_JP=+19.093942  c=(3.0000, 0.1500, 0.1000 MHz, 5.0000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  36] log_JP=+19.071978  c=(3.0000, 0.1500, 2.8615 MHz, 0.8000)  ω_d/(2π)=6.2299 GHz  0.0s
+[pcrb_widephi  37] log_JP=+19.086330  c=(3.0000, 0.1500, 0.1000 MHz, 0.8000)  ω_d/(2π)=6.4878 GHz  0.0s
+[pcrb_widephi  38] log_JP=+19.164879  c=(3.0000, 0.2692, 2.2616 MHz, 0.8000)  ω_d/(2π)=7.5720 GHz  0.0s
+[pcrb_widephi  39] log_JP=+19.185308  c=(3.0000, 0.2840, 2.6724 MHz, 2.2777)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  40] log_JP=+19.067686  c=(3.0000, 0.1500, 5.0000 MHz, 0.8000)  ω_d/(2π)=6.4392 GHz  0.0s
+[pcrb_widephi  41] log_JP=+19.110382  c=(3.0000, 0.1500, 0.1000 MHz, 5.0000)  ω_d/(2π)=6.4561 GHz  0.0s
+[pcrb_widephi  42] log_JP=+19.129626  c=(3.0000, 0.2529, 0.1000 MHz, 2.7035)  ω_d/(2π)=8.5509 GHz  0.0s
+[pcrb_widephi  43] log_JP=+19.083273  c=(3.0000, 0.1500, 2.1040 MHz, 2.7098)  ω_d/(2π)=6.9173 GHz  0.0s
+[pcrb_widephi  44] log_JP=+19.108293  c=(3.0000, 0.1500, 0.1000 MHz, 2.8707)  ω_d/(2π)=3.9554 GHz  0.0s
+[pcrb_widephi  45] log_JP=+19.093922  c=(3.0000, 0.1500, 0.1000 MHz, 2.9136)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  46] log_JP=+19.091207  c=(3.0000, 0.1500, 5.0000 MHz, 2.8748)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  47] log_JP=+19.236673  c=(3.0000, 0.4000, 5.0000 MHz, 2.8951)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  48] log_JP=+19.234816  c=(3.0000, 0.4000, 2.5325 MHz, 0.8000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  49] log_JP=+21.723435  c=(12.0000, 0.4000, 5.0000 MHz, 0.8000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  50] log_JP=+19.091072  c=(3.0000, 0.1500, 5.0000 MHz, 2.7433)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  51] log_JP=+19.237747  c=(3.0000, 0.4000, 0.1000 MHz, 2.8969)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  52] log_JP=+19.237055  c=(3.0000, 0.4000, 3.3429 MHz, 2.9753)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  53] log_JP=+19.189054  c=(3.0000, 0.2760, 0.1000 MHz, 0.8000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  54] log_JP=+19.152801  c=(3.0000, 0.2669, 0.1000 MHz, 5.0000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  55] log_JP=+19.092240  c=(3.0000, 0.1500, 2.5524 MHz, 2.3662)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  56] log_JP=+19.244360  c=(3.0000, 0.4000, 0.1000 MHz, 0.8000)  ω_d/(2π)=6.1431 GHz  0.0s
+[pcrb_widephi  57] log_JP=+19.233159  c=(3.0000, 0.4000, 5.0000 MHz, 0.8000)  ω_d/(2π)=6.2378 GHz  0.0s
+[pcrb_widephi  58] log_JP=+19.154968  c=(3.0000, 0.2701, 5.0000 MHz, 4.0892)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  59] log_JP=+19.237747  c=(3.0000, 0.4000, 0.1000 MHz, 2.9890)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  60] log_JP=+19.232253  c=(3.0000, 0.4000, 0.1000 MHz, 3.8627)  ω_d/(2π)=6.1222 GHz  0.0s
+[pcrb_widephi  61] log_JP=+19.096206  c=(3.0000, 0.1500, 5.0000 MHz, 3.9746)  ω_d/(2π)=6.2656 GHz  0.0s
+[pcrb_widephi  62] log_JP=+19.204857  c=(3.0000, 0.3100, 5.0000 MHz, 2.6673)  ω_d/(2π)=6.0078 GHz  0.0s
+[pcrb_widephi  63] log_JP=+19.140512  c=(3.0000, 0.2381, 3.1327 MHz, 0.8000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  64] log_JP=+19.173533  c=(3.0000, 0.2827, 0.1000 MHz, 0.8000)  ω_d/(2π)=2.9252 GHz  0.0s
+[pcrb_widephi  65] log_JP=+19.223160  c=(3.0000, 0.4000, 5.0000 MHz, 5.0000)  ω_d/(2π)=6.2210 GHz  0.0s
+[pcrb_widephi  66] log_JP=+19.236710  c=(3.0000, 0.4000, 5.0000 MHz, 2.9975)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  67] log_JP=+19.196578  c=(3.0000, 0.2775, 2.5452 MHz, 5.0000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  68] log_JP=+19.092996  c=(3.0000, 0.1500, 2.8574 MHz, 5.0000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  69] log_JP=+20.280712  c=(4.8458, 0.1500, 0.1000 MHz, 5.0000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  70] log_JP=+19.237487  c=(3.0000, 0.4000, 2.0610 MHz, 5.0000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  71] log_JP=+19.176619  c=(3.0000, 0.2736, 0.1000 MHz, 3.7623)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  72] log_JP=+19.093016  c=(3.0000, 0.1500, 2.7990 MHz, 5.0000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  73] log_JP=+19.123152  c=(3.0000, 0.2404, 5.0000 MHz, 5.0000)  ω_d/(2π)=7.3096 GHz  0.0s
+[pcrb_widephi  74] log_JP=+19.237371  c=(3.0000, 0.4000, 2.4818 MHz, 4.0817)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  75] log_JP=+19.175216  c=(3.0000, 0.2735, 5.0000 MHz, 5.0000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  76] log_JP=+19.176757  c=(3.0000, 0.2918, 0.1000 MHz, 5.0000)  ω_d/(2π)=3.8515 GHz  0.0s
+[pcrb_widephi  77] log_JP=+19.984885  c=(4.2471, 0.1500, 0.1000 MHz, 0.8000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  78] log_JP=+19.086988  c=(3.0000, 0.1500, 2.3889 MHz, 0.8000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  79] log_JP=+19.234772  c=(3.0000, 0.4000, 2.5708 MHz, 0.8000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  80] log_JP=+19.165568  c=(3.0000, 0.2884, 5.0000 MHz, 0.8000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  81] log_JP=+19.739581  c=(3.8462, 0.1500, 2.0148 MHz, 0.8000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  82] log_JP=+19.873166  c=(3.8869, 0.4000, 0.1000 MHz, 0.8000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  83] log_JP=+19.895923  c=(4.0679, 0.1500, 5.0000 MHz, 5.0000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  84] log_JP=+19.907131  c=(4.2055, 0.2417, 3.7485 MHz, 0.8000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  85] log_JP=+19.996465  c=(4.0206, 0.4000, 0.1000 MHz, 5.0000)  ω_d/(2π)=6.8775 GHz  0.0s
+[pcrb_widephi  86] log_JP=+20.065120  c=(4.1585, 0.4000, 1.2032 MHz, 0.8000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  87] log_JP=+19.193841  c=(3.0000, 0.3458, 3.2885 MHz, 5.0000)  ω_d/(2π)=7.8377 GHz  0.0s
+[pcrb_widephi  88] log_JP=+20.064039  c=(4.1491, 0.4000, 5.0000 MHz, 5.0000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  89] log_JP=+19.944815  c=(4.3887, 0.1500, 5.0000 MHz, 0.8000)  ω_d/(2π)=9.3597 GHz  0.0s
+[pcrb_widephi  90] log_JP=+19.731252  c=(3.8516, 0.2100, 0.1000 MHz, 1.8389)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  91] log_JP=+20.023283  c=(4.1072, 0.4000, 5.0000 MHz, 0.8000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  92] log_JP=+19.998265  c=(4.3868, 0.1500, 0.1000 MHz, 5.0000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  93] log_JP=+19.194623  c=(3.0000, 0.3269, 1.4525 MHz, 1.8985)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  94] log_JP=+19.956019  c=(4.0362, 0.3394, 5.0000 MHz, 5.0000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  95] log_JP=+20.085994  c=(4.2724, 0.3264, 0.1000 MHz, 5.0000)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  96] log_JP=+20.042448  c=(4.1246, 0.4000, 3.1903 MHz, 5.0000)  ω_d/(2π)=12.0000 GHz  0.0s
+[pcrb_widephi  97] log_JP=+19.867996  c=(4.0144, 0.1500, 3.7123 MHz, 5.0000)  ω_d/(2π)=4.8050 GHz  0.0s
+[pcrb_widephi  98] log_JP=+19.947061  c=(4.1576, 0.1500, 3.9531 MHz, 3.6041)  ω_d/(2π)=1.0000 GHz  0.0s
+[pcrb_widephi  99] log_JP=+20.131114  c=(4.4121, 0.3117, 0.1000 MHz, 0.8000)  ω_d/(2π)=7.9170 GHz  0.0s
+[pcrb_widephi 100] log_JP=+20.049982  c=(4.4774, 0.1500, 5.0000 MHz, 0.8000)  ω_d/(2π)=3.0225 GHz  0.0s
+
+bopt total: 0.15 min
+
+Best log_JP = 21.950786 at eval 30
+  c_best:  f_q=12.0000 GHz  E_C=0.4000 GHz  κ=0.1000 MHz  Δ=5.0000 GHz
+  ω_d/(2π) = 1.0000 GHz   ω_d = 6.2832e+09 rad/s
+
+Verifying schedule assumption: enumerate at the BOpt winner...
+  argmax schedule: [(10, 2), (10, 2), (10, 2), (10, 2)]   log_JP=21.950786   (72.7s)
+  fixed assumed:   [(10, 2), (10, 2), (10, 2), (10, 2)]   log_JP=21.950786
+  ✓ assumption confirmed at this c+ω_d
+  ω_d_fn(c_best)/(2π) = 4.0530 GHz  (Δ from BOpt's ω_d = -3.0530 GHz, -75.3%)
+┌ Warning: use values(kwargs) instead of kwargs.data
+│   caller = #MAPGPOptimizer#13 at gp.jl:37 [inlined]
+└ @ Core ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:37
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:04:05.323	iteration: 10	current optimum: 21.600879459439284
+[ Info: 2026-04-26T21:04:08.881	iteration: 11	current optimum: 21.600879459439284
+[ Info: 2026-04-26T21:04:08.882	iteration: 12	current optimum: 21.600879459439284
+[ Info: 2026-04-26T21:04:08.882	iteration: 13	current optimum: 21.600879459439284
+[ Info: 2026-04-26T21:04:08.883	iteration: 14	current optimum: 21.600879459439284
+[ Info: 2026-04-26T21:04:08.884	iteration: 15	current optimum: 21.600879459439284
+[ Info: 2026-04-26T21:04:08.885	iteration: 16	current optimum: 21.9457765294964
+[ Info: 2026-04-26T21:04:08.885	iteration: 17	current optimum: 21.9457765294964
+[ Info: 2026-04-26T21:04:08.886	iteration: 18	current optimum: 21.9457765294964
+[ Info: 2026-04-26T21:04:08.887	iteration: 19	current optimum: 21.9457765294964
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:04:08.888	iteration: 20	current optimum: 21.9457765294964
+[ Info: 2026-04-26T21:04:08.889	iteration: 21	current optimum: 21.9457765294964
+[ Info: 2026-04-26T21:04:08.890	iteration: 22	current optimum: 21.9457765294964
+[ Info: 2026-04-26T21:04:08.891	iteration: 23	current optimum: 21.9457765294964
+[ Info: 2026-04-26T21:04:08.892	iteration: 24	current optimum: 21.9457765294964
+[ Info: 2026-04-26T21:04:08.893	iteration: 25	current optimum: 21.9457765294964
+[ Info: 2026-04-26T21:04:08.893	iteration: 26	current optimum: 21.9457765294964
+[ Info: 2026-04-26T21:04:08.894	iteration: 27	current optimum: 21.9457765294964
+[ Info: 2026-04-26T21:04:08.895	iteration: 28	current optimum: 21.9457765294964
+[ Info: 2026-04-26T21:04:08.896	iteration: 29	current optimum: 21.9457765294964
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:04:08.898	iteration: 30	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.933	iteration: 31	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.934	iteration: 32	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.935	iteration: 33	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.937	iteration: 34	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.938	iteration: 35	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.939	iteration: 36	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.940	iteration: 37	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.942	iteration: 38	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.943	iteration: 39	current optimum: 21.950785872180376
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:04:08.944	iteration: 40	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.945	iteration: 41	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.947	iteration: 42	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.948	iteration: 43	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.950	iteration: 44	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.951	iteration: 45	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.952	iteration: 46	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.954	iteration: 47	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.955	iteration: 48	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.957	iteration: 49	current optimum: 21.950785872180376
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:04:08.958	iteration: 50	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.960	iteration: 51	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.961	iteration: 52	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.963	iteration: 53	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.965	iteration: 54	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.978	iteration: 55	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.980	iteration: 56	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.981	iteration: 57	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.983	iteration: 58	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.984	iteration: 59	current optimum: 21.950785872180376
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:04:08.986	iteration: 60	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.988	iteration: 61	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.990	iteration: 62	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.991	iteration: 63	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.993	iteration: 64	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:08.995	iteration: 65	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.003	iteration: 66	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.005	iteration: 67	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.007	iteration: 68	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.009	iteration: 69	current optimum: 21.950785872180376
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:04:09.011	iteration: 70	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.013	iteration: 71	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.014	iteration: 72	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.018	iteration: 73	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.020	iteration: 74	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.022	iteration: 75	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.024	iteration: 76	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.026	iteration: 77	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.028	iteration: 78	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.031	iteration: 79	current optimum: 21.950785872180376
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:04:09.033	iteration: 80	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.035	iteration: 81	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.039	iteration: 82	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.041	iteration: 83	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.044	iteration: 84	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.047	iteration: 85	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.049	iteration: 86	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.051	iteration: 87	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.054	iteration: 88	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.057	iteration: 89	current optimum: 21.950785872180376
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+[ Info: 2026-04-26T21:04:09.061	iteration: 90	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.064	iteration: 91	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.068	iteration: 92	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.070	iteration: 93	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.074	iteration: 94	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.077	iteration: 95	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.080	iteration: 96	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.083	iteration: 97	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.088	iteration: 98	current optimum: 21.950785872180376
+[ Info: 2026-04-26T21:04:09.091	iteration: 99	current optimum: 21.950785872180376
+┌ Warning: NLopt returned FORCED_STOP while optimizing the GP.
+└ @ BayesianOptimization ~/.julia/packages/BayesianOptimization/nq1HY/src/models/gp.jl:72
+┌ Info: ──────────────────────────────────────────────────────────────────────────────────────────────
+│                                                      Time                    Allocations      
+│                                             ───────────────────────   ────────────────────────
+│              Tot / % measured:                   7.42s /  98.7%           1.56GiB /  99.6%    
+│ 
+│ Section                             ncalls     time    %tot     avg     alloc    %tot      avg
+│ ──────────────────────────────────────────────────────────────────────────────────────────────
+│ acquisition                             91    5.44s   74.3%  59.8ms   1.40GiB   90.1%  15.7MiB
+│ model update                            91    1.16s   15.9%  12.8ms   84.4MiB    5.3%   950KiB
+│ function evaluation                    100    373ms    5.1%  3.73ms   19.6MiB    1.2%   200KiB
+│ model hyperparameter optimization       91    349ms    4.8%  3.84ms   53.0MiB    3.3%   597KiB
+└ ──────────────────────────────────────────────────────────────────────────────────────────────
+Saved /home/zlin/BFIMGaussian/doc/scqubit_widephi/results/bayesopt_pcrb_phi15_K4/result.jls

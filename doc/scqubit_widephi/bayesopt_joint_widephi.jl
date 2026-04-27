@@ -31,9 +31,11 @@ println("Threads: $(Threads.nthreads())"); flush(stdout)
 
 const K_EPOCHS = parse(Int, get(ENV, "K_EPOCHS", "4"))
 const K_PHI    = parse(Int, get(ENV, "K_PHI", "256"))
+const PHI_MAX_ENV = parse(Float64, get(ENV, "PHI_MAX", "0.5"))
 const K_TAG    = "K$(K_EPOCHS)"
+const PHI_TAG  = "phi$(round(Int, PHI_MAX_ENV*100))"
 const J_TAU    = 10
-const PHI_MAX  = 0.5
+const PHI_MAX  = PHI_MAX_ENV
 const TAU_GRID = ntuple(k -> 10e-9 * (32.0)^((k-1)/(J_TAU-1)), J_TAU)
 const N_GRID   = (1, 10)
 const N_EVAL   = parse(Int, get(ENV, "N_EVAL", "100"))
@@ -128,7 +130,7 @@ omega_d_fn  = make_omega_d_fn(; phi_star_fn=phi_star_fn)
         ω_fn/TWO_PI/1e9, (ω_best-ω_fn)/TWO_PI/1e9, 100*(ω_best-ω_fn)/ω_fn)
 flush(stdout)
 
-outdir = joinpath(@__DIR__, "results", "bayesopt_joint_widephi_$(K_TAG)")
+outdir = joinpath(@__DIR__, "results", "bayesopt_joint_$(PHI_TAG)_$(K_TAG)")
 isdir(outdir) || mkpath(outdir)
 open(joinpath(outdir, "result.jls"), "w") do io
     serialize(io, (; hist=HIST, ibest, V_best, v_best, omega_d_best=ω_best,

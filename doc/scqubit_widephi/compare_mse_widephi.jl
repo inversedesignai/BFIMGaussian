@@ -30,16 +30,17 @@ const K_PHI_POST = parse(Int, get(ENV, "MSE_K_PHI", "256"))
 const J_TAU      = 10
 const TAU_GRID   = ntuple(k -> 10e-9 * (32.0)^((k-1)/(J_TAU-1)), J_TAU)
 const N_GRID     = (1, 10)
-const PHI_MAX    = 0.5
+const PHI_MAX    = parse(Float64, get(ENV, "PHI_MAX", "0.5"))
 const K_EPOCHS   = parse(Int, get(ENV, "K_EPOCHS", "4"))
 const K_TAG      = "K$(K_EPOCHS)"
+const PHI_TAG    = "phi$(round(Int, PHI_MAX*100))"
 const TWO_PI     = 2π
 
 println("compare_mse_widephi.jl  (PHI_MAX=$(PHI_MAX); K_EPOCHS=$(K_EPOCHS); 5-D BayesOpt: ω_d free)"); flush(stdout)
 println("Threads: $(Threads.nthreads())"); flush(stdout)
 
-j = deserialize(joinpath(@__DIR__, "results", "bayesopt_joint_widephi_$(K_TAG)", "result.jls"))
-p = deserialize(joinpath(@__DIR__, "results", "bayesopt_pcrb_widephi_$(K_TAG)",  "result.jls"))
+j = deserialize(joinpath(@__DIR__, "results", "bayesopt_joint_$(PHI_TAG)_$(K_TAG)", "result.jls"))
+p = deserialize(joinpath(@__DIR__, "results", "bayesopt_pcrb_$(PHI_TAG)_$(K_TAG)",  "result.jls"))
 
 v1  = j.v_best;  c1 = vec_as_c(v1);  ωd1 = j.omega_d_best
 v2  = p.v_best;  c2 = vec_as_c(v2);  ωd2 = p.omega_d_best
@@ -91,7 +92,7 @@ println("-"^72)
 @printf("  z-score                             = %+.2f σ\n", z)
 println("="^72); flush(stdout)
 
-open(joinpath(@__DIR__, "results", "compare_mse_widephi_$(K_TAG).jls"), "w") do io
+open(joinpath(@__DIR__, "results", "compare_mse_$(PHI_TAG)_$(K_TAG).jls"), "w") do io
     serialize(io, (; V1_exact=V1, mmse_exact=-V1,
                      MSE_1, se_1, MSE_2, se_2,
                      ratio_mc, ratio_exact, z, pcrb_bound=crb,
